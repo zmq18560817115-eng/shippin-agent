@@ -167,9 +167,8 @@ def real_readiness(env: dict[str, str] | None = None) -> dict[str, Any]:
     unset_pricing = [name for name, value in pricing.items() if value is None]
     if unset_pricing:
         warnings.append(f"pricing not calibrated: {', '.join(unset_pricing)}")
-    warnings.append("real provider adapters are smoke stubs until actual Doubao/SeedDance API calls are wired")
     return {
-        "status": "blocked" if missing else "ready_with_warnings",
+        "status": "blocked" if missing else ("ready_with_warnings" if warnings else "ready"),
         "missing": missing,
         "warnings": warnings,
     }

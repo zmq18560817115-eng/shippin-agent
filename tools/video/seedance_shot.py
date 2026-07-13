@@ -7,6 +7,7 @@ from typing import Any
 from libshared import artifacts
 from libshared.paths import ROOT
 from tools.base_tool import ToolContext, ToolResult, require_env
+from tools.providers import ark
 from tools.tool_registry import register_tool
 
 
@@ -34,6 +35,15 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     output = shots_dir / f"shot-{number:03d}.mp4"
     if context.mock:
         output.write_bytes(b"mock seedance mp4\n")
+        provider_meta = {"provider": "mock"}
+    else:
+        provider_meta = ark.create_seedance_video(
+            context,
+            prompt=_shot_prompt(shot, asset_manifest),
+            image_path=str(asset_manifest.get("seedance_source") or ""),
+            output_path=output,
+            duration_sec=_duration_sec(shot),
+        )
 
     shot_report = {
         "version": "2.0",
@@ -57,5 +67,25 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "mock": context.mock,
             "shot_index": number,
             "seedance_source": asset_manifest.get("seedance_source"),
+            **provider_meta,
         },
     )
+
+
+def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
+    return " ".join(
+        part
+        for part in (
+            str(shot.get("seedance_prompt") or shot.get("visual_prompt") or shot.get("visual") or ""),
+            f"Seedance source: {asset_manifest.get('seedance_source')}",
+        )
+        if part
+    )
+
+
+def _duration_sec(shot: dict[str, Any]) -> int:
+    camera = shot.get("camera_motion") if isinstance(shot.get("camera_motion"), dict) else {}
+    try:
+        return max(3, min(10, int(float(camera.get("duration_sec") or 5))))
+    except (TypeError, ValueError):
+        return 5

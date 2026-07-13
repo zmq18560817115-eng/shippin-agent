@@ -5,3 +5,4 @@ jsonschema
 httpx
 pytest
 PyYAML
+imageio-ffmpeg
