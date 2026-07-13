@@ -79,9 +79,15 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "fingerprint": _string(response.get("fingerprint"), f"ark-{meta.get('response_id') or 'analysis'}"),
     }
     artifacts.validate_artifact("analysis_report", report)
+    usage = meta.get("usage") or {}
+    cost_cny = context.token_cost_cny(
+        "doubao_analyze",
+        prompt_tokens=int(usage.get("prompt_tokens") or 0),
+        completion_tokens=int(usage.get("completion_tokens") or 0),
+    )
     return ToolResult.success(
         {"analysis_report": report},
-        cost_cny=context.pricing_for("doubao_analyze"),
+        cost_cny=cost_cny,
         meta={"tool": "doubao_analyze", "mock": False, **meta},
     )
 

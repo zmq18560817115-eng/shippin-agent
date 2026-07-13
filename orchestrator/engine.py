@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,12 +10,19 @@ from libshared import artifacts, checkpoint
 from libshared.paths import ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, queue
 from tools import tool_registry
+from tools.base_tool import ToolResult
 from tools.collect import product_library
 
 
 WHITE_HERO_BY_PRODUCT = {
     "便携恒温杯": "data/01_素材库/产品资料/便携恒温杯/listing-0602-nw/主图/白底主图.png"
 }
+
+# Target width/height ratio for each shot_plan.aspect_ratio value, used to
+# validate the real ffprobe resolution in final_qa. Kept in sync with
+# schemas/artifacts/shot_plan.schema.json's enum.
+ASPECT_RATIO_TARGETS = {"9:16": 9 / 16, "16:9": 16 / 9, "1:1": 1.0}
+RESOLUTION_RE = re.compile(r"^(\d+)x(\d+)$")
 
 
 @dataclass(frozen=True)
@@ -108,7 +116,7 @@ def run_until_blocked(
         result = _execute_task(task, root, mock=mock, db_path=db_path)
         if result.status in {"awaiting_human", "failed", "blocked", "needs_review"}:
             return result
-        if result.status == "succeeded" and result.stage == "archive":
+        if result.status == "completed" and result.stage == "archive":
             return result
 
     raise RuntimeError(f"engine exceeded max_steps={max_steps} for {project_id}")
@@ -237,6 +245,8 @@ def _run_analysis(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pa
         result.data["analysis_report"],
         next_stage="script",
         db_path=db_path,
+        tool="doubao_analyze",
+        result=result,
     )
 
 
@@ -259,6 +269,8 @@ def _run_script(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path
         result.data["script_copy"],
         next_stage="script_review",
         db_path=db_path,
+        tool="doubao_script",
+        result=result,
     )
 
 
@@ -281,6 +293,7 @@ def _run_script_review(task: queue.Task, root: Path, *, mock: bool, db_path: str
         task_id=task.id,
         agent=task.agent,
         tool="doubao_review",
+        phase="script_review",
         cost_cny=result.cost_cny,
         model=result.meta.get("model"),
         meta=result.meta,
@@ -289,7 +302,7 @@ def _run_script_review(task: queue.Task, root: Path, *, mock: bool, db_path: str
     checkpoint.write_checkpoint(
         task.project_id,
         "script_review",
-        status="succeeded",
+        status="completed",
         artifacts={"review_report": "artifacts/review_report.json"},
         run_root=root,
     )
@@ -323,6 +336,8 @@ def _run_storyboard(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         result.data["shot_plan"],
         next_stage="asset",
         db_path=db_path,
+        tool="doubao_shotplan",
+        result=result,
         script_copy=script_copy,
     )
 
@@ -351,7 +366,7 @@ def _run_asset(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path 
     checkpoint.write_checkpoint(
         task.project_id,
         "asset",
-        status="succeeded",
+        status="completed",
         artifacts={"asset_manifest": "artifacts/asset_manifest.json"},
         run_root=root,
     )
@@ -366,6 +381,7 @@ def _run_asset(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path 
 
 
 def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:
+    shot_plan = _load_artifact(root, "shot_plan")
     result = _execute_tool(
         "seedance_shot",
         {
@@ -373,6 +389,7 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
             "shot": task.payload_json.get("shot"),
             "shot_index": task.payload_json.get("shot_index"),
             "asset_manifest": _load_artifact(root, "asset_manifest"),
+            "aspect_ratio": shot_plan.get("aspect_ratio", "9:16"),
             "attempt": task.attempt,
         },
         root,
@@ -399,6 +416,7 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         task_id=task.id,
         agent=task.agent,
         tool="seedance_shot",
+        phase="production",
         cost_cny=result.cost_cny,
         shot_index=task.payload_json.get("shot_index"),
         meta=result.meta,
@@ -408,7 +426,7 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         checkpoint.write_checkpoint(
             task.project_id,
             "production",
-            status="succeeded",
+            status="completed",
             artifacts={"shot_report": "artifacts/shot_report.json"},
             run_root=root,
         )
@@ -417,12 +435,14 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
 
 
 def _run_compose(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:
+    shot_plan = _load_artifact(root, "shot_plan")
     result = _execute_tool(
         "ffmpeg_compose",
         {
             "project_id": task.project_id,
             "shot_report": _load_artifact(root, "shot_report"),
             "script_copy": _load_artifact(root, "script_copy"),
+            "aspect_ratio": shot_plan.get("aspect_ratio", "9:16"),
         },
         root,
         mock=mock,
@@ -434,33 +454,107 @@ def _run_compose(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pat
         result.data["render_report"],
         next_stage="final_qa",
         db_path=db_path,
+        tool="ffmpeg_compose",
+        result=result,
     )
 
 
 def _run_final_qa(task: queue.Task, root: Path, *, db_path: str | Path | None) -> EngineRunStatus:
+    render_report = _load_artifact(root, "render_report")
+    script_copy = _load_artifact(root, "script_copy")
+    shot_plan = _load_artifact(root, "shot_plan")
+    ffprobe = render_report.get("ffprobe") or {}
+
+    duration_ok = _duration_within(
+        ffprobe.get("duration"), script_copy.get("total_duration_s"), _final_qa_duration_tolerance()
+    )
+    audio_ok = int(ffprobe.get("audio_streams") or 0) >= 1
+    aspect_ok = _resolution_matches_aspect(ffprobe.get("resolution"), shot_plan.get("aspect_ratio"))
+    passed = duration_ok and audio_ok and aspect_ok
+
     report = {
         "version": "2.0",
         "project_id": task.project_id,
         "artifact_type": "qa_report",
-        "status": "PASS",
+        "status": "PASS" if passed else "failed",
         "qa": {
-            "ffprobe_duration_within": True,
-            "has_audio_stream": True,
-            "resolution_matches_aspect": True,
+            "ffprobe_duration_within": duration_ok,
+            "has_audio_stream": audio_ok,
+            "resolution_matches_aspect": aspect_ok,
         },
-        "comments": ["Mock final QA passed."],
+        "comments": [_final_qa_comment(passed, ffprobe, shot_plan, script_copy)],
     }
     artifacts.save_artifact(task.project_id, "qa_report", report, run_root=root)
+
+    if not passed:
+        queue.fail_task(
+            task.id,
+            "engine",
+            {"category": "qa_failed", "message": report["comments"][0]},
+            retryable=False,
+            db_path=db_path,
+        )
+        checkpoint.write_checkpoint(
+            task.project_id,
+            "final_qa",
+            status="failed",
+            artifacts={"qa_report": "artifacts/qa_report.json"},
+            data={"qa": report["qa"]},
+            run_root=root,
+        )
+        return EngineRunStatus(task.project_id, "final_qa", "failed", report["comments"][0])
+
     queue.complete_task(task.id, "engine", {"qa_report": report}, db_path=db_path)
     checkpoint.write_checkpoint(
         task.project_id,
         "final_qa",
-        status="succeeded",
+        status="completed",
         artifacts={"qa_report": "artifacts/qa_report.json"},
         run_root=root,
     )
     _enqueue_stage(task.project_id, "archive", {"run_root": root.as_posix()}, db_path=db_path)
-    return EngineRunStatus(task.project_id, "final_qa", "succeeded")
+    return EngineRunStatus(task.project_id, "final_qa", "completed")
+
+
+def _duration_within(actual: Any, expected: Any, tolerance_s: float) -> bool:
+    try:
+        return abs(float(actual) - float(expected)) <= tolerance_s
+    except (TypeError, ValueError):
+        return False
+
+
+def _resolution_matches_aspect(resolution: Any, aspect_ratio: Any, *, tolerance: float = 0.03) -> bool:
+    match = RESOLUTION_RE.match(str(resolution or ""))
+    target = ASPECT_RATIO_TARGETS.get(str(aspect_ratio or ""))
+    if not match or target is None:
+        return False
+    width, height = int(match.group(1)), int(match.group(2))
+    if height <= 0:
+        return False
+    return abs((width / height) - target) <= tolerance * target
+
+
+def _final_qa_duration_tolerance() -> float:
+    for check in _stage_def("final_qa").get("qa") or []:
+        if isinstance(check, dict) and isinstance(check.get("ffprobe_duration_within"), dict):
+            return float(check["ffprobe_duration_within"].get("tolerance_s") or 1.5)
+    return 1.5
+
+
+def _final_qa_comment(
+    passed: bool,
+    ffprobe: dict[str, Any],
+    shot_plan: dict[str, Any],
+    script_copy: dict[str, Any],
+) -> str:
+    if passed:
+        return "final QA passed: duration, audio, and aspect ratio all match."
+    return (
+        f"final QA failed: resolution={ffprobe.get('resolution')} "
+        f"duration={ffprobe.get('duration')}s audio_streams={ffprobe.get('audio_streams')} "
+        f"expected aspect_ratio={shot_plan.get('aspect_ratio')} "
+        f"total_duration_s={script_copy.get('total_duration_s')}"
+    )
 
 
 def _run_archive(task: queue.Task, root: Path, *, db_path: str | Path | None) -> EngineRunStatus:
@@ -482,11 +576,11 @@ def _run_archive(task: queue.Task, root: Path, *, db_path: str | Path | None) ->
     checkpoint.write_checkpoint(
         task.project_id,
         "archive",
-        status="succeeded",
+        status="completed",
         artifacts={"publish_archive": "artifacts/publish_archive.json"},
         run_root=root,
     )
-    return EngineRunStatus(task.project_id, "archive", "succeeded", "pipeline complete")
+    return EngineRunStatus(task.project_id, "archive", "completed", "pipeline complete")
 
 
 def _complete_with_artifact(
@@ -497,19 +591,32 @@ def _complete_with_artifact(
     *,
     next_stage: str,
     db_path: str | Path | None,
+    tool: str,
+    result: ToolResult,
     script_copy: dict[str, Any] | None = None,
 ) -> EngineRunStatus:
     artifacts.save_artifact(task.project_id, artifact_name, payload, run_root=root, script_copy=script_copy)
     queue.complete_task(task.id, "engine", {artifact_name: payload}, db_path=db_path)
+    cost_tracker.reconcile(
+        project_id=task.project_id,
+        task_id=task.id,
+        agent=task.agent,
+        tool=tool,
+        phase=task.stage,
+        cost_cny=result.cost_cny,
+        model=result.meta.get("model"),
+        meta=result.meta,
+        db_path=db_path,
+    )
     checkpoint.write_checkpoint(
         task.project_id,
         task.stage,
-        status="succeeded",
+        status="completed",
         artifacts={artifact_name: f"artifacts/{artifact_name}.json"},
         run_root=root,
     )
     _enqueue_stage(task.project_id, next_stage, {"run_root": root.as_posix()}, db_path=db_path)
-    return EngineRunStatus(task.project_id, task.stage, "succeeded", f"{artifact_name} saved")
+    return EngineRunStatus(task.project_id, task.stage, "completed", f"{artifact_name} saved")
 
 
 def _execute_tool(
@@ -639,8 +746,8 @@ def _terminal_status(
     if failed and not _has_queued_production(project_id, db_path=db_path):
         return EngineRunStatus(project_id, "production", "failed", "production has failed shot tasks")
     latest = checkpoint.read_latest(project_id, run_root=root)
-    if latest and latest.get("stage") == "archive" and latest.get("status") == "succeeded":
-        return EngineRunStatus(project_id, "archive", "succeeded", "pipeline complete")
+    if latest and latest.get("stage") == "archive" and latest.get("status") in checkpoint.DONE_STATUSES:
+        return EngineRunStatus(project_id, "archive", "completed", "pipeline complete")
     return None
 
 

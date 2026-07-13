@@ -58,9 +58,15 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "shots": _normalize_shots(response.get("shots"), script_copy),
     }
     artifacts.validate_artifact("shot_plan", shot_plan, script_copy=script_copy)
+    usage = meta.get("usage") or {}
+    cost_cny = context.token_cost_cny(
+        "doubao_shotplan",
+        prompt_tokens=int(usage.get("prompt_tokens") or 0),
+        completion_tokens=int(usage.get("completion_tokens") or 0),
+    )
     return ToolResult.success(
         {"shot_plan": shot_plan},
-        cost_cny=context.pricing_for("doubao_shotplan"),
+        cost_cny=cost_cny,
         meta={"tool": "doubao_shotplan", "mock": False, **meta},
     )
 

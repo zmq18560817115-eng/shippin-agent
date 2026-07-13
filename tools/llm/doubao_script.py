@@ -68,9 +68,15 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "feedback_constraints_applied": _string_list(response.get("feedback_constraints_applied"), []),
     }
     artifacts.validate_artifact("script_copy", script_copy)
+    usage = meta.get("usage") or {}
+    cost_cny = context.token_cost_cny(
+        "doubao_script",
+        prompt_tokens=int(usage.get("prompt_tokens") or 0),
+        completion_tokens=int(usage.get("completion_tokens") or 0),
+    )
     return ToolResult.success(
         {"script_copy": script_copy},
-        cost_cny=context.pricing_for("doubao_script"),
+        cost_cny=cost_cny,
         meta={"tool": "doubao_script", "mock": False, **meta},
     )
 

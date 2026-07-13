@@ -18,6 +18,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     project_id = str(payload.get("project_id") or "ref-mock")
     shot = payload.get("shot") or {}
     asset_manifest = payload.get("asset_manifest") or {}
+    aspect_ratio = str(payload.get("aspect_ratio") or "9:16")
     artifacts.validate_artifact("asset_manifest", asset_manifest)
     number = int(shot.get("number") or payload.get("shot_index") or 1)
 
@@ -43,6 +44,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             image_path=str(asset_manifest.get("seedance_source") or ""),
             output_path=output,
             duration_sec=_duration_sec(shot),
+            aspect_ratio=aspect_ratio,
         )
 
     shot_report = {
@@ -66,6 +68,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "tool": "seedance_shot",
             "mock": context.mock,
             "shot_index": number,
+            "aspect_ratio": aspect_ratio,
             "seedance_source": asset_manifest.get("seedance_source"),
             **provider_meta,
         },

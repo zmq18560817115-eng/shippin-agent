@@ -60,7 +60,7 @@ def test_a6_api_workbench_two_gate_flow_and_polling(tmp_path: Path, monkeypatch)
         )
         assert hero_gate.status_code == 200
         assert hero_gate.json()["engine"]["stage"] == "archive"
-        assert hero_gate.json()["engine"]["status"] == "succeeded"
+        assert hero_gate.json()["engine"]["status"] == "completed"
 
         def poll_pipeline(_: int) -> int:
             with TestClient(app) as polling_client:

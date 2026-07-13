@@ -72,9 +72,11 @@ def create_seedance_video(
     image_path: str,
     output_path: Path,
     duration_sec: int = 5,
+    aspect_ratio: str = "9:16",
 ) -> dict[str, Any]:
     api_key = env_value(context, "SEEDANCE_API_KEY", "ARK_SEEDANCE_API_KEY", "ARK_API_KEY")
     model = str(context.env.get("SEEDANCE_MODEL") or context.env.get("ARK_SEEDANCE_MODEL") or DEFAULT_SEEDANCE_MODEL).strip()
+    resolution = str(context.env.get("SEEDANCE_RESOLUTION") or "1080p").strip()
     base_url = _chat_base_url(context)
     timeout_s = float(context.env.get("ARK_TIMEOUT_S") or 120)
     poll_s = float(context.env.get("SEEDANCE_POLL_INTERVAL_S") or 5)
@@ -83,9 +85,12 @@ def create_seedance_video(
     body = {
         "model": model,
         "content": [
-            {"type": "text", "text": _seedance_prompt(prompt, duration_sec)},
+            {"type": "text", "text": _seedance_prompt(prompt, duration_sec, aspect_ratio)},
             {"type": "image_url", "image_url": {"url": _image_data_url(source_path)}},
         ],
+        "ratio": aspect_ratio,
+        "resolution": resolution,
+        "duration": duration_sec,
     }
     created = _post_json(
         base_url + "/contents/generations/tasks",
@@ -173,12 +178,13 @@ def _json_from_text(text: str) -> dict[str, Any]:
     return loaded
 
 
-def _seedance_prompt(prompt: str, duration_sec: int) -> str:
+def _seedance_prompt(prompt: str, duration_sec: int, aspect_ratio: str) -> str:
+    orientation = {"9:16": "vertical", "16:9": "horizontal", "1:1": "square"}.get(aspect_ratio, "vertical")
     return (
         f"{prompt}\n"
         "Use the provided product image as the strict product identity reference. "
         "Do not invent product shape, logo, display, lid, spout, or accessories. "
-        f"Duration {duration_sec} seconds, vertical 9:16, product-safe commercial short video shot."
+        f"Duration {duration_sec} seconds, {orientation} {aspect_ratio}, product-safe commercial short video shot."
     )
 
 

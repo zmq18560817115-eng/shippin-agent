@@ -8,6 +8,11 @@ from typing import Any
 from libshared.paths import RUNS_ROOT
 
 
+# docs/第一批实施文档 §2.2 checkpoint status enum. "succeeded" is accepted on read
+# for backward compatibility with checkpoint files written before this rename.
+DONE_STATUS = "completed"
+DONE_STATUSES = {"completed", "succeeded"}
+
 STAGE_ORDER = [
     "analysis",
     "script",
@@ -100,7 +105,7 @@ def get_completed_stages(
     return [
         stage
         for stage in STAGE_ORDER
-        if latest_by_stage.get(stage, {}).get("status") == "succeeded"
+        if latest_by_stage.get(stage, {}).get("status") in DONE_STATUSES
     ]
 
 
@@ -136,7 +141,7 @@ def approve_gate(
     approved = write_checkpoint(
         project_id,
         stage,
-        status="succeeded",
+        status=DONE_STATUS,
         artifacts=dict(latest.get("artifacts") or {}),
         data=data,
         run_root=run_root,
