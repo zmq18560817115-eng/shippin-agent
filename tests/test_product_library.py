@@ -38,6 +38,29 @@ def test_product_library_blocks_without_white_hero(tmp_path: Path) -> None:
     assert "missing_white_hero" in {issue["code"] for issue in product["issues"]}
 
 
+def test_product_library_ignores_operational_notes(tmp_path: Path) -> None:
+    root, _ = _sample_product_root(tmp_path)
+    (root / "618大促期间竞品动作.md").write_text("# 运营宣传\n", encoding="utf-8")
+    (root / "产品篇-讲产品本身是什么.md").write_text("# 运营宣传\n", encoding="utf-8")
+    (root / "卡审原因分析.md").write_text("# 流程复盘\n", encoding="utf-8")
+
+    payload = product_library.refresh_index([root], path=tmp_path / "index.json")
+
+    ids = {product["id"] for product in payload["products"]}
+    assert ids == {"便携恒温杯"}
+
+
+def test_product_library_can_allow_new_sku_by_env(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "产品资料"
+    root.mkdir()
+    (root / "新硬件产品.md").write_text("# 新硬件产品\n", encoding="utf-8")
+    monkeypatch.setenv("VAF_PRODUCT_LIBRARY_PRODUCTS", "新硬件产品")
+
+    payload = product_library.refresh_index([root], path=tmp_path / "index.json")
+
+    assert {product["id"] for product in payload["products"]} == {"新硬件产品"}
+
+
 def _sample_product_root(tmp_path: Path) -> tuple[Path, Path]:
     root = tmp_path / "产品资料"
     root.mkdir()

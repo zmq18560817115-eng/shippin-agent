@@ -19,6 +19,7 @@ PRODUCT_KEYWORDS = {
     "奶瓶": ("奶瓶", "bottle"),
     "羊脂膏": ("羊脂膏", "lanolin"),
 }
+PRODUCT_LIST_ENV = "VAF_PRODUCT_LIBRARY_PRODUCTS"
 PROHIBITED_MARKERS = ("竞品", "对比", "vs", "贝亲", "世喜", "momcozy", "baby brezza", "bololo")
 
 
@@ -276,8 +277,10 @@ def _infer_product_id(path: Path, root: Path) -> str | None:
     for product_id, aliases in PRODUCT_KEYWORDS.items():
         if any(alias.casefold() in text for alias in aliases):
             return product_id
-    if path.parent == root and path.name.lower() != "assets":
-        return path.stem if path.suffix else path.name
+    configured = _configured_product_ids()
+    candidate = path.stem if path.suffix else path.name
+    if _normalize_text(candidate) in configured:
+        return candidate
     if root.name.lower() == "assets":
         return path.name
     return None
@@ -293,6 +296,16 @@ def _canonical_product_id(product_id: str) -> str:
 
 def _normalize_product_id(product_id: str) -> str:
     return _canonical_product_id(product_id).strip().casefold().replace(" ", "")
+
+
+def _configured_product_ids() -> set[str]:
+    env_value = os.environ.get(PRODUCT_LIST_ENV, "")
+    parts = [part.strip() for chunk in env_value.split(";") for part in chunk.split(",")]
+    return {_normalize_text(part) for part in parts if part}
+
+
+def _normalize_text(value: str) -> str:
+    return value.strip().casefold().replace(" ", "")
 
 
 def _is_ds223_path(value: str) -> bool:
