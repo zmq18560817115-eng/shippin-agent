@@ -9,6 +9,7 @@ from libshared import artifacts, checkpoint
 from libshared.paths import ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, queue
 from tools import tool_registry
+from tools.collect import product_library
 
 
 WHITE_HERO_BY_PRODUCT = {
@@ -335,7 +336,7 @@ def _run_asset(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path 
             "project_id": task.project_id,
             "product_id": product_id,
             "shot_plan": shot_plan,
-            "seedance_source": WHITE_HERO_BY_PRODUCT.get(product_id, ""),
+            "seedance_source": _seedance_source_for_product(product_id),
         },
         root,
         mock=mock,
@@ -582,6 +583,10 @@ def _project_product_id(project_id: str, *, db_path: str | Path | None) -> str:
     with queue.get_conn(db_path) as conn:
         row = conn.execute("SELECT product_id FROM projects WHERE id = ?", (project_id,)).fetchone()
     return str(row["product_id"] or "便携恒温杯")
+
+
+def _seedance_source_for_product(product_id: str) -> str:
+    return product_library.resolve_seedance_source(product_id) or WHITE_HERO_BY_PRODUCT.get(product_id, "")
 
 
 def _run_root(project_id: str, run_root: str | Path | None) -> Path:

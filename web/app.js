@@ -1,6 +1,9 @@
 const state = {
   projects: [],
   materials: [],
+  productLibrary: [],
+  productLibraryGeneratedAt: null,
+  productLibrarySources: [],
   selectedId: null,
   selected: null,
   scriptCopy: null,
@@ -56,6 +59,7 @@ function toast(message, kind = "ok") {
 async function boot() {
   bindEvents();
   await checkHealth();
+  await loadProductLibrary();
   await loadProducts();
   await refreshProjects();
   window.setInterval(() => refreshProjects({ silent: true }), 3000);
@@ -65,6 +69,7 @@ function bindEvents() {
   $("#startForm").addEventListener("submit", startProject);
   $("#collectForm").addEventListener("submit", collectLinks);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
+  $("#refreshProductLibrary").addEventListener("click", refreshProductLibrary);
 }
 
 async function checkHealth() {
@@ -86,13 +91,116 @@ async function loadProducts() {
     payload.items.forEach((item) => {
       const option = document.createElement("option");
       option.value = item.id;
-      option.textContent = item.ready ? item.label : `${item.label}（素材未齐）`;
+      option.textContent = item.ready ? item.label : `${item.label}（素材未齐 ${item.issue_count || 0}）`;
       option.disabled = !item.ready;
       select.appendChild(option);
     });
   } catch (error) {
     select.innerHTML = '<option value="便携恒温杯">便携恒温杯</option>';
   }
+}
+
+async function loadProductLibrary({ refresh = false } = {}) {
+  const panel = $("#productLibraryPanel");
+  try {
+    const payload = await api(`/api/v2/product-library${refresh ? "?refresh=true" : ""}`);
+    state.productLibrary = payload.products || [];
+    state.productLibraryGeneratedAt = payload.generated_at || null;
+    state.productLibrarySources = payload.source_roots || [];
+  } catch (error) {
+    state.productLibrary = [];
+    state.productLibraryGeneratedAt = null;
+    state.productLibrarySources = [];
+    panel.className = "emptyState";
+    panel.textContent = error.message;
+    return;
+  }
+  renderProductLibrary();
+}
+
+async function refreshProductLibrary() {
+  const button = $("#refreshProductLibrary");
+  button.disabled = true;
+  $("#productLibraryState").textContent = "刷新中";
+  try {
+    const payload = await api("/api/v2/product-library/refresh", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    state.productLibrary = payload.products || [];
+    state.productLibraryGeneratedAt = payload.generated_at || null;
+    state.productLibrarySources = payload.source_roots || [];
+    renderProductLibrary();
+    await loadProducts();
+    toast("产品素材库已刷新");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    renderProductLibrary();
+  }
+}
+
+function renderProductLibrary() {
+  const host = $("#productLibraryPanel");
+  const readyCount = state.productLibrary.filter((product) => product.ready).length;
+  const sourceCount = state.productLibrarySources.filter((source) => source.exists).length;
+  $("#productLibraryState").textContent = state.productLibrary.length
+    ? `${readyCount}/${state.productLibrary.length} 可生产 · ${sourceCount} 个源在线`
+    : "";
+  if (!state.productLibrary.length) {
+    host.className = "emptyState";
+    host.textContent = "暂无产品素材库索引";
+    return;
+  }
+  host.className = "productLibrary";
+  host.innerHTML = state.productLibrary.map(renderProductItem).join("");
+}
+
+function renderProductItem(product) {
+  const issues = product.issues || [];
+  const counts = formatCounts(product.counts || {});
+  const blockers = issues.filter((issue) => issue.severity === "BLOCKED").length;
+  const status = product.ready ? "可生产" : `${blockers || issues.length} 项阻塞`;
+  const issueText = issues.length
+    ? issues.map((issue) => `${issue.severity}: ${issue.message}`).join(" · ")
+    : "素材规则通过";
+  const sourceText = product.seedance_source
+    ? compactPath(product.seedance_source, 4)
+    : "未绑定白底主图";
+  return `
+    <article class="productItem" data-ready="${product.ready ? "true" : "false"}">
+      <div class="productMain">
+        <strong>${escapeHtml(product.label || product.id)}</strong>
+        <span>${escapeHtml(status)} · ${product.ds223_refreshed ? "DS223 已刷新" : "DS223 待刷新"}</span>
+      </div>
+      <div class="productMeta">
+        <span>${escapeHtml(counts || "暂无图片分类")}</span>
+        <span title="${escapeAttr(product.seedance_source || "")}">${escapeHtml(sourceText)}</span>
+      </div>
+      <p>${escapeHtml(issueText)}</p>
+    </article>
+  `;
+}
+
+function formatCounts(counts) {
+  const labels = {
+    product_identity: "身份图",
+    usage_step: "使用图",
+    scene: "场景图",
+    detail_proof: "细节图",
+    reference_only: "参考图",
+    prohibited: "禁用图",
+  };
+  return Object.entries(counts)
+    .map(([key, value]) => `${labels[key] || key} ${value}`)
+    .join(" · ");
+}
+
+function compactPath(pathText, keep = 3) {
+  const normal = String(pathText || "").replace(/\\/g, "/");
+  const parts = normal.split("/").filter(Boolean);
+  return parts.slice(-keep).join("/");
 }
 
 async function loadMaterials() {

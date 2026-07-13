@@ -62,6 +62,7 @@ input,
 select,
 textarea {
   width: 100%;
+  min-width: 0;
   border: 1px solid #bbc5cf;
   border-radius: 6px;
   background: #ffffff;
@@ -131,12 +132,14 @@ textarea {
 .workspace {
   display: grid;
   gap: 18px;
+  min-width: 0;
   max-width: 1320px;
   margin: 0 auto;
   padding: 18px clamp(12px, 3vw, 28px) 40px;
 }
 
 .band {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -148,6 +151,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   min-height: 38px;
   margin-bottom: 12px;
 }
@@ -163,17 +167,27 @@ textarea {
   font-size: 13px;
 }
 
+.headActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
 .startBar {
   display: grid;
   grid-template-columns: minmax(180px, 240px) minmax(160px, 1fr) auto;
   gap: 12px;
   align-items: end;
+  min-width: 0;
 }
 
 .startBar label,
 .collectForm label {
   display: grid;
   gap: 6px;
+  min-width: 0;
   color: var(--muted);
   font-size: 13px;
 }
@@ -183,6 +197,7 @@ textarea {
   grid-template-columns: minmax(180px, 240px) minmax(260px, 1fr) auto;
   gap: 12px;
   align-items: end;
+  min-width: 0;
 }
 
 .collectLinks textarea {
@@ -228,6 +243,59 @@ textarea {
   font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.productLibrary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.productItem {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfb;
+}
+
+.productItem[data-ready="true"] {
+  border-color: #aacdbc;
+  background: #f7fbf8;
+}
+
+.productItem[data-ready="false"] {
+  border-color: #dfbbb8;
+  background: #fff9f8;
+}
+
+.productMain,
+.productMeta {
+  display: grid;
+  gap: 4px;
+}
+
+.productMain strong {
+  font-size: 14px;
+}
+
+.productMain span,
+.productMeta span,
+.productItem p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.productMeta {
+  border-top: 1px solid #edf0ed;
+  padding-top: 8px;
 }
 
 .tableWrap {
@@ -524,13 +592,27 @@ pre {
     flex-direction: column;
   }
 
+  .sectionHead {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .headActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .startBar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .collectForm,
   .materialItem {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .productLibrary {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .delivery {

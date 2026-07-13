@@ -14,6 +14,7 @@ venv/
 
 db/
 data/runs/
+data/01_素材库/product_library_index.json
 logs/
 
 *.log

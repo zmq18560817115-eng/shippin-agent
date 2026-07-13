@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from libshared import artifacts, checkpoint
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, engine, queue
-from tools.collect import manual_import
+from tools.collect import manual_import, product_library
 
 
 WEB_ROOT = ROOT / "web"
@@ -71,6 +71,10 @@ class ManualCollectRequest(BaseModel):
     items: list[dict[str, Any]] | None = None
     product_id: str = "便携恒温杯"
     source_keyword: str = "manual_tiktok"
+
+
+class ProductLibraryRefreshRequest(BaseModel):
+    source_roots: list[str] | None = None
 
 
 class GateApproveRequest(BaseModel):
@@ -128,8 +132,31 @@ def healthz() -> dict[str, str]:
 
 
 @app.get("/api/v2/products")
-def products() -> dict[str, list[dict[str, Any]]]:
-    return {"items": _list_products()}
+def products(refresh: bool = Query(default=False)) -> dict[str, Any]:
+    index = _load_product_library(refresh=refresh)
+    return {
+        "items": _list_products(index),
+        "generated_at": index.get("generated_at"),
+        "source_roots": index.get("source_roots", []),
+    }
+
+
+@app.get("/api/v2/product-library")
+def product_library_index(refresh: bool = Query(default=False)) -> dict[str, Any]:
+    return _load_product_library(refresh=refresh)
+
+
+@app.post("/api/v2/product-library/refresh")
+def refresh_product_library(request: ProductLibraryRefreshRequest | None = None) -> dict[str, Any]:
+    return product_library.refresh_index((request.source_roots if request else None))
+
+
+@app.get("/api/v2/product-library/{product_id}")
+def product_library_product(product_id: str) -> dict[str, Any]:
+    product = product_library.get_product(product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="product not found")
+    return product
 
 
 @app.post("/api/v2/collect/manual")
@@ -828,7 +855,15 @@ def _build_delivery_zip(project_id: str) -> Path:
     return zip_path
 
 
-def _list_products() -> list[dict[str, Any]]:
+def _load_product_library(*, refresh: bool = False) -> dict[str, Any]:
+    return product_library.refresh_index() if refresh else product_library.load_index(refresh_if_missing=True)
+
+
+def _list_products(index: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    products = (index or {}).get("products", [])
+    if products:
+        return sorted((_product_option(item) for item in products), key=lambda item: (not item["ready"], item["label"]))
+
     materials_root = DATA_ROOT / "01_素材库" / "产品资料"
     items: list[dict[str, Any]] = []
     if materials_root.exists():
@@ -836,10 +871,46 @@ def _list_products() -> list[dict[str, Any]]:
             product_id = product_doc.stem
             product_dir = materials_root / product_id
             has_white_hero = bool(list(product_dir.rglob("白底主图.*"))) if product_dir.exists() else False
-            items.append({"id": product_id, "label": product_id, "ready": has_white_hero})
+            items.append(
+                {
+                    "id": product_id,
+                    "label": product_id,
+                    "ready": has_white_hero,
+                    "seedance_source": "",
+                    "issue_count": 0 if has_white_hero else 1,
+                    "issues": [],
+                    "counts": {},
+                    "ds223_refreshed": False,
+                }
+            )
     if not items:
-        items.append({"id": "便携恒温杯", "label": "便携恒温杯", "ready": True})
+        items.append(
+            {
+                "id": "便携恒温杯",
+                "label": "便携恒温杯",
+                "ready": True,
+                "seedance_source": "",
+                "issue_count": 0,
+                "issues": [],
+                "counts": {},
+                "ds223_refreshed": False,
+            }
+        )
     return sorted(items, key=lambda item: (not item["ready"], item["label"]))
+
+
+def _product_option(product: dict[str, Any]) -> dict[str, Any]:
+    issues = list(product.get("issues") or [])
+    return {
+        "id": product.get("id"),
+        "label": product.get("label") or product.get("id"),
+        "ready": bool(product.get("ready")),
+        "seedance_source": product.get("seedance_source") or "",
+        "issue_count": len(issues),
+        "issues": issues,
+        "counts": product.get("counts") or {},
+        "ds223_refreshed": bool(product.get("ds223_refreshed")),
+    }
 
 
 def _loads_json(value: str | bytes | None) -> dict[str, Any]:
