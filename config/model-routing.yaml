@@ -1,0 +1,15 @@
+analysis:
+  provider: "doubao"
+  tier: "turbo"
+script:
+  provider: "doubao"
+  tier: "pro"
+shotplan:
+  provider: "doubao"
+  tier: "pro"
+review:
+  provider: "doubao"
+  tier: "turbo"
+claude_script:
+  provider: "claude"
+  tier: "fallback"

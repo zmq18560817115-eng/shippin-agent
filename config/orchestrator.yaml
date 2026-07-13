@@ -1,0 +1,25 @@
+server:
+  host: "127.0.0.1"
+  port: 8790
+
+database:
+  path: "db/agentflow.db"
+  pragmas:
+    journal_mode: "WAL"
+    foreign_keys: "ON"
+    busy_timeout_ms: 5000
+
+runtime:
+  media_concurrency: 1
+  lease_seconds: 60
+  worker_poll_interval_s: 1.0
+  budget_mode: "observe"
+
+pricing:
+  # Fill after block 4 real-key smoke tests.
+  doubao_analyze: null
+  doubao_script: null
+  doubao_shotplan: null
+  doubao_review: null
+  seedance_shot: null
+  ffmpeg_compose: null

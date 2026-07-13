@@ -1,0 +1,7 @@
+interface:
+  display_name: "海外视频出稿规范"
+  short_description: "规范产品图素材库场景人物一致性与视频出稿映射流程"
+  default_prompt: "Use $overseas-video-output-standards to review or generate an overseas video script, asset mapping, SeedDance prompts, and delivery checklist according to the company material library standards."
+
+policy:
+  allow_implicit_invocation: true

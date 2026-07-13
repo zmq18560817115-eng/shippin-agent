@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "description": "已批准出镜角色三视图，供 SeedDance 图生视频与脚本 continuity 锚定",
+  "characters": [
+    {
+      "id": "female_caregiver_01",
+      "label": "女性角色-照护者-01",
+      "gender": "female",
+      "role_tags": ["新手爸妈", "妈妈", "母亲", "照护者", "夜奶", "0-12月"],
+      "age_range": "26-34",
+      "wardrobe": "cream chunky ribbed knit sweater, light-wash straight-leg jeans, white sneakers",
+      "hair": "light brown blonde high messy bun with soft face-framing waves",
+      "emotional_state": "warm, calm, approachable new parent",
+      "relationship_to_product": "prepares warm milk with portable thermos cup beside separate baby bottle",
+      "views": {
+        "front": "女性角色-照护者-01/front.png",
+        "side": "女性角色-照护者-01/side.png",
+        "back": "女性角色-照护者-01/back.png"
+      },
+      "approval_status": "approved",
+      "allowed_use": "on-camera caregiver in nursery/bedroom/travel lifestyle shots",
+      "forbidden_use": "medical claims, competitor branding, inconsistent wardrobe"
+    },
+    {
+      "id": "male_caregiver_01",
+      "label": "男性角色-照护者-01",
+      "gender": "male",
+      "role_tags": ["爸爸", "奶爸", "父亲", "照护者", "新手爸妈"],
+      "age_range": "28-36",
+      "wardrobe": "heathered medium-blue crew-neck t-shirt, dark indigo slim jeans, white sneakers",
+      "hair": "short textured brown hair styled up",
+      "beard": "neat short trimmed beard and mustache",
+      "emotional_state": "friendly, practical, supportive co-parent",
+      "relationship_to_product": "handles portable thermos cup and baby bottle with realistic grip and pour physics",
+      "views": {
+        "front": "男性角色-照护者-01/front.png",
+        "side": "男性角色-照护者-01/side.png",
+        "back": "男性角色-照护者-01/back.png"
+      },
+      "approval_status": "approved",
+      "allowed_use": "on-camera father/caregiver in home and travel scenes",
+      "forbidden_use": "medical claims, competitor branding, inconsistent wardrobe"
+    }
+  ],
+  "selection": {
+    "default_character_id": "female_caregiver_01",
+    "male_audience_keywords": ["爸爸", "奶爸", "父亲", "宝爸"],
+    "female_audience_keywords": ["妈妈", "母亲", "宝妈", "新手妈", "背奶", "夜奶", "0-12月", "照护"]
+  }
+}
