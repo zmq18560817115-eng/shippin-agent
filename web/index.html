@@ -3,14 +3,84 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>video-agent-factory</title>
+    <title>七 Agent 闸门工作台</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <main>
-      <h1>video-agent-factory</h1>
-      <p>块 6 将实现四区闸门工作台。</p>
+    <header class="topbar">
+      <div>
+        <h1>七 Agent 闸门工作台</h1>
+        <p id="activeProject">未选择项目</p>
+      </div>
+      <div class="health" id="health">连接中</div>
+    </header>
+
+    <main class="workspace">
+      <section class="band">
+        <div class="sectionHead">
+          <h2>新建项目</h2>
+          <span id="startState"></span>
+        </div>
+        <form class="startBar" id="startForm">
+          <label>
+            产品
+            <select id="productSelect" name="product_id"></select>
+          </label>
+          <label>
+            link_id
+            <input id="linkInput" name="link_id" inputmode="numeric" placeholder="101" />
+          </label>
+          <button type="submit">开始生产</button>
+        </form>
+      </section>
+
+      <section class="band">
+        <div class="sectionHead">
+          <h2>项目列表</h2>
+          <button type="button" id="refreshButton">刷新</button>
+        </div>
+        <div class="tableWrap">
+          <table class="projectTable">
+            <thead>
+              <tr>
+                <th>项目号</th>
+                <th>节点</th>
+                <th>当前</th>
+                <th>成本</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="projectRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="band gate" id="scriptGate">
+        <div class="sectionHead">
+          <h2>闸门① 脚本确认</h2>
+          <span id="scriptGateState"></span>
+        </div>
+        <div id="scriptEditor" class="emptyState">等待脚本闸门项目</div>
+      </section>
+
+      <section class="band gate" id="heroGate">
+        <div class="sectionHead">
+          <h2>闸门② 关键帧确认</h2>
+          <span id="heroGateState"></span>
+        </div>
+        <div id="heroEditor" class="emptyState">等待关键帧闸门项目</div>
+      </section>
+
+      <section class="band">
+        <div class="sectionHead">
+          <h2>交付区</h2>
+          <span id="deliveryState"></span>
+        </div>
+        <div id="deliveryPanel" class="emptyState">暂无可交付项目</div>
+      </section>
     </main>
+
+    <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/app.js"></script>
   </body>
 </html>

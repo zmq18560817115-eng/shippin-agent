@@ -1,8 +1,521 @@
-fetch("/healthz")
-  .then((response) => response.json())
-  .then((data) => {
-    document.body.dataset.health = data.status || "unknown";
-  })
-  .catch(() => {
-    document.body.dataset.health = "offline";
+const state = {
+  projects: [],
+  selectedId: null,
+  selected: null,
+  scriptCopy: null,
+  reviewReport: null,
+  shotPlan: null,
+  assetManifest: null,
+  renderReport: null,
+  refreshing: false,
+};
+
+const $ = (selector) => document.querySelector(selector);
+const statusGlyph = {
+  idle: "○",
+  queued: "●",
+  running: "◐",
+  awaiting_human: "⏸",
+  succeeded: "✓",
+  failed: "×",
+  blocked: "!",
+  needs_review: "?",
+};
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options,
   });
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`;
+    try {
+      const payload = await response.json();
+      detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail);
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail);
+  }
+  const contentType = response.headers.get("content-type") || "";
+  return contentType.includes("application/json") ? response.json() : response;
+}
+
+function toast(message, kind = "ok") {
+  const node = $("#toast");
+  node.textContent = message;
+  node.dataset.kind = kind;
+  window.clearTimeout(toast.timer);
+  toast.timer = window.setTimeout(() => {
+    node.textContent = "";
+    delete node.dataset.kind;
+  }, 2800);
+}
+
+async function boot() {
+  bindEvents();
+  await checkHealth();
+  await loadProducts();
+  await refreshProjects();
+  window.setInterval(() => refreshProjects({ silent: true }), 3000);
+}
+
+function bindEvents() {
+  $("#startForm").addEventListener("submit", startProject);
+  $("#refreshButton").addEventListener("click", () => refreshProjects());
+}
+
+async function checkHealth() {
+  try {
+    const health = await api("/healthz");
+    $("#health").textContent = health.status === "ok" ? "在线" : "异常";
+    $("#health").dataset.status = health.status;
+  } catch (error) {
+    $("#health").textContent = "离线";
+    $("#health").dataset.status = "offline";
+  }
+}
+
+async function loadProducts() {
+  const select = $("#productSelect");
+  try {
+    const payload = await api("/api/v2/products");
+    select.innerHTML = "";
+    payload.items.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.ready ? item.label : `${item.label}（素材未齐）`;
+      option.disabled = !item.ready;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    select.innerHTML = '<option value="便携恒温杯">便携恒温杯</option>';
+  }
+}
+
+async function startProject(event) {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  $("#startState").textContent = "提交中";
+  try {
+    const body = {
+      product_id: $("#productSelect").value,
+      link_id: $("#linkInput").value.trim() || null,
+    };
+    const payload = await api("/api/v2/pipeline/run", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    state.selectedId = payload.project_id;
+    toast(`项目 ${payload.project_id} 已到 ${payload.engine.stage}`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    $("#startState").textContent = "";
+  }
+}
+
+async function refreshProjects({ silent = false } = {}) {
+  if (state.refreshing) return;
+  state.refreshing = true;
+  try {
+    const payload = await api("/api/v2/pipeline?limit=50");
+    state.projects = payload.items;
+    if (!state.selectedId && state.projects.length) {
+      state.selectedId = state.projects[0].project_id;
+    }
+    renderProjectRows();
+    if (state.selectedId) {
+      await loadSelectedProject(state.selectedId);
+    } else {
+      renderPanels();
+    }
+  } catch (error) {
+    if (!silent) toast(error.message, "error");
+  } finally {
+    state.refreshing = false;
+  }
+}
+
+async function loadSelectedProject(projectId) {
+  state.selected = await api(`/api/v2/pipeline/${encodeURIComponent(projectId)}`);
+  state.scriptCopy = null;
+  state.reviewReport = null;
+  state.shotPlan = null;
+  state.assetManifest = null;
+  state.renderReport = null;
+
+  if (state.selected.current_gate === "script_gate") {
+    state.scriptCopy = await safeArtifact(projectId, "script_copy");
+    state.reviewReport = await safeArtifact(projectId, "review_report");
+  }
+  if (state.selected.current_gate === "hero_gate") {
+    state.shotPlan = await safeArtifact(projectId, "shot_plan");
+    state.assetManifest = await safeArtifact(projectId, "asset_manifest");
+  }
+  if (state.selected.status === "succeeded") {
+    state.renderReport = await safeArtifact(projectId, "render_report");
+  }
+  renderPanels();
+}
+
+async function safeArtifact(projectId, artifactName) {
+  try {
+    return await api(`/api/v2/artifacts/${encodeURIComponent(projectId)}/${artifactName}`);
+  } catch {
+    return null;
+  }
+}
+
+function renderProjectRows() {
+  const tbody = $("#projectRows");
+  tbody.innerHTML = "";
+  if (!state.projects.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">暂无项目</td></tr>';
+    return;
+  }
+  state.projects.forEach((project) => {
+    const row = document.createElement("tr");
+    row.className = project.project_id === state.selectedId ? "selected" : "";
+    row.innerHTML = `
+      <td>
+        <button type="button" class="linkButton" data-open="${escapeAttr(project.project_id)}">
+          ${escapeHtml(project.project_id)}
+        </button>
+        <div class="subline">${escapeHtml(project.product_id || "")}</div>
+      </td>
+      <td>${renderNodes(project.nodes)}</td>
+      <td>
+        <span class="stageTag ${statusClass(project.status)}">${escapeHtml(project.current_stage || project.status)}</span>
+      </td>
+      <td>¥${Number(project.cost.total_cost_cny || 0).toFixed(2)}</td>
+      <td>${renderProjectActions(project)}</td>
+    `;
+    tbody.appendChild(row);
+
+    const errors = project.tasks.filter((task) => task.error_json);
+    if (errors.length) {
+      const errorRow = document.createElement("tr");
+      errorRow.className = "errorRow";
+      errorRow.innerHTML = `<td colspan="5">${renderErrors(project.project_id, errors)}</td>`;
+      tbody.appendChild(errorRow);
+    }
+  });
+
+  tbody.querySelectorAll("[data-open]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedId = button.dataset.open;
+      refreshProjects();
+    });
+  });
+  tbody.querySelectorAll("[data-retry-shot]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedId = button.dataset.project;
+      retryShot(Number(button.dataset.retryShot));
+    });
+  });
+}
+
+function renderNodes(nodes) {
+  return `<div class="nodes">${nodes
+    .map((node) => `<span class="node ${statusClass(node.status)}" title="${node.agent}: ${node.status}">${statusGlyph[node.status] || "·"} ${node.agent}</span>`)
+    .join("")}</div>`;
+}
+
+function renderProjectActions(project) {
+  const failedShot = project.tasks.find((task) => task.stage === "production" && task.status === "failed");
+  if (failedShot) {
+    const shot = failedShot.payload_json.shot_index;
+    return `<button type="button" data-project="${escapeAttr(project.project_id)}" data-retry-shot="${shot}">重试镜头 ${shot}</button>`;
+  }
+  return `<button type="button" data-open="${escapeAttr(project.project_id)}">打开</button>`;
+}
+
+function renderErrors(projectId, errors) {
+  return errors
+    .map((task) => {
+      const shot = task.shot_index || task.payload_json?.shot_index || "";
+      const retry = task.stage === "production" && shot
+        ? `<button type="button" data-project="${escapeAttr(projectId)}" data-retry-shot="${shot}">重试镜头 ${shot}</button>`
+        : "";
+      return `
+        <details>
+          <summary>${escapeHtml(task.stage)} ${shot ? `shot ${shot}` : ""} failed</summary>
+          <pre>${escapeHtml(JSON.stringify(task.error_json, null, 2))}</pre>
+          ${retry}
+        </details>
+      `;
+    })
+    .join("");
+}
+
+function renderPanels() {
+  const label = state.selected
+    ? `${state.selected.project_id} · ${state.selected.current_stage || state.selected.status}`
+    : "未选择项目";
+  $("#activeProject").textContent = label;
+  renderScriptGate();
+  renderHeroGate();
+  renderDelivery();
+}
+
+function renderScriptGate() {
+  const host = $("#scriptEditor");
+  $("#scriptGateState").textContent = state.selected?.current_gate === "script_gate" ? "待确认" : "";
+  if (!state.selected || state.selected.current_gate !== "script_gate" || !state.scriptCopy) {
+    host.className = "emptyState";
+    host.textContent = "等待脚本闸门项目";
+    return;
+  }
+  host.className = "editor";
+  const comments = state.reviewReport?.comments || [];
+  const scores = state.reviewReport?.scores || {};
+  host.innerHTML = `
+    <div class="reviewStrip">
+      <span>Review: ${escapeHtml(state.reviewReport?.status || "PASS")}</span>
+      <span>${Object.entries(scores).map(([key, value]) => `${escapeHtml(key)} ${escapeHtml(String(value))}`).join(" · ")}</span>
+      <span>${comments.map(escapeHtml).join(" · ")}</span>
+    </div>
+    <div class="tableWrap">
+      <table class="scriptTable">
+        <thead><tr><th>#</th><th>角色</th><th>时长</th><th>英文台词</th></tr></thead>
+        <tbody>
+          ${state.scriptCopy.sections.map(renderScriptRow).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div class="actionBar">
+      <button type="button" id="saveScript">保存</button>
+      <button type="button" id="approveScript">保存并通过</button>
+      <button type="button" id="rewriteScript">退回重写</button>
+    </div>
+  `;
+  $("#saveScript").addEventListener("click", () => {
+    saveScript().catch((error) => toast(error.message, "error"));
+  });
+  $("#approveScript").addEventListener("click", approveScriptGate);
+  $("#rewriteScript").addEventListener("click", rewriteScript);
+}
+
+function renderScriptRow(section) {
+  return `
+    <tr>
+      <td>${section.number}</td>
+      <td>${escapeHtml(section.role || "")}</td>
+      <td><input data-section="${section.number}" data-field="timing" value="${escapeAttr(section.timing || "")}" /></td>
+      <td><textarea data-section="${section.number}" data-field="voiceover_en">${escapeHtml(section.voiceover_en || "")}</textarea></td>
+    </tr>
+  `;
+}
+
+function collectScriptDraft() {
+  const draft = structuredClone(state.scriptCopy);
+  draft.sections.forEach((section) => {
+    const timing = $(`[data-section="${section.number}"][data-field="timing"]`);
+    const voiceover = $(`[data-section="${section.number}"][data-field="voiceover_en"]`);
+    section.timing = timing.value.trim();
+    section.voiceover_en = voiceover.value.trim();
+    section.subtitle_en = section.voiceover_en;
+  });
+  return draft;
+}
+
+async function saveScript() {
+  const draft = collectScriptDraft();
+  const saved = await api(`/api/v2/artifacts/${encodeURIComponent(state.selectedId)}/script_copy`, {
+    method: "PUT",
+    body: JSON.stringify(draft),
+  });
+  state.scriptCopy = saved.artifact;
+  toast(`已保存，stale 镜头：${saved.stale_sections.join(",") || "无"}`);
+  await refreshProjects({ silent: true });
+  return saved;
+}
+
+async function approveScriptGate() {
+  try {
+    await saveScript();
+    const payload = await api("/api/v2/gates/approve", {
+      method: "POST",
+      body: JSON.stringify({ project_id: state.selectedId, stage: "script_gate", approver: "operator" }),
+    });
+    toast(`已进入 ${payload.engine.stage}`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function rewriteScript() {
+  try {
+    const payload = await api("/api/v2/gates/rewrite", {
+      method: "POST",
+      body: JSON.stringify({ project_id: state.selectedId, stage: "script_gate", reason: "human rewrite requested" }),
+    });
+    toast(`已退回，当前 ${payload.engine.stage}`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function renderHeroGate() {
+  const host = $("#heroEditor");
+  $("#heroGateState").textContent = state.selected?.current_gate === "hero_gate" ? "待确认" : "";
+  if (!state.selected || state.selected.current_gate !== "hero_gate" || !state.assetManifest) {
+    host.className = "emptyState";
+    host.textContent = "等待关键帧闸门项目";
+    return;
+  }
+  host.className = "heroGrid";
+  const shots = new Map((state.shotPlan?.shots || []).map((shot) => [Number(shot.number), shot]));
+  host.innerHTML = `
+    ${state.assetManifest.hero_frames.map((frame) => renderHeroFrame(frame, shots.get(Number(frame.number)))).join("")}
+    <div class="actionBar wide"><button type="button" id="approveHero">全部确认</button></div>
+  `;
+  host.querySelectorAll("[data-regen]").forEach((button) => {
+    button.addEventListener("click", () => regenHero(Number(button.dataset.regen)));
+  });
+  $("#approveHero").addEventListener("click", approveHeroGate);
+}
+
+function renderHeroFrame(frame, shot) {
+  const camera = shot?.camera_motion
+    ? `${shot.camera_motion.type || ""} · ${shot.camera_motion.duration_sec || 3}s`
+    : "";
+  return `
+    <article class="heroItem">
+      <div class="thumb">
+        <img src="${escapeAttr(frame.preview_url || "")}" alt="shot ${frame.number}" />
+      </div>
+      <div class="heroMeta">
+        <strong>Shot ${frame.number}</strong>
+        <span>${escapeHtml(camera)}</span>
+        <p>${escapeHtml(shot?.visual || "")}</p>
+      </div>
+      <button type="button" data-regen="${frame.number}">单镜重生成</button>
+    </article>
+  `;
+}
+
+async function regenHero(shotIndex) {
+  try {
+    await api("/api/v2/hero/regen", {
+      method: "POST",
+      body: JSON.stringify({ project_id: state.selectedId, shot_index: shotIndex }),
+    });
+    toast(`Shot ${shotIndex} 已重生成`);
+    await loadSelectedProject(state.selectedId);
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function approveHeroGate() {
+  try {
+    const payload = await api("/api/v2/gates/approve", {
+      method: "POST",
+      body: JSON.stringify({ project_id: state.selectedId, stage: "hero_gate", approver: "operator" }),
+    });
+    toast(`已完成到 ${payload.engine.stage}`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function retryShot(shotIndex) {
+  try {
+    const payload = await api("/api/v2/tasks/retry", {
+      method: "POST",
+      body: JSON.stringify({ project_id: state.selectedId, shot_index: shotIndex }),
+    });
+    toast(`镜头 ${shotIndex} 已重试：${payload.engine.status}`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function renderDelivery() {
+  const host = $("#deliveryPanel");
+  const delivered = state.projects.filter((project) => project.status === "succeeded");
+  $("#deliveryState").textContent = delivered.length ? `${delivered.length} 个可交付` : "";
+  if (!delivered.length) {
+    host.className = "emptyState";
+    host.textContent = "暂无可交付项目";
+    return;
+  }
+  host.className = "delivery";
+  const selectedDelivered = state.selected?.status === "succeeded" ? state.selected : delivered[0];
+  const renderUrl = state.renderReport?.output_path
+    ? runFileUrl(selectedDelivered.project_id, state.renderReport.output_path)
+    : "";
+  host.innerHTML = `
+    <div class="deliveryList">
+      ${delivered.map((project) => `
+        <button type="button" data-open="${escapeAttr(project.project_id)}" class="${project.project_id === selectedDelivered.project_id ? "active" : ""}">
+          ${escapeHtml(project.project_id)} · ¥${Number(project.cost.total_cost_cny || 0).toFixed(2)}
+        </button>
+      `).join("")}
+    </div>
+    <div class="deliveryDetail">
+      ${renderUrl ? `<video controls src="${escapeAttr(renderUrl)}"></video>` : ""}
+      <div class="actionBar">
+        <a class="buttonLink" href="/api/v2/download/${encodeURIComponent(selectedDelivered.project_id)}">下载 zip</a>
+        <input id="feedbackInput" placeholder="一句话反馈" />
+        <button type="button" id="sendFeedback">写入反馈</button>
+      </div>
+    </div>
+  `;
+  host.querySelectorAll("[data-open]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedId = button.dataset.open;
+      refreshProjects();
+    });
+  });
+  $("#sendFeedback").addEventListener("click", () => sendFeedback(selectedDelivered.project_id));
+}
+
+async function sendFeedback(projectId) {
+  const input = $("#feedbackInput");
+  try {
+    await api("/api/v2/feedback", {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId, text: input.value.trim() }),
+    });
+    input.value = "";
+    toast("反馈已写入");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function runFileUrl(projectId, pathText) {
+  const normal = String(pathText || "").replace(/\\/g, "/");
+  const parts = normal.split("/");
+  const file = parts[parts.length - 1];
+  return `/api/v2/runs/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(file)}`;
+}
+
+function statusClass(status) {
+  return `status-${String(status || "idle").replace(/_/g, "-")}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+boot();
