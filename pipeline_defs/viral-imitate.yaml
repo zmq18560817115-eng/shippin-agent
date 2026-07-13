@@ -78,7 +78,7 @@ stages:
   - name: final_qa
     agent: review
     task_type: final_qa
-    consumes: [render_report, script_copy]
+    consumes: [render_report, script_copy, shot_plan]
     produces: [qa_report]
     qa:
       - ffprobe_duration_within:

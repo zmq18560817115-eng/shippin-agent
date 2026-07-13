@@ -12,10 +12,14 @@ from tools.base_tool import ToolContext, ToolResult, ToolNotConfiguredError
 from tools.tool_registry import register_tool
 
 
+ASPECT_RATIO_MOCK_RESOLUTION = {"9:16": "1080x1920", "16:9": "1920x1080", "1:1": "1080x1080"}
+
+
 @register_tool("ffmpeg_compose")
 def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     project_id = str(payload.get("project_id") or "ref-mock")
     shot_report = payload.get("shot_report") or {}
+    aspect_ratio = str(payload.get("aspect_ratio") or "9:16")
     artifacts.validate_artifact("shot_report", shot_report)
     if not context.mock and not _find_ffmpeg():
         raise ToolNotConfiguredError("ffmpeg executable not found")
@@ -28,7 +32,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         output.write_bytes(b"mock composed mp4\n")
         ffprobe = {
             "duration": _duration_from_shots(shot_report),
-            "resolution": "1080x1920",
+            "resolution": ASPECT_RATIO_MOCK_RESOLUTION.get(aspect_ratio, "1080x1920"),
             "fps": 30,
             "audio_streams": 1,
         }

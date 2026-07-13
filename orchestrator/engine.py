@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,12 @@ from tools.collect import product_library
 WHITE_HERO_BY_PRODUCT = {
     "便携恒温杯": "data/01_素材库/产品资料/便携恒温杯/listing-0602-nw/主图/白底主图.png"
 }
+
+# Target width/height ratio for each shot_plan.aspect_ratio value, used to
+# validate the real ffprobe resolution in final_qa. Kept in sync with
+# schemas/artifacts/shot_plan.schema.json's enum.
+ASPECT_RATIO_TARGETS = {"9:16": 9 / 16, "16:9": 16 / 9, "1:1": 1.0}
+RESOLUTION_RE = re.compile(r"^(\d+)x(\d+)$")
 
 
 @dataclass(frozen=True)
@@ -374,6 +381,7 @@ def _run_asset(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path 
 
 
 def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:
+    shot_plan = _load_artifact(root, "shot_plan")
     result = _execute_tool(
         "seedance_shot",
         {
@@ -381,6 +389,7 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
             "shot": task.payload_json.get("shot"),
             "shot_index": task.payload_json.get("shot_index"),
             "asset_manifest": _load_artifact(root, "asset_manifest"),
+            "aspect_ratio": shot_plan.get("aspect_ratio", "9:16"),
             "attempt": task.attempt,
         },
         root,
@@ -426,12 +435,14 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
 
 
 def _run_compose(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:
+    shot_plan = _load_artifact(root, "shot_plan")
     result = _execute_tool(
         "ffmpeg_compose",
         {
             "project_id": task.project_id,
             "shot_report": _load_artifact(root, "shot_report"),
             "script_copy": _load_artifact(root, "script_copy"),
+            "aspect_ratio": shot_plan.get("aspect_ratio", "9:16"),
         },
         root,
         mock=mock,
@@ -449,19 +460,50 @@ def _run_compose(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pat
 
 
 def _run_final_qa(task: queue.Task, root: Path, *, db_path: str | Path | None) -> EngineRunStatus:
+    render_report = _load_artifact(root, "render_report")
+    script_copy = _load_artifact(root, "script_copy")
+    shot_plan = _load_artifact(root, "shot_plan")
+    ffprobe = render_report.get("ffprobe") or {}
+
+    duration_ok = _duration_within(
+        ffprobe.get("duration"), script_copy.get("total_duration_s"), _final_qa_duration_tolerance()
+    )
+    audio_ok = int(ffprobe.get("audio_streams") or 0) >= 1
+    aspect_ok = _resolution_matches_aspect(ffprobe.get("resolution"), shot_plan.get("aspect_ratio"))
+    passed = duration_ok and audio_ok and aspect_ok
+
     report = {
         "version": "2.0",
         "project_id": task.project_id,
         "artifact_type": "qa_report",
-        "status": "PASS",
+        "status": "PASS" if passed else "failed",
         "qa": {
-            "ffprobe_duration_within": True,
-            "has_audio_stream": True,
-            "resolution_matches_aspect": True,
+            "ffprobe_duration_within": duration_ok,
+            "has_audio_stream": audio_ok,
+            "resolution_matches_aspect": aspect_ok,
         },
-        "comments": ["Mock final QA passed."],
+        "comments": [_final_qa_comment(passed, ffprobe, shot_plan, script_copy)],
     }
     artifacts.save_artifact(task.project_id, "qa_report", report, run_root=root)
+
+    if not passed:
+        queue.fail_task(
+            task.id,
+            "engine",
+            {"category": "qa_failed", "message": report["comments"][0]},
+            retryable=False,
+            db_path=db_path,
+        )
+        checkpoint.write_checkpoint(
+            task.project_id,
+            "final_qa",
+            status="failed",
+            artifacts={"qa_report": "artifacts/qa_report.json"},
+            data={"qa": report["qa"]},
+            run_root=root,
+        )
+        return EngineRunStatus(task.project_id, "final_qa", "failed", report["comments"][0])
+
     queue.complete_task(task.id, "engine", {"qa_report": report}, db_path=db_path)
     checkpoint.write_checkpoint(
         task.project_id,
@@ -472,6 +514,47 @@ def _run_final_qa(task: queue.Task, root: Path, *, db_path: str | Path | None) -
     )
     _enqueue_stage(task.project_id, "archive", {"run_root": root.as_posix()}, db_path=db_path)
     return EngineRunStatus(task.project_id, "final_qa", "completed")
+
+
+def _duration_within(actual: Any, expected: Any, tolerance_s: float) -> bool:
+    try:
+        return abs(float(actual) - float(expected)) <= tolerance_s
+    except (TypeError, ValueError):
+        return False
+
+
+def _resolution_matches_aspect(resolution: Any, aspect_ratio: Any, *, tolerance: float = 0.03) -> bool:
+    match = RESOLUTION_RE.match(str(resolution or ""))
+    target = ASPECT_RATIO_TARGETS.get(str(aspect_ratio or ""))
+    if not match or target is None:
+        return False
+    width, height = int(match.group(1)), int(match.group(2))
+    if height <= 0:
+        return False
+    return abs((width / height) - target) <= tolerance * target
+
+
+def _final_qa_duration_tolerance() -> float:
+    for check in _stage_def("final_qa").get("qa") or []:
+        if isinstance(check, dict) and isinstance(check.get("ffprobe_duration_within"), dict):
+            return float(check["ffprobe_duration_within"].get("tolerance_s") or 1.5)
+    return 1.5
+
+
+def _final_qa_comment(
+    passed: bool,
+    ffprobe: dict[str, Any],
+    shot_plan: dict[str, Any],
+    script_copy: dict[str, Any],
+) -> str:
+    if passed:
+        return "final QA passed: duration, audio, and aspect ratio all match."
+    return (
+        f"final QA failed: resolution={ffprobe.get('resolution')} "
+        f"duration={ffprobe.get('duration')}s audio_streams={ffprobe.get('audio_streams')} "
+        f"expected aspect_ratio={shot_plan.get('aspect_ratio')} "
+        f"total_duration_s={script_copy.get('total_duration_s')}"
+    )
 
 
 def _run_archive(task: queue.Task, root: Path, *, db_path: str | Path | None) -> EngineRunStatus:
