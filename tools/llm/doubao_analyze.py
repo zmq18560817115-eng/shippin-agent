@@ -17,6 +17,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "version": "2.0",
         "project_id": project_id,
         "source_link_id": payload.get("source_link_id"),
+        "material_meta_ref": str(payload.get("source_material_id") or payload.get("source_url") or ""),
         "hook_3s": "Night feeds should feel easier.",
         "structure": ["钩子", "痛点", "方案", "证明", "行动号召"],
         "voiceover_text": transcript or "Mock transcript for portable warming cup.",
