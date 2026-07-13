@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "material_meta",
+  "type": "object",
+  "required": ["version", "source_url", "video_id", "source_keyword", "crawl_time"],
+  "properties": {
+    "version": {"const": "2.0"},
+    "source_url": {"type": "string", "minLength": 1},
+    "video_url": {"type": "string"},
+    "video_id": {"type": "string", "minLength": 1},
+    "caption": {"type": "string"},
+    "author_name": {"type": "string"},
+    "author_url": {"type": "string"},
+    "like_count": {"type": "integer", "minimum": 0},
+    "comment_count": {"type": "integer", "minimum": 0},
+    "share_count": {"type": "integer", "minimum": 0},
+    "collect_count": {"type": "integer", "minimum": 0},
+    "publish_time": {"type": ["string", "null"]},
+    "hashtags": {"type": "array", "items": {"type": "string"}},
+    "music_title": {"type": "string"},
+    "cover_url": {"type": "string"},
+    "source_keyword": {"type": "string", "minLength": 1},
+    "crawl_time": {"type": "string", "minLength": 1},
+    "processing_status": {"type": "string"},
+    "transcript_text": {"type": "string"},
+    "ai_analysis_json": {"type": "string"},
+    "local_video_path": {"type": "string"}
+  }
+}

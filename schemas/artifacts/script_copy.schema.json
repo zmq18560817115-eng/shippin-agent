@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "script_copy",
+  "type": "object",
+  "required": ["version", "project_id", "product_id", "sections"],
+  "properties": {
+    "version": {"const": "2.0"},
+    "project_id": {"type": "string"},
+    "product_id": {"type": "string"},
+    "source_link_id": {"type": ["integer", "null"]},
+    "total_duration_s": {"type": "number", "minimum": 12, "maximum": 60},
+    "generator": {
+      "type": "object",
+      "properties": {
+        "provider": {"type": "string"},
+        "model": {"type": "string"},
+        "prompt_version": {"type": "string"}
+      }
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["number", "role", "timing", "voiceover_en"],
+        "properties": {
+          "number": {"type": "integer", "minimum": 1},
+          "role": {"enum": ["钩子", "痛点", "方案", "证明", "行动号召"]},
+          "timing": {"type": "string", "pattern": "^\\d+-\\d+s$"},
+          "voiceover_en": {"type": "string", "minLength": 2, "maxLength": 220},
+          "subtitle_en": {"type": "string"},
+          "selling_points": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "feedback_constraints_applied": {"type": "array", "items": {"type": "string"}}
+  }
+}

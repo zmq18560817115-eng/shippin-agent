@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "review_outputs",
+  "type": "object",
+  "required": ["version", "project_id", "artifact_type", "status"],
+  "properties": {
+    "version": {"const": "2.0"},
+    "project_id": {"type": "string"},
+    "artifact_type": {"enum": ["review_report", "qa_report", "publish_archive"]},
+    "status": {"enum": ["PASS", "WARNING", "BLOCKED", "failed", "succeeded"]},
+    "scores": {"type": "object"},
+    "comments": {"type": "array", "items": {"type": "string"}},
+    "qa": {"type": "object"},
+    "archive": {"type": "object"},
+    "feedback_constraints": {"type": "array", "items": {"type": "string"}}
+  }
+}

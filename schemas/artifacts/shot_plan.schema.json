@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "shot_plan",
+  "type": "object",
+  "required": ["version", "project_id", "script_copy_ref", "aspect_ratio", "shots"],
+  "properties": {
+    "version": {"const": "2.0"},
+    "project_id": {"type": "string"},
+    "script_copy_ref": {
+      "type": "string",
+      "description": "所依据的 script_copy 产物路径；script_copy 变更后 engine 使本产物失效"
+    },
+    "aspect_ratio": {"enum": ["9:16", "16:9", "1:1"], "default": "9:16"},
+    "shots": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["number", "visual", "footage_type", "camera_motion"],
+        "properties": {
+          "number": {"type": "integer", "minimum": 1},
+          "visual": {"type": "string", "minLength": 4},
+          "visual_prompt": {"type": "string"},
+          "seedance_prompt": {"type": "string"},
+          "footage_type": {"enum": ["AI_BROLL", "AI_VIDEO", "STOCK", "SCREEN", "NONE"]},
+          "camera_motion": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "enum": [
+                  "dolly_in",
+                  "dolly_out",
+                  "pan_left",
+                  "pan_right",
+                  "static",
+                  "arc",
+                  "crash_zoom"
+                ]
+              },
+              "start_frame_focus": {"type": "string"},
+              "end_frame_focus": {"type": "string"},
+              "duration_sec": {"type": "number", "minimum": 1, "maximum": 10}
+            }
+          }
+        }
+      }
+    }
+  }
+}

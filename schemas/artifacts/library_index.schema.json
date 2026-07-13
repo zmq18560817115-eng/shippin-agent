@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "library_index",
+  "type": "object",
+  "required": ["version", "items"],
+  "properties": {
+    "version": {"const": "2.0"},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["material_id", "material_meta_ref", "status"],
+        "properties": {
+          "material_id": {"type": "string", "minLength": 1},
+          "material_meta_ref": {"type": "string", "minLength": 1},
+          "status": {"enum": ["raw", "kept", "dropped", "needs_review"]},
+          "fingerprint": {"type": "string"},
+          "thumbnail_path": {"type": "string"},
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "created_at": {"type": "string"}
+        }
+      }
+    }
+  }
+}

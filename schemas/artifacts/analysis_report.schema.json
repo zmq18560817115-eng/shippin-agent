@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "analysis_report",
+  "type": "object",
+  "required": ["version", "project_id", "hook_3s", "structure", "voiceover_text", "pacing"],
+  "properties": {
+    "version": {"const": "2.0"},
+    "project_id": {"type": "string", "minLength": 1},
+    "source_link_id": {"type": ["integer", "null"]},
+    "material_meta_ref": {"type": "string"},
+    "hook_3s": {"type": "string", "minLength": 1},
+    "structure": {"type": "array", "items": {"type": "string"}},
+    "voiceover_text": {"type": "string"},
+    "pacing": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["start_s", "end_s", "role"],
+        "properties": {
+          "start_s": {"type": "number", "minimum": 0},
+          "end_s": {"type": "number", "minimum": 0},
+          "role": {"type": "string"},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "keyframes": {"type": "array", "items": {"type": "string"}},
+    "fingerprint": {"type": "string"}
+  }
+}

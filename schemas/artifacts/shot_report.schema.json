@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "shot_report",
+  "type": "object",
+  "required": ["version", "project_id", "shots"],
+  "properties": {
+    "version": {"const": "2.0"},
+    "project_id": {"type": "string"},
+    "shots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "status", "attempt"],
+        "properties": {
+          "number": {"type": "integer", "minimum": 1},
+          "status": {"enum": ["queued", "running", "succeeded", "failed", "blocked"]},
+          "path": {"type": "string"},
+          "cost_cny": {"type": "number", "minimum": 0},
+          "attempt": {"type": "integer", "minimum": 0},
+          "error": {"type": "object"}
+        }
+      }
+    }
+  }
+}
