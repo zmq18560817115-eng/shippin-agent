@@ -60,13 +60,16 @@ ON tasks(status, lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_stage
 ON tasks(project_id, stage, status);
 
+-- cost_entries columns follow docs/第一批实施文档 §1.3 (tool/operation/phase/amount_cny).
 CREATE TABLE IF NOT EXISTS cost_entries (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id    INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     task_id     INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
     agent       TEXT,
-    tool        TEXT,
-    cost_cny    REAL NOT NULL DEFAULT 0.0,
+    tool        TEXT NOT NULL,
+    operation   TEXT NOT NULL DEFAULT 'reconcile',
+    phase       TEXT,
+    amount_cny  REAL NOT NULL DEFAULT 0.0,
     meta_json   TEXT NOT NULL DEFAULT '{}',
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );

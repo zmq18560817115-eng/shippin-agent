@@ -13,6 +13,8 @@ def reconcile(
     agent: str,
     tool: str,
     cost_cny: float,
+    phase: str | None = None,
+    operation: str = "reconcile",
     db_path: str | os.PathLike[str] | None = None,
     task_id: int | None = None,
     tokens: dict[str, int] | None = None,
@@ -36,15 +38,17 @@ def reconcile(
         cursor = conn.execute(
             """
             INSERT INTO cost_entries (
-                project_id, task_id, agent, tool, cost_cny, meta_json, created_at
+                project_id, task_id, agent, tool, operation, phase, amount_cny, meta_json, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_id,
                 task_id,
                 agent,
                 tool,
+                operation,
+                phase,
                 float(cost_cny),
                 dumps_meta(payload),
                 queue.utc_now(),
@@ -71,7 +75,7 @@ def get_project_cost(
         row = conn.execute(
             """
             SELECT
-                COALESCE(SUM(cost_cny), 0.0) AS total_cost_cny,
+                COALESCE(SUM(amount_cny), 0.0) AS total_cost_cny,
                 COUNT(*) AS entry_count
             FROM cost_entries
             WHERE project_id = ?
@@ -95,7 +99,7 @@ def get_task_cost(
         row = conn.execute(
             """
             SELECT
-                COALESCE(SUM(cost_cny), 0.0) AS total_cost_cny,
+                COALESCE(SUM(amount_cny), 0.0) AS total_cost_cny,
                 COUNT(*) AS entry_count
             FROM cost_entries
             WHERE task_id = ?

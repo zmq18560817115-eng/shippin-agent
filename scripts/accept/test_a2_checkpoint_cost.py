@@ -89,6 +89,7 @@ def test_a2_cost_reconcile_records_observe_mode_meta(tmp_path: Path) -> None:
         task_id=task_id,
         agent="analysis",
         tool="doubao_analyze",
+        phase="analysis",
         cost_cny=0.42,
         tokens={"input": 100, "output": 40},
         model="doubao-turbo",
@@ -102,8 +103,12 @@ def test_a2_cost_reconcile_records_observe_mode_meta(tmp_path: Path) -> None:
     assert totals["total_cost_cny"] == 0.42
     assert totals["entry_count"] == 1
     with queue.get_conn(db_path) as conn:
-        row = conn.execute("SELECT * FROM cost_entries WHERE id = ?", (entry_id,)).fetchone()
+        row = conn.execute("SELECT * FROM cost_entries WHERE entry_id = ?", (entry_id,)).fetchone()
 
+    assert row["tool"] == "doubao_analyze"
+    assert row["operation"] == "reconcile"
+    assert row["phase"] == "analysis"
+    assert row["amount_cny"] == 0.42
     meta = cost_tracker.loads_meta(row["meta_json"])
     assert meta["budget_mode"] == "observe"
     assert meta["tokens"] == {"input": 100, "output": 40}

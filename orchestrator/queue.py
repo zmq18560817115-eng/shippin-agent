@@ -102,6 +102,45 @@ def get_conn(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connectio
 def init_db(db_path: str | os.PathLike[str] | None = None) -> None:
     with get_conn(db_path) as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _migrate_cost_entries(conn)
+
+
+def _migrate_cost_entries(conn: sqlite3.Connection) -> None:
+    """Idempotently upgrade a pre-existing cost_entries table to the
+    entry_id/tool/operation/phase/amount_cny shape, preserving every row."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(cost_entries)").fetchall()}
+    if not columns or "amount_cny" in columns:
+        return
+    conn.execute("ALTER TABLE cost_entries RENAME TO cost_entries_legacy")
+    conn.executescript(
+        """
+        CREATE TABLE cost_entries (
+            entry_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            task_id     INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+            agent       TEXT,
+            tool        TEXT NOT NULL,
+            operation   TEXT NOT NULL DEFAULT 'reconcile',
+            phase       TEXT,
+            amount_cny  REAL NOT NULL DEFAULT 0.0,
+            meta_json   TEXT NOT NULL DEFAULT '{}',
+            created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO cost_entries (
+            entry_id, project_id, task_id, agent, tool, operation, phase, amount_cny, meta_json, created_at
+        )
+        SELECT
+            id, project_id, task_id, agent, COALESCE(NULLIF(tool, ''), 'unknown'),
+            'reconcile', NULL, cost_cny, meta_json, created_at
+        FROM cost_entries_legacy
+        """
+    )
+    conn.execute("DROP TABLE cost_entries_legacy")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cost_entries_project ON cost_entries(project_id, created_at)")
 
 
 def ensure_project(

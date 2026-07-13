@@ -34,9 +34,21 @@ class ToolContext:
 
     def pricing_for(self, tool_name: str) -> float:
         value = (self.config.get("pricing") or {}).get(tool_name)
-        if value is None:
+        if value is None or isinstance(value, dict):
             return 0.0
         return float(value)
+
+    def token_cost_cny(self, tool_name: str, *, prompt_tokens: int, completion_tokens: int) -> float:
+        value = (self.config.get("pricing") or {}).get(tool_name)
+        if not isinstance(value, dict):
+            return 0.0
+        input_rate = float(value.get("input_cny_per_1k_tokens") or 0.0)
+        output_rate = float(value.get("output_cny_per_1k_tokens") or 0.0)
+        return round(
+            (max(prompt_tokens, 0) / 1000.0) * input_rate
+            + (max(completion_tokens, 0) / 1000.0) * output_rate,
+            6,
+        )
 
 
 @dataclass

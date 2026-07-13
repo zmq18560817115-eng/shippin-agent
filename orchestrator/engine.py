@@ -9,6 +9,7 @@ from libshared import artifacts, checkpoint
 from libshared.paths import ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, queue
 from tools import tool_registry
+from tools.base_tool import ToolResult
 from tools.collect import product_library
 
 
@@ -237,6 +238,8 @@ def _run_analysis(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pa
         result.data["analysis_report"],
         next_stage="script",
         db_path=db_path,
+        tool="doubao_analyze",
+        result=result,
     )
 
 
@@ -259,6 +262,8 @@ def _run_script(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path
         result.data["script_copy"],
         next_stage="script_review",
         db_path=db_path,
+        tool="doubao_script",
+        result=result,
     )
 
 
@@ -281,6 +286,7 @@ def _run_script_review(task: queue.Task, root: Path, *, mock: bool, db_path: str
         task_id=task.id,
         agent=task.agent,
         tool="doubao_review",
+        phase="script_review",
         cost_cny=result.cost_cny,
         model=result.meta.get("model"),
         meta=result.meta,
@@ -323,6 +329,8 @@ def _run_storyboard(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         result.data["shot_plan"],
         next_stage="asset",
         db_path=db_path,
+        tool="doubao_shotplan",
+        result=result,
         script_copy=script_copy,
     )
 
@@ -399,6 +407,7 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         task_id=task.id,
         agent=task.agent,
         tool="seedance_shot",
+        phase="production",
         cost_cny=result.cost_cny,
         shot_index=task.payload_json.get("shot_index"),
         meta=result.meta,
@@ -434,6 +443,8 @@ def _run_compose(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pat
         result.data["render_report"],
         next_stage="final_qa",
         db_path=db_path,
+        tool="ffmpeg_compose",
+        result=result,
     )
 
 
@@ -497,10 +508,23 @@ def _complete_with_artifact(
     *,
     next_stage: str,
     db_path: str | Path | None,
+    tool: str,
+    result: ToolResult,
     script_copy: dict[str, Any] | None = None,
 ) -> EngineRunStatus:
     artifacts.save_artifact(task.project_id, artifact_name, payload, run_root=root, script_copy=script_copy)
     queue.complete_task(task.id, "engine", {artifact_name: payload}, db_path=db_path)
+    cost_tracker.reconcile(
+        project_id=task.project_id,
+        task_id=task.id,
+        agent=task.agent,
+        tool=tool,
+        phase=task.stage,
+        cost_cny=result.cost_cny,
+        model=result.meta.get("model"),
+        meta=result.meta,
+        db_path=db_path,
+    )
     checkpoint.write_checkpoint(
         task.project_id,
         task.stage,

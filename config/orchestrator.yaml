@@ -16,10 +16,22 @@ runtime:
   budget_mode: "observe"
 
 pricing:
-  # Fill after block 4 real-key smoke tests.
-  doubao_analyze: null
-  doubao_script: null
-  doubao_shotplan: null
-  doubao_review: null
-  seedance_shot: null
-  ffmpeg_compose: null
+  # Sourced from public Volcengine Ark pricing pages (checked 2026-07-13):
+  # doubao-seed-1.8 chat: ~0.8 CNY / 1M input tokens, ~8 CNY / 1M output tokens (16k tier).
+  # doubao-seedance-2-0-fast: flat per-shot estimate at ~5s/shot, fast tier.
+  # These are placeholders pending real invoices from block4/block8 live-key runs;
+  # calibrate against actual billing per scripts/accept/report_10videos.md.
+  doubao_analyze:
+    input_cny_per_1k_tokens: 0.0008
+    output_cny_per_1k_tokens: 0.008
+  doubao_script:
+    input_cny_per_1k_tokens: 0.0008
+    output_cny_per_1k_tokens: 0.008
+  doubao_shotplan:
+    input_cny_per_1k_tokens: 0.0008
+    output_cny_per_1k_tokens: 0.008
+  doubao_review:
+    input_cny_per_1k_tokens: 0.0008
+    output_cny_per_1k_tokens: 0.008
+  seedance_shot: 3.0
+  ffmpeg_compose: 0.0
