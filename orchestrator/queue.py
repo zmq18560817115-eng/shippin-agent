@@ -191,6 +191,7 @@ def claim_task(
     worker_id: str,
     *,
     agents: Sequence[str] | None = None,
+    project_id: str | None = None,
     lease_seconds: int | None = None,
     db_path: str | os.PathLike[str] | None = None,
 ) -> Task | None:
@@ -203,6 +204,7 @@ def claim_task(
     now = utc_now()
     lease_expires_at = _iso_after(resolve_lease_seconds(lease_seconds))
     placeholders = ",".join("?" for _ in selected_agents)
+    project_clause = "AND candidate.project_id = ?" if project_id else ""
     sql = f"""
         UPDATE tasks
         SET
@@ -218,6 +220,7 @@ def claim_task(
             FROM tasks AS candidate
             WHERE candidate.status = 'queued'
               AND candidate.agent IN ({placeholders})
+              {project_clause}
               AND (
                 candidate.agent <> 'media'
                 OR NOT EXISTS (
@@ -239,6 +242,8 @@ def claim_task(
         now,
         *selected_agents,
     ]
+    if project_id:
+        params.append(project_id)
     with get_conn(db_path) as conn:
         row = conn.execute(sql, params).fetchone()
         if row is None:
@@ -455,6 +460,7 @@ def get_task(task_id: int, *, db_path: str | os.PathLike[str] | None = None) -> 
 def list_tasks(
     *,
     status: str | None = None,
+    project_id: str | None = None,
     db_path: str | os.PathLike[str] | None = None,
 ) -> list[Task]:
     clauses: list[str] = []
@@ -462,6 +468,9 @@ def list_tasks(
     if status is not None:
         clauses.append("status = ?")
         params.append(status)
+    if project_id is not None:
+        clauses.append("project_id = ?")
+        params.append(project_id)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with get_conn(db_path) as conn:
         rows = conn.execute(
