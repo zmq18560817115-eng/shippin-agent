@@ -45,7 +45,7 @@ class VideoResult:
     @property
     def qualified(self) -> bool:
         return (
-            self.status == "succeeded"
+            self.status == "completed"
             and self.final_qa_status == "PASS"
             and self.business_status == "accepted"
             and self.script_gate_passes <= 2

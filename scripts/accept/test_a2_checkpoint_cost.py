@@ -13,14 +13,14 @@ def test_a2_checkpoint_sequence_tmp_tolerance_and_next_stage(tmp_path: Path) -> 
     checkpoint.write_checkpoint(
         "ref-a2",
         "analysis",
-        status="succeeded",
+        status="completed",
         artifacts={"analysis_report": "artifacts/analysis_report.json"},
         run_root=run_root,
     )
     checkpoint.write_checkpoint(
         "ref-a2",
         "script",
-        status="succeeded",
+        status="completed",
         artifacts={"script_copy": "artifacts/script_copy.json"},
         run_root=run_root,
     )
@@ -31,7 +31,7 @@ def test_a2_checkpoint_sequence_tmp_tolerance_and_next_stage(tmp_path: Path) -> 
     assert latest is not None
     assert latest["seq"] == 2
     assert latest["stage"] == "script"
-    assert latest["status"] == "succeeded"
+    assert latest["status"] == "completed"
     assert checkpoint.get_completed_stages("ref-a2", run_root=run_root) == [
         "analysis",
         "script",
@@ -40,6 +40,20 @@ def test_a2_checkpoint_sequence_tmp_tolerance_and_next_stage(tmp_path: Path) -> 
     assert checkpoint.resolve_artifact("ref-a2", "script_copy", run_root=run_root) == (
         run_root / "artifacts" / "script_copy.json"
     )
+
+
+def test_a2_checkpoint_completed_status_reads_legacy_succeeded_value(tmp_path: Path) -> None:
+    run_root = tmp_path / "runs" / "ref-a2-legacy"
+    checkpoint.write_checkpoint(
+        "ref-a2-legacy",
+        "analysis",
+        status="succeeded",
+        artifacts={"analysis_report": "artifacts/analysis_report.json"},
+        run_root=run_root,
+    )
+
+    assert checkpoint.get_completed_stages("ref-a2-legacy", run_root=run_root) == ["analysis"]
+    assert checkpoint.get_next_stage("ref-a2-legacy", run_root=run_root) == "script"
 
 
 def test_a2_approve_gate_requires_awaiting_human(tmp_path: Path) -> None:
@@ -68,7 +82,7 @@ def test_a2_approve_gate_requires_awaiting_human(tmp_path: Path) -> None:
         run_root=run_root,
     )
 
-    assert approved["status"] == "succeeded"
+    assert approved["status"] == "completed"
     assert approved["approved_by"] == "qa"
     assert approved["approval_notes"] == "copy ok"
 

@@ -109,7 +109,7 @@ def run_until_blocked(
         result = _execute_task(task, root, mock=mock, db_path=db_path)
         if result.status in {"awaiting_human", "failed", "blocked", "needs_review"}:
             return result
-        if result.status == "succeeded" and result.stage == "archive":
+        if result.status == "completed" and result.stage == "archive":
             return result
 
     raise RuntimeError(f"engine exceeded max_steps={max_steps} for {project_id}")
@@ -295,7 +295,7 @@ def _run_script_review(task: queue.Task, root: Path, *, mock: bool, db_path: str
     checkpoint.write_checkpoint(
         task.project_id,
         "script_review",
-        status="succeeded",
+        status="completed",
         artifacts={"review_report": "artifacts/review_report.json"},
         run_root=root,
     )
@@ -359,7 +359,7 @@ def _run_asset(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path 
     checkpoint.write_checkpoint(
         task.project_id,
         "asset",
-        status="succeeded",
+        status="completed",
         artifacts={"asset_manifest": "artifacts/asset_manifest.json"},
         run_root=root,
     )
@@ -417,7 +417,7 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         checkpoint.write_checkpoint(
             task.project_id,
             "production",
-            status="succeeded",
+            status="completed",
             artifacts={"shot_report": "artifacts/shot_report.json"},
             run_root=root,
         )
@@ -466,12 +466,12 @@ def _run_final_qa(task: queue.Task, root: Path, *, db_path: str | Path | None) -
     checkpoint.write_checkpoint(
         task.project_id,
         "final_qa",
-        status="succeeded",
+        status="completed",
         artifacts={"qa_report": "artifacts/qa_report.json"},
         run_root=root,
     )
     _enqueue_stage(task.project_id, "archive", {"run_root": root.as_posix()}, db_path=db_path)
-    return EngineRunStatus(task.project_id, "final_qa", "succeeded")
+    return EngineRunStatus(task.project_id, "final_qa", "completed")
 
 
 def _run_archive(task: queue.Task, root: Path, *, db_path: str | Path | None) -> EngineRunStatus:
@@ -493,11 +493,11 @@ def _run_archive(task: queue.Task, root: Path, *, db_path: str | Path | None) ->
     checkpoint.write_checkpoint(
         task.project_id,
         "archive",
-        status="succeeded",
+        status="completed",
         artifacts={"publish_archive": "artifacts/publish_archive.json"},
         run_root=root,
     )
-    return EngineRunStatus(task.project_id, "archive", "succeeded", "pipeline complete")
+    return EngineRunStatus(task.project_id, "archive", "completed", "pipeline complete")
 
 
 def _complete_with_artifact(
@@ -528,12 +528,12 @@ def _complete_with_artifact(
     checkpoint.write_checkpoint(
         task.project_id,
         task.stage,
-        status="succeeded",
+        status="completed",
         artifacts={artifact_name: f"artifacts/{artifact_name}.json"},
         run_root=root,
     )
     _enqueue_stage(task.project_id, next_stage, {"run_root": root.as_posix()}, db_path=db_path)
-    return EngineRunStatus(task.project_id, task.stage, "succeeded", f"{artifact_name} saved")
+    return EngineRunStatus(task.project_id, task.stage, "completed", f"{artifact_name} saved")
 
 
 def _execute_tool(
@@ -663,8 +663,8 @@ def _terminal_status(
     if failed and not _has_queued_production(project_id, db_path=db_path):
         return EngineRunStatus(project_id, "production", "failed", "production has failed shot tasks")
     latest = checkpoint.read_latest(project_id, run_root=root)
-    if latest and latest.get("stage") == "archive" and latest.get("status") == "succeeded":
-        return EngineRunStatus(project_id, "archive", "succeeded", "pipeline complete")
+    if latest and latest.get("stage") == "archive" and latest.get("status") in checkpoint.DONE_STATUSES:
+        return EngineRunStatus(project_id, "archive", "completed", "pipeline complete")
     return None
 
 

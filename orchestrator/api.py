@@ -52,6 +52,7 @@ STATUS_PRIORITY = (
     "running",
     "queued",
     "succeeded",
+    "completed",
     "idle",
 )
 
@@ -696,7 +697,7 @@ def _source_material_or_none(material_id: str | None) -> dict[str, Any] | None:
 def _project_status(stages: dict[str, dict[str, Any]], pending_gate: str | None) -> str:
     if pending_gate:
         return "awaiting_human"
-    if stages["archive"]["status"] == "succeeded":
+    if stages["archive"]["status"] in {"succeeded", "completed"}:
         return "succeeded"
     status = _aggregate_status([item["status"] for item in stages.values()])
     return "running" if status in {"queued", "running"} else status

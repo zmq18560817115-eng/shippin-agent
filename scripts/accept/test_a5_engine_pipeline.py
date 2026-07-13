@@ -33,7 +33,7 @@ def test_a5_mock_pipeline_runs_with_two_human_gates(tmp_path: Path) -> None:
     engine.approve_gate("ref-e2e", "hero_gate", approver="qa", db_path=db_path, run_root=run_root)
     done = engine.run_until_blocked("ref-e2e", db_path=db_path, run_root=run_root, mock=True)
 
-    assert done.status == "succeeded"
+    assert done.status == "completed"
     assert done.stage == "archive"
     assert (run_root / "artifacts" / "analysis_report.json").is_file()
     assert (run_root / "artifacts" / "script_copy.json").is_file()
@@ -84,7 +84,7 @@ def test_a5_seedance_failure_isolated_and_retry_only_failed_shot(tmp_path: Path,
     assert retried.status == "succeeded"
     all_done = engine.run_until_blocked("ref-shotfail", db_path=db_path, run_root=first_root, mock=True)
 
-    assert all_done.status == "succeeded"
+    assert all_done.status == "completed"
     assert all_done.stage == "archive"
     shot_tasks_after = [
         task
