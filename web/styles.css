@@ -170,11 +170,64 @@ textarea {
   align-items: end;
 }
 
-.startBar label {
+.startBar label,
+.collectForm label {
   display: grid;
   gap: 6px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.collectForm {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.collectLinks textarea {
+  min-height: 86px;
+}
+
+.materialList {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.materialItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfb;
+}
+
+.materialItem strong,
+.materialItem span,
+.materialItem p {
+  display: block;
+}
+
+.materialItem strong {
+  font-size: 13px;
+}
+
+.materialItem span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.materialItem p {
+  margin: 5px 0 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .tableWrap {
@@ -472,6 +525,11 @@ pre {
   }
 
   .startBar {
+    grid-template-columns: 1fr;
+  }
+
+  .collectForm,
+  .materialItem {
     grid-template-columns: 1fr;
   }
 

@@ -36,6 +36,25 @@
 
       <section class="band">
         <div class="sectionHead">
+          <h2>采集通道3</h2>
+          <span id="collectState"></span>
+        </div>
+        <form class="collectForm" id="collectForm">
+          <label>
+            来源关键词
+            <input id="sourceKeywordInput" value="manual_tiktok" />
+          </label>
+          <label class="collectLinks">
+            TikTok 链接
+            <textarea id="collectLinksInput" placeholder="每行一条 TikTok 链接"></textarea>
+          </label>
+          <button type="submit">导入素材</button>
+        </form>
+        <div id="materialLibrary" class="emptyState">暂无人工导入素材</div>
+      </section>
+
+      <section class="band">
+        <div class="sectionHead">
           <h2>项目列表</h2>
           <button type="button" id="refreshButton">刷新</button>
         </div>

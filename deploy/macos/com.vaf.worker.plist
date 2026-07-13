@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.vaf.worker</string>
+  <key>WorkingDirectory</key>
+  <string>__VAF_ROOT__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>-m</string>
+    <string>agents.worker</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>__VAF_ROOT__</string>
+    <key>VAF_DB_PATH</key>
+    <string>__VAF_ROOT__/db/agentflow.db</string>
+    <key>VAF_RUNS_ROOT</key>
+    <string>__VAF_ROOT__/data/runs</string>
+    <key>VAF_MATERIAL_LIBRARY_ROOT</key>
+    <string>__VAF_ROOT__/data/01_素材库/对标视频/manual_import</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/worker.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/worker.err.log</string>
+</dict>
+</plist>

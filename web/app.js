@@ -1,5 +1,6 @@
 const state = {
   projects: [],
+  materials: [],
   selectedId: null,
   selected: null,
   scriptCopy: null,
@@ -62,6 +63,7 @@ async function boot() {
 
 function bindEvents() {
   $("#startForm").addEventListener("submit", startProject);
+  $("#collectForm").addEventListener("submit", collectLinks);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
 }
 
@@ -93,6 +95,16 @@ async function loadProducts() {
   }
 }
 
+async function loadMaterials() {
+  try {
+    const payload = await api("/api/v2/collect/library?limit=50");
+    state.materials = payload.items || [];
+  } catch {
+    state.materials = [];
+  }
+  renderMaterialLibrary();
+}
+
 async function startProject(event) {
   event.preventDefault();
   const button = event.submitter;
@@ -118,6 +130,48 @@ async function startProject(event) {
   }
 }
 
+async function collectLinks(event) {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  $("#collectState").textContent = "导入中";
+  try {
+    const payload = await api("/api/v2/collect/manual", {
+      method: "POST",
+      body: JSON.stringify({
+        links_text: $("#collectLinksInput").value,
+        product_id: $("#productSelect").value,
+        source_keyword: $("#sourceKeywordInput").value.trim() || "manual_tiktok",
+      }),
+    });
+    $("#collectLinksInput").value = "";
+    toast(`已导入 ${payload.imported_count} 条素材`);
+    await loadMaterials();
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    $("#collectState").textContent = "";
+  }
+}
+
+async function startFromMaterial(materialId) {
+  try {
+    const payload = await api("/api/v2/pipeline/run", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: $("#productSelect").value,
+        source_material_id: materialId,
+      }),
+    });
+    state.selectedId = payload.project_id;
+    toast(`素材 ${materialId} 已发起：${payload.engine.stage}`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
 async function refreshProjects({ silent = false } = {}) {
   if (state.refreshing) return;
   state.refreshing = true;
@@ -133,11 +187,41 @@ async function refreshProjects({ silent = false } = {}) {
     } else {
       renderPanels();
     }
+    await loadMaterials();
   } catch (error) {
     if (!silent) toast(error.message, "error");
   } finally {
     state.refreshing = false;
   }
+}
+
+function renderMaterialLibrary() {
+  const host = $("#materialLibrary");
+  if (!state.materials.length) {
+    host.className = "emptyState";
+    host.textContent = "暂无人工导入素材";
+    return;
+  }
+  host.className = "materialList";
+  host.innerHTML = state.materials.map(renderMaterialItem).join("");
+  host.querySelectorAll("[data-start-material]").forEach((button) => {
+    button.addEventListener("click", () => startFromMaterial(button.dataset.startMaterial));
+  });
+}
+
+function renderMaterialItem(item) {
+  const meta = item.material_meta || {};
+  const caption = meta.caption || meta.source_url || "";
+  return `
+    <article class="materialItem">
+      <div>
+        <strong>${escapeHtml(item.material_id)}</strong>
+        <span>${escapeHtml(meta.source_keyword || "manual_tiktok")} · ${escapeHtml(item.status || "raw")}</span>
+        <p>${escapeHtml(caption)}</p>
+      </div>
+      <button type="button" data-start-material="${escapeAttr(item.material_id)}">发起项目</button>
+    </article>
+  `;
 }
 
 async function loadSelectedProject(projectId) {

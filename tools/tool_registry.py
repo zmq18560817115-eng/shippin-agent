@@ -8,6 +8,7 @@ from tools.base_tool import ToolContext, ToolResult, result_from_exception
 
 ToolFn = Callable[[dict[str, Any], ToolContext], ToolResult]
 _REGISTRY: dict[str, ToolFn] = {}
+_LOADED = False
 
 
 def register_tool(name: str, func: ToolFn | None = None):
@@ -47,14 +48,17 @@ def execute_tool(
 
 
 def _ensure_loaded() -> None:
-    if _REGISTRY:
+    global _LOADED
+    if _LOADED:
         return
     from tools.audio import volcengine_asr
+    from tools.collect import manual_import
     from tools.llm import claude_script, doubao_analyze, doubao_review, doubao_script, doubao_shotplan
     from tools.video import ffmpeg_compose, hero_frame, seedance_shot
 
     _ = (
         volcengine_asr,
+        manual_import,
         claude_script,
         doubao_analyze,
         doubao_review,
@@ -64,3 +68,4 @@ def _ensure_loaded() -> None:
         hero_frame,
         seedance_shot,
     )
+    _LOADED = True

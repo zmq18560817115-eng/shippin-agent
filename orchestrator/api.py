@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from libshared import artifacts, checkpoint
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, engine, queue
+from tools.collect import manual_import
 
 
 WEB_ROOT = ROOT / "web"
@@ -59,8 +60,17 @@ class PipelineRunRequest(BaseModel):
     project_id: str | None = None
     product_id: str = "便携恒温杯"
     source_link_id: int | None = None
+    source_material_id: str | None = None
     link_id: str | int | None = None
     mock: bool = True
+
+
+class ManualCollectRequest(BaseModel):
+    links_text: str = ""
+    urls: list[str] | None = None
+    items: list[dict[str, Any]] | None = None
+    product_id: str = "便携恒温杯"
+    source_keyword: str = "manual_tiktok"
 
 
 class GateApproveRequest(BaseModel):
@@ -122,15 +132,70 @@ def products() -> dict[str, list[dict[str, Any]]]:
     return {"items": _list_products()}
 
 
+@app.post("/api/v2/collect/manual")
+def collect_manual(request: ManualCollectRequest) -> dict[str, Any]:
+    payload = {
+        "links_text": request.links_text,
+        "urls": request.urls or [],
+        "items": request.items or [],
+        "product_id": request.product_id,
+        "source_keyword": request.source_keyword,
+        "library_root": _material_library_root().as_posix(),
+    }
+    result = manual_import.execute(payload, context=_tool_context())
+    if not result.ok:
+        error = result.error or {"message": "manual import failed"}
+        status_code = 422 if error.get("category") == "validation" else 500
+        raise HTTPException(status_code=status_code, detail=error.get("message") or error)
+    queue.record_event(
+        event_type="collector.manual_import",
+        message=f"{result.data['imported_count']} links",
+        meta={"library_root": result.data["library_root"]},
+        db_path=_db_path(),
+    )
+    return result.data
+
+
+@app.get("/api/v2/collect/library")
+def collect_library(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+    root = _material_library_root()
+    index = manual_import.load_library_index(root)
+    items = index.get("items", [])[:limit]
+    enriched = []
+    for item in items:
+        payload = dict(item)
+        try:
+            meta = manual_import.load_material_meta(str(item["material_id"]), root)
+        except (FileNotFoundError, ValueError):
+            meta = None
+        payload["material_meta"] = meta
+        enriched.append(payload)
+    return {"library_root": root.as_posix(), "items": enriched}
+
+
+@app.get("/api/v2/collect/materials/{material_id}")
+def collect_material(material_id: str) -> dict[str, Any]:
+    try:
+        return manual_import.load_material_meta(material_id, _material_library_root())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/api/v2/pipeline/run")
 def run_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
     project_id = _validate_project_id(request.project_id or _new_project_id())
     source_link_id = _normalize_source_link_id(request.source_link_id, request.link_id)
+    source_meta = _source_material_or_none(request.source_material_id)
+    product_id = request.product_id or str((source_meta or {}).get("product_id") or "便携恒温杯")
     run_root = _run_root(project_id)
     task_id = engine.start_pipeline(
         project_id,
-        product_id=request.product_id,
+        product_id=product_id,
         source_link_id=source_link_id,
+        source_material_id=request.source_material_id,
+        source_url=str((source_meta or {}).get("source_url") or ""),
         db_path=_db_path(),
         run_root=run_root,
         mock=request.mock,
@@ -405,12 +470,31 @@ def _runs_root() -> Path:
     return RUNS_ROOT
 
 
+def _material_library_root() -> Path:
+    configured = os.environ.get("VAF_MATERIAL_LIBRARY_ROOT")
+    if configured:
+        path = Path(configured)
+        return path if path.is_absolute() else ROOT / path
+    return DATA_ROOT / "01_素材库" / "对标视频" / "manual_import"
+
+
 def _feedback_root() -> Path:
     configured = os.environ.get("VAF_FEEDBACK_ROOT")
     if configured:
         path = Path(configured)
         return path if path.is_absolute() else ROOT / path
     return DATA_ROOT / "05_反馈库"
+
+
+def _tool_context() -> manual_import.ToolContext:
+    from tools.base_tool import ToolContext
+
+    return ToolContext.from_mapping(
+        {
+            "mock": True,
+            "env": os.environ,
+        }
+    )
 
 
 def _run_root(project_id: str) -> Path:
@@ -460,6 +544,7 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
     if row is None:
         raise HTTPException(status_code=404, detail="project not found")
     root = _run_root(project_id)
+    payload = _loads_json(row["payload_json"])
     tasks = queue.list_tasks(project_id=project_id, db_path=_db_path())
     checkpoints = checkpoint.read_all(project_id, run_root=root)
     stages = _stage_statuses(tasks, checkpoints)
@@ -470,6 +555,8 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
         "project_id": project_id,
         "product_id": row["product_id"],
         "source_link_id": row["source_link_id"],
+        "source_material_id": payload.get("source_material_id"),
+        "source_url": payload.get("source_url"),
         "status": status,
         "current_stage": current_stage,
         "current_gate": pending_gate,
@@ -566,6 +653,17 @@ def _current_stage(
     if checkpoints:
         return str(checkpoints[-1]["stage"])
     return None
+
+
+def _source_material_or_none(material_id: str | None) -> dict[str, Any] | None:
+    if not material_id:
+        return None
+    try:
+        return manual_import.load_material_meta(material_id, _material_library_root())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def _project_status(stages: dict[str, dict[str, Any]], pending_gate: str | None) -> str:

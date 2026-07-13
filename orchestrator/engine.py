@@ -29,6 +29,8 @@ def start_pipeline(
     *,
     product_id: str,
     source_link_id: int | None = None,
+    source_material_id: str | None = None,
+    source_url: str | None = None,
     db_path: str | Path | None = None,
     run_root: str | Path | None = None,
     mock: bool = True,
@@ -42,7 +44,12 @@ def start_pipeline(
         project_id,
         product_id=product_id,
         source_link_id=source_link_id,
-        payload={"mock": mock, "run_root": root.as_posix()},
+        payload={
+            "mock": mock,
+            "run_root": root.as_posix(),
+            "source_material_id": source_material_id,
+            "source_url": source_url,
+        },
         db_path=db_path,
     )
     existing = [
@@ -58,6 +65,8 @@ def start_pipeline(
         {
             "product_id": product_id,
             "source_link_id": source_link_id,
+            "source_material_id": source_material_id,
+            "source_url": source_url,
             "run_root": root.as_posix(),
             "mock": mock,
         },
@@ -214,6 +223,8 @@ def _run_analysis(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pa
             "project_id": task.project_id,
             "product_id": product_id,
             "source_link_id": task.payload_json.get("source_link_id"),
+            "source_material_id": task.payload_json.get("source_material_id"),
+            "source_url": task.payload_json.get("source_url"),
         },
         root,
         mock=mock,
