@@ -42,8 +42,8 @@ ARTIFACT_NAMES = {
 GATE_STAGES = ("script_gate", "hero_gate")
 NODE_STAGES = {
     "collector": (),
-    "analysis": ("analysis",),
-    "script": ("script",),
+    "analysis": ("analysis", "research"),
+    "script": ("strategy", "script", "script_breakdown"),
     "storyboard": ("storyboard",),
     "asset": ("asset", "hero_gate"),
     "media": ("production", "compose"),
@@ -66,6 +66,7 @@ class PipelineRunRequest(BaseModel):
     product_id: str = "便携恒温杯"
     source_link_id: int | None = None
     source_material_id: str | None = None
+    source_text: str | None = None
     link_id: str | int | None = None
     mock: bool = True
 
@@ -356,6 +357,11 @@ def run_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
         source_link_id=source_link_id,
         source_material_id=request.source_material_id,
         source_url=str((source_meta or {}).get("source_url") or ""),
+        source_text=(
+            request.source_text
+            or str((source_meta or {}).get("transcript_text") or "")
+            or str((source_meta or {}).get("caption") or "")
+        )[:8000],
         db_path=_db_path(),
         run_root=run_root,
         mock=request.mock,

@@ -16,17 +16,35 @@ stages:
     tools: [doubao_analyze]
     skip_if_artifact_exists: analysis_report
 
+  - name: research
+    agent: analysis
+    consumes: [analysis_report]
+    produces: [research_brief]
+    tools: [competitor_research]
+
+  - name: strategy
+    agent: script
+    consumes: [research_brief]
+    produces: [strategy_brief]
+    tools: [content_strategy]
+
   - name: script
     agent: script
-    consumes: [analysis_report]
+    consumes: [analysis_report, strategy_brief]
     produces: [script_copy]
     tools: [doubao_script]
     on_validation_fail: retry
 
+  - name: script_breakdown
+    agent: script
+    consumes: [script_copy]
+    produces: [script_breakdown]
+    tools: [script_breakdown]
+
   - name: script_review
     agent: review
     task_type: script_review
-    consumes: [script_copy, analysis_report]
+    consumes: [script_copy, analysis_report, strategy_brief, script_breakdown]
     produces: [review_report]
     tools: [doubao_review]
     on_review_fail: requeue_script

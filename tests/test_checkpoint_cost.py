@@ -7,7 +7,10 @@ from orchestrator import cost_tracker, queue
 def test_stage_order_matches_v2_manual() -> None:
     assert checkpoint.STAGE_ORDER == [
         "analysis",
+        "research",
+        "strategy",
         "script",
+        "script_breakdown",
         "script_review",
         "script_gate",
         "storyboard",

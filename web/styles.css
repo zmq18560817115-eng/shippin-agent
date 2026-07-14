@@ -628,11 +628,38 @@ pre {
   color: var(--muted);
 }
 
-.agentRunBar {
-  margin-bottom: 14px;
+.nodeTools {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
 }
 
-.agentRunBar label {
+.splitNodes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.nodeToolHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.nodeToolHead strong,
+.nodeToolHead span {
+  display: block;
+}
+
+.nodeToolHead span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nodeTools label {
   display: grid;
   gap: 6px;
   max-width: 760px;
@@ -640,110 +667,26 @@ pre {
   font-size: 13px;
 }
 
-.agentRunBar textarea {
-  min-height: 84px;
+.nodeTools textarea {
+  min-height: 78px;
   resize: vertical;
 }
 
-.agentMapGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.agentCard {
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-top: 3px solid #3178c6;
-  border-radius: 6px;
-  padding: 12px;
-  background: #ffffff;
-}
-
-.agentCard[data-status="partial"] {
-  border-top-color: #c4841d;
-}
-
-.agentCardHead {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
-}
-
-.agentCardHead > span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.agentCardHead strong,
-.agentCardHead small {
-  display: block;
-}
-
-.agentCardHead small {
-  margin-top: 2px;
-  color: var(--muted);
-}
-
-.agentCardHead b {
-  color: #216e39;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.agentCard[data-status="partial"] .agentCardHead b {
-  color: #9a6700;
-}
-
-.agentCard dl {
-  display: grid;
-  grid-template-columns: 62px minmax(0, 1fr);
-  gap: 5px 8px;
-  margin: 12px 0;
-  font-size: 12px;
-}
-
-.agentCard dt {
-  color: var(--muted);
-}
-
-.agentCard dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.agentCard p {
-  min-height: 34px;
-  margin: 8px 0;
-  color: #8a5a00;
-  font-size: 12px;
-}
-
-.agentCard button {
-  width: 100%;
-}
-
-.agentResult {
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.agentResult > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.agentResult span {
+.nodeResult {
+  margin-top: 8px;
   color: var(--muted);
   font-size: 12px;
 }
 
-.agentResult pre {
+.nodeResult.complete {
+  color: var(--text);
+}
+
+.nodeResult.error {
+  color: #8f2424;
+}
+
+.nodeResult pre {
   max-height: 360px;
   overflow: auto;
   white-space: pre-wrap;
@@ -814,7 +757,7 @@ pre {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .agentMapGrid {
+  .splitNodes {
     grid-template-columns: minmax(0, 1fr);
   }
 

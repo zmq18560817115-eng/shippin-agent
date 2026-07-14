@@ -18,11 +18,18 @@ def test_agent_map_and_independent_research_strategy_breakdown(tmp_path: Path, m
     engine.start_pipeline(
         "agent-map-demo",
         product_id="便携恒温杯",
+        source_text="Late-night caregiver transcript supplied by collector.",
         db_path=db_path,
         run_root=run_root,
         mock=True,
     )
     engine.run_until_blocked("agent-map-demo", db_path=db_path, run_root=run_root, mock=True)
+
+    analysis = (run_root / "artifacts" / "analysis_report.json").read_text(encoding="utf-8")
+    assert "Late-night caregiver transcript supplied by collector." in analysis
+    assert (run_root / "artifacts" / "research_brief.json").is_file()
+    assert (run_root / "artifacts" / "strategy_brief.json").is_file()
+    assert (run_root / "artifacts" / "script_breakdown.json").is_file()
 
     with TestClient(app) as client:
         capability_map = client.get("/api/v2/agents")

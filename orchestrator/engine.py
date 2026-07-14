@@ -33,6 +33,7 @@ def start_pipeline(
     source_link_id: int | None = None,
     source_material_id: str | None = None,
     source_url: str | None = None,
+    source_text: str | None = None,
     db_path: str | Path | None = None,
     run_root: str | Path | None = None,
     mock: bool = True,
@@ -51,6 +52,7 @@ def start_pipeline(
             "run_root": root.as_posix(),
             "source_material_id": source_material_id,
             "source_url": source_url,
+            "source_text": source_text,
         },
         db_path=db_path,
     )
@@ -69,6 +71,7 @@ def start_pipeline(
             "source_link_id": source_link_id,
             "source_material_id": source_material_id,
             "source_url": source_url,
+            "source_text": source_text,
             "run_root": root.as_posix(),
             "mock": mock,
         },
@@ -204,8 +207,14 @@ def _execute_task(
     try:
         if task.stage == "analysis":
             return _run_analysis(task, root, mock=mock, db_path=db_path)
+        if task.stage == "research":
+            return _run_research(task, root, mock=mock, db_path=db_path)
+        if task.stage == "strategy":
+            return _run_strategy(task, root, mock=mock, db_path=db_path)
         if task.stage == "script":
             return _run_script(task, root, mock=mock, db_path=db_path)
+        if task.stage == "script_breakdown":
+            return _run_script_breakdown(task, root, mock=mock, db_path=db_path)
         if task.stage == "script_review":
             return _run_script_review(task, root, mock=mock, db_path=db_path)
         if task.stage == "storyboard":
@@ -249,6 +258,7 @@ def _run_analysis(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pa
             "source_link_id": task.payload_json.get("source_link_id"),
             "source_material_id": task.payload_json.get("source_material_id"),
             "source_url": task.payload_json.get("source_url"),
+            "transcript_text": task.payload_json.get("source_text"),
         },
         root,
         mock=mock,
@@ -258,6 +268,50 @@ def _run_analysis(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pa
         root,
         "analysis_report",
         result.data["analysis_report"],
+        next_stage="research",
+        db_path=db_path,
+    )
+
+
+def _run_research(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:
+    analysis = _load_artifact(root, "analysis_report")
+    result = _execute_tool(
+        "competitor_research",
+        {
+            "project_id": task.project_id,
+            "source_text": analysis.get("voiceover_text") or analysis.get("material_meta_ref") or "",
+            "source_refs": [value for value in [analysis.get("material_meta_ref")] if value],
+        },
+        root,
+        mock=mock,
+    )
+    return _complete_with_artifact(
+        task,
+        root,
+        "research_brief",
+        result.data["research_brief"],
+        next_stage="strategy",
+        db_path=db_path,
+    )
+
+
+def _run_strategy(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:
+    product_id = _project_product_id(task.project_id, db_path=db_path)
+    result = _execute_tool(
+        "content_strategy",
+        {
+            "project_id": task.project_id,
+            "research_brief": _load_artifact(root, "research_brief"),
+            "product_guardrails": product_library.product_guardrail_text(product_id),
+        },
+        root,
+        mock=mock,
+    )
+    return _complete_with_artifact(
+        task,
+        root,
+        "strategy_brief",
+        result.data["strategy_brief"],
         next_stage="script",
         db_path=db_path,
     )
@@ -271,6 +325,7 @@ def _run_script(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path
             "project_id": task.project_id,
             "product_id": product_id,
             "analysis_report": _load_artifact(root, "analysis_report"),
+            "strategy_brief": _load_artifact_or_none(root, "strategy_brief") or {},
             "rewrite_reason": task.payload_json.get("rewrite_reason"),
         },
         root,
@@ -281,6 +336,23 @@ def _run_script(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path
         root,
         "script_copy",
         result.data["script_copy"],
+        next_stage="script_breakdown",
+        db_path=db_path,
+    )
+
+
+def _run_script_breakdown(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:
+    result = _execute_tool(
+        "script_breakdown",
+        {"project_id": task.project_id, "script_copy": _load_artifact(root, "script_copy")},
+        root,
+        mock=mock,
+    )
+    return _complete_with_artifact(
+        task,
+        root,
+        "script_breakdown",
+        result.data["script_breakdown"],
         next_stage="script_review",
         db_path=db_path,
     )
@@ -712,6 +784,11 @@ def _run_root(project_id: str, run_root: str | Path | None) -> Path:
 def _load_artifact(root: Path, artifact_name: str) -> dict[str, Any]:
     path = root / "artifacts" / f"{artifact_name}.json"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_artifact_or_none(root: Path, artifact_name: str) -> dict[str, Any] | None:
+    path = root / "artifacts" / f"{artifact_name}.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
 
 def _merge_shot_report(root: Path, project_id: str, new_report: dict[str, Any]) -> None:

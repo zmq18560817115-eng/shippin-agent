@@ -36,7 +36,7 @@ def test_a2_checkpoint_sequence_tmp_tolerance_and_next_stage(tmp_path: Path) -> 
         "analysis",
         "script",
     ]
-    assert checkpoint.get_next_stage("ref-a2", run_root=run_root) == "script_review"
+    assert checkpoint.get_next_stage("ref-a2", run_root=run_root) == "research"
     assert checkpoint.resolve_artifact("ref-a2", "script_copy", run_root=run_root) == (
         run_root / "artifacts" / "script_copy.json"
     )

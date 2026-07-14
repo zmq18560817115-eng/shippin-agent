@@ -10,7 +10,10 @@ from libshared.paths import RUNS_ROOT
 
 STAGE_ORDER = [
     "analysis",
+    "research",
+    "strategy",
     "script",
+    "script_breakdown",
     "script_review",
     "script_gate",
     "storyboard",

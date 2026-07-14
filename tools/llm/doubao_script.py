@@ -31,6 +31,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     project_id = str(payload.get("project_id") or "ref-real")
     product_id = str(payload.get("product_id") or "便携恒温杯")
     analysis_report = payload.get("analysis_report") or {}
+    strategy_brief = payload.get("strategy_brief") or {}
     rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
     product_facts = product_library.product_guardrail_text(product_id)
     response, meta = ark.chat_json(
@@ -53,7 +54,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "milk is poured into the cup, warmed/kept warm, then poured through the spout into a clean bottle. "
                     f"Approved product facts and hard constraints: {product_facts or 'not provided'}. "
                     f"Previous review feedback that must be fixed: {rewrite_reason or 'none'}. "
-                    f"Analysis: {analysis_report}"
+                    f"Approved content strategy: {strategy_brief}. Analysis: {analysis_report}"
                 ),
             },
         ],

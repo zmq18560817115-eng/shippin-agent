@@ -57,6 +57,10 @@ def test_a7_manual_import_five_links_can_start_pipelines(tmp_path: Path, monkeyp
             assert payload["engine"]["stage"] == "script_gate"
             assert payload["engine"]["status"] == "awaiting_human"
             assert payload["project"]["source_material_id"] == item["material_id"]
+            artifact_root = tmp_path / "runs" / f"ref-a7-{index}" / "artifacts"
+            assert (artifact_root / "research_brief.json").is_file()
+            assert (artifact_root / "strategy_brief.json").is_file()
+            assert (artifact_root / "script_breakdown.json").is_file()
 
 
 def test_a7_collector_worker_imports_manual_links(tmp_path: Path, monkeypatch) -> None:
