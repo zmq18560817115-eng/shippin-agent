@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "script_breakdown",
+  "type": "object",
+  "required": ["version", "project_id", "total_duration_s", "beats", "continuity_requirements"],
+  "properties": {
+    "version": {"const": "1.0"},
+    "project_id": {"type": "string", "minLength": 1},
+    "total_duration_s": {"type": "number", "minimum": 0},
+    "beats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "timing", "role", "voiceover", "intent", "visual_requirement", "human_editable"],
+        "properties": {
+          "number": {"type": "integer", "minimum": 1},
+          "timing": {"type": "string"},
+          "role": {"type": "string"},
+          "voiceover": {"type": "string"},
+          "intent": {"type": "string"},
+          "visual_requirement": {"type": "string"},
+          "human_editable": {"type": "boolean"}
+        }
+      }
+    },
+    "continuity_requirements": {"type": "array", "items": {"type": "string"}}
+  }
+}

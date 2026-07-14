@@ -628,6 +628,129 @@ pre {
   color: var(--muted);
 }
 
+.agentRunBar {
+  margin-bottom: 14px;
+}
+
+.agentRunBar label {
+  display: grid;
+  gap: 6px;
+  max-width: 760px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.agentRunBar textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.agentMapGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.agentCard {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-top: 3px solid #3178c6;
+  border-radius: 6px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.agentCard[data-status="partial"] {
+  border-top-color: #c4841d;
+}
+
+.agentCardHead {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.agentCardHead > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.agentCardHead strong,
+.agentCardHead small {
+  display: block;
+}
+
+.agentCardHead small {
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.agentCardHead b {
+  color: #216e39;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agentCard[data-status="partial"] .agentCardHead b {
+  color: #9a6700;
+}
+
+.agentCard dl {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 5px 8px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+
+.agentCard dt {
+  color: var(--muted);
+}
+
+.agentCard dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.agentCard p {
+  min-height: 34px;
+  margin: 8px 0;
+  color: #8a5a00;
+  font-size: 12px;
+}
+
+.agentCard button {
+  width: 100%;
+}
+
+.agentResult {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.agentResult > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agentResult span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agentResult pre {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
 @media (max-width: 760px) {
   .topbar {
     align-items: center;
@@ -688,6 +811,10 @@ pre {
   }
 
   .productLibrary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agentMapGrid {
     grid-template-columns: minmax(0, 1fr);
   }
 

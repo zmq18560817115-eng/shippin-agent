@@ -5,7 +5,7 @@ from jsonschema import Draft7Validator
 from libshared import artifacts
 
 
-def test_artifact_schema_set_has_nine_files() -> None:
+def test_artifact_schema_set_has_twelve_files() -> None:
     schema_files = sorted(Path("schemas/artifacts").glob("*.schema.json"))
 
     assert [path.name for path in schema_files] == [
@@ -14,10 +14,13 @@ def test_artifact_schema_set_has_nine_files() -> None:
         "library_index.schema.json",
         "material_meta.schema.json",
         "render_report.schema.json",
+        "research_brief.schema.json",
         "review_outputs.schema.json",
+        "script_breakdown.schema.json",
         "script_copy.schema.json",
         "shot_plan.schema.json",
         "shot_report.schema.json",
+        "strategy_brief.schema.json",
     ]
     for path in schema_files:
         Draft7Validator.check_schema(artifacts.load_schema(path.stem.removesuffix(".schema")))

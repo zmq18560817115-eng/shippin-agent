@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "research_brief",
+  "type": "object",
+  "required": ["version", "project_id", "viral_patterns", "audience_insights", "pacing_notes", "content_risks"],
+  "properties": {
+    "version": {"const": "1.0"},
+    "project_id": {"type": "string", "minLength": 1},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "viral_patterns": {"type": "array", "items": {"type": "string"}},
+    "audience_insights": {"type": "array", "items": {"type": "string"}},
+    "pacing_notes": {"type": "array", "items": {"type": "string"}},
+    "content_risks": {"type": "array", "items": {"type": "string"}},
+    "source_summary": {"type": "string"}
+  }
+}

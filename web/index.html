@@ -18,6 +18,7 @@
     <nav class="workflowNav" aria-label="制作流程">
       <a href="#projectSetup">创建</a>
       <a href="#productAssets">素材</a>
+      <a href="#agentMap">Agent</a>
       <a href="#referenceIntake">采集</a>
       <a href="#projectQueue">项目</a>
       <a href="#scriptGate">脚本</a>
@@ -63,6 +64,21 @@
           </div>
         </div>
         <div id="productLibraryPanel" class="emptyState">等待产品素材库索引</div>
+      </section>
+
+      <section class="band" id="agentMap">
+        <div class="sectionHead">
+          <h2>Agent 能力地图</h2>
+          <span id="agentMapState"></span>
+        </div>
+        <div class="agentRunBar">
+          <label>
+            Research 输入（可选转写文本）
+            <textarea id="agentSourceText" placeholder="粘贴 TikTok 视频转写；留空则读取当前项目分析产物"></textarea>
+          </label>
+        </div>
+        <div id="agentMapPanel" class="emptyState">正在读取 Agent 部署状态</div>
+        <div id="agentResultPanel" class="emptyState">选择项目后可独立运行已部署 Agent</div>
       </section>
 
       <section class="band" id="referenceIntake">
@@ -162,6 +178,6 @@
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js?v=20260714-3"></script>
+    <script src="/static/app.js?v=20260714-4"></script>
   </body>
 </html>

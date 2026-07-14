@@ -18,6 +18,8 @@ from pydantic import BaseModel
 from libshared import artifacts, checkpoint
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, engine, queue
+from orchestrator.capabilities import capability_map
+from tools import tool_registry
 from tools.collect import manual_import, product_library, tiktok_oembed
 
 
@@ -33,6 +35,9 @@ ARTIFACT_NAMES = {
     "render_report",
     "qa_report",
     "publish_archive",
+    "research_brief",
+    "strategy_brief",
+    "script_breakdown",
 }
 GATE_STAGES = ("script_gate", "hero_gate")
 NODE_STAGES = {
@@ -120,6 +125,14 @@ class FeedbackRequest(BaseModel):
     author: str = "operator"
 
 
+class AgentRunRequest(BaseModel):
+    project_id: str
+    action: str
+    source_text: str | None = None
+    source_refs: list[str] | None = None
+    mock: bool = True
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     queue.init_db(db_path=_db_path())
@@ -154,6 +167,73 @@ def runtime_status() -> dict[str, Any]:
         },
         "budget_mode": "observe",
         "pricing_calibrated": False,
+    }
+
+
+@app.get("/api/v2/agents")
+def agent_capabilities() -> dict[str, Any]:
+    return capability_map()
+
+
+@app.post("/api/v2/agents/run")
+def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
+    project_id = _validate_project_id(request.project_id)
+    project = _project_summary(project_id)
+    action = request.action.strip().casefold()
+    root = _run_root(project_id)
+    payload: dict[str, Any] = {"project_id": project_id}
+
+    if action == "research":
+        analysis = _load_artifact_or_none(project_id, "analysis_report") or {}
+        payload.update(
+            {
+                "source_text": request.source_text
+                or analysis.get("voiceover_text")
+                or project.get("source_url")
+                or "",
+                "source_refs": request.source_refs
+                or [value for value in (project.get("source_material_id"), project.get("source_url")) if value],
+            }
+        )
+        tool_name, artifact_name = "competitor_research", "research_brief"
+    elif action == "strategy":
+        payload.update(
+            {
+                "research_brief": _load_artifact(project_id, "research_brief"),
+                "product_guardrails": product_library.product_guardrail_text(project["product_id"]),
+            }
+        )
+        tool_name, artifact_name = "content_strategy", "strategy_brief"
+    elif action == "script_breakdown":
+        payload["script_copy"] = _load_artifact(project_id, "script_copy")
+        tool_name, artifact_name = "script_breakdown", "script_breakdown"
+    else:
+        raise HTTPException(status_code=400, detail="action must be research, strategy, or script_breakdown")
+
+    result = tool_registry.execute_tool(
+        tool_name,
+        payload,
+        context={"mock": request.mock, "run_root": root},
+    )
+    if not result.ok:
+        error = result.error or {"message": f"{tool_name} failed"}
+        raise HTTPException(status_code=422, detail=error.get("message") or error)
+    artifact = result.data[artifact_name]
+    artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
+    queue.record_event(
+        project_id=project_id,
+        event_type="agent.capability_completed",
+        message=action,
+        meta={"tool": tool_name, "artifact": artifact_name, "mock": request.mock},
+        db_path=_db_path(),
+    )
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "action": action,
+        "artifact_name": artifact_name,
+        "artifact": artifact,
+        "meta": result.meta,
     }
 
 

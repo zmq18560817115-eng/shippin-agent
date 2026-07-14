@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "strategy_brief",
+  "type": "object",
+  "required": ["version", "project_id", "content_direction", "target_audience", "selling_point_priority", "forbidden_claims"],
+  "properties": {
+    "version": {"const": "1.0"},
+    "project_id": {"type": "string", "minLength": 1},
+    "content_direction": {"type": "string", "minLength": 1},
+    "target_audience": {"type": "array", "items": {"type": "string"}},
+    "selling_point_priority": {"type": "array", "items": {"type": "string"}},
+    "hook_options": {"type": "array", "items": {"type": "string"}},
+    "cta_options": {"type": "array", "items": {"type": "string"}},
+    "forbidden_claims": {"type": "array", "items": {"type": "string"}},
+    "product_guardrails": {"type": "string"}
+  }
+}

@@ -13,6 +13,8 @@ const state = {
   renderReport: null,
   runReport: null,
   refreshing: false,
+  agentCapabilities: [],
+  agentSummary: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -62,8 +64,81 @@ async function boot() {
   await checkHealth();
   await loadProductLibrary();
   await loadProducts();
+  await loadAgentCapabilities();
   await refreshProjects();
   window.setInterval(() => refreshProjects({ silent: true }), 3000);
+}
+
+async function loadAgentCapabilities() {
+  const host = $("#agentMapPanel");
+  try {
+    const payload = await api("/api/v2/agents");
+    state.agentCapabilities = payload.agents || [];
+    state.agentSummary = payload.summary || null;
+    renderAgentCapabilities();
+  } catch (error) {
+    host.className = "emptyState";
+    host.textContent = error.message;
+  }
+}
+
+function renderAgentCapabilities() {
+  const host = $("#agentMapPanel");
+  const summary = state.agentSummary || {};
+  $("#agentMapState").textContent = `${summary.deployed || 0} 已部署 · ${summary.partial || 0} 待补齐`;
+  host.className = "agentMapGrid";
+  host.innerHTML = state.agentCapabilities.map((agent) => `
+    <article class="agentCard" data-status="${escapeAttr(agent.status)}">
+      <div class="agentCardHead">
+        <span>${escapeHtml(agent.number)}</span>
+        <div><strong>${escapeHtml(agent.name)}</strong><small>${escapeHtml(agent.role)}</small></div>
+        <b>${agent.status === "deployed" ? "已部署" : agent.status === "partial" ? "部分可用" : "未部署"}</b>
+      </div>
+      <dl>
+        <dt>输入</dt><dd>${escapeHtml((agent.inputs || []).join(" · "))}</dd>
+        <dt>输出</dt><dd>${escapeHtml((agent.outputs || []).join(" · "))}</dd>
+        <dt>工具</dt><dd>${escapeHtml((agent.tools || []).join(" · "))}</dd>
+        <dt>人工介入</dt><dd>${escapeHtml(agent.human_gate || "-")}</dd>
+      </dl>
+      ${agent.gap ? `<p>${escapeHtml(agent.gap)}</p>` : ""}
+      ${agent.independent_action ? `<button type="button" data-agent-action="${escapeAttr(agent.independent_action)}">独立运行</button>` : ""}
+    </article>
+  `).join("");
+  host.querySelectorAll("[data-agent-action]").forEach((button) => {
+    button.addEventListener("click", () => runAgentCapability(button.dataset.agentAction, button));
+  });
+}
+
+async function runAgentCapability(action, button) {
+  if (!state.selectedId) {
+    toast("请先在项目列表打开一个项目", "error");
+    return;
+  }
+  button.disabled = true;
+  const resultHost = $("#agentResultPanel");
+  resultHost.className = "emptyState";
+  resultHost.textContent = `${action} 运行中`;
+  try {
+    const payload = await api("/api/v2/agents/run", {
+      method: "POST",
+      body: JSON.stringify({
+        project_id: state.selectedId,
+        action,
+        source_text: action === "research" ? $("#agentSourceText").value.trim() || null : null,
+        mock: $("#runtimeMode").value !== "real",
+      }),
+    });
+    resultHost.className = "agentResult";
+    resultHost.innerHTML = `<div><strong>${escapeHtml(payload.artifact_name)}</strong><span>${escapeHtml(payload.project_id)}</span></div><pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>`;
+    toast(`${payload.artifact_name} 已生成`);
+    await refreshProjects({ silent: true });
+  } catch (error) {
+    resultHost.className = "emptyState";
+    resultHost.textContent = error.message;
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function bindEvents() {

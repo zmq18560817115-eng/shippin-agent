@@ -53,11 +53,12 @@ def _ensure_loaded() -> None:
         return
     from tools.audio import volcengine_asr
     from tools.collect import manual_import, tiktok_oembed
-    from tools.llm import claude_script, doubao_analyze, doubao_review, doubao_script, doubao_shotplan
+    from tools.llm import agent_capabilities, claude_script, doubao_analyze, doubao_review, doubao_script, doubao_shotplan
     from tools.video import ffmpeg_compose, hero_frame, seedance_shot
 
     _ = (
         volcengine_asr,
+        agent_capabilities,
         manual_import,
         tiktok_oembed,
         claude_script,
