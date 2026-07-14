@@ -693,7 +693,7 @@ async function runManualStage(stage, shotIndex = null) {
         project_id: state.selectedId,
         stage,
         shot_index: shotIndex,
-        mock: $("#runMode").value !== "real",
+        mock: $("#runtimeMode").value !== "real",
       }),
     });
     toast(`${stage}${shotIndex ? ` 镜头 ${shotIndex}` : ""} 已运行到 ${payload.engine.stage}`);

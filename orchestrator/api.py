@@ -417,6 +417,7 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
             "shot_index": request.shot_index,
             "shot": shot,
             "revision": revision,
+            "manual_only": True,
         }
     elif stage == "compose":
         _load_artifact(project_id, "shot_report")
@@ -449,12 +450,12 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
         meta={"shot_index": request.shot_index, "revision": revision},
         db_path=_db_path(),
     )
-    status = engine.run_until_blocked(
-        project_id,
-        db_path=_db_path(),
-        run_root=root,
-        mock=request.mock,
-    )
+    if stage in {"production", "compose"}:
+        status = engine.run_task(task_id, db_path=_db_path(), run_root=root, mock=request.mock)
+    else:
+        status = engine.run_until_blocked(
+            project_id, db_path=_db_path(), run_root=root, mock=request.mock
+        )
     return {
         "task_id": task_id,
         "engine": _engine_status(status),

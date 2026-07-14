@@ -260,6 +260,46 @@ def claim_task(
         return task
 
 
+def claim_task_by_id(
+    task_id: int,
+    worker_id: str,
+    *,
+    lease_seconds: int | None = None,
+    db_path: str | os.PathLike[str] | None = None,
+) -> Task | None:
+    recover_expired_leases(db_path=db_path)
+    now = utc_now()
+    lease_expires_at = _iso_after(resolve_lease_seconds(lease_seconds))
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'running',
+                attempt = attempt + 1,
+                lease_owner = ?,
+                lease_expires_at = ?,
+                heartbeat_at = ?,
+                started_at = COALESCE(started_at, ?),
+                updated_at = ?
+            WHERE id = ? AND status = 'queued'
+            RETURNING *
+            """,
+            (worker_id, lease_expires_at, now, now, now, task_id),
+        ).fetchone()
+        if row is None:
+            return None
+        task = _row_to_task(row)
+        record_event(
+            project_id=task.project_id,
+            task_id=task.id,
+            event_type="task.claimed",
+            message=worker_id,
+            meta={"attempt": task.attempt, "lease_expires_at": task.lease_expires_at},
+            db_path=db_path,
+        )
+        return task
+
+
 def heartbeat_task(
     task_id: int,
     worker_id: str,

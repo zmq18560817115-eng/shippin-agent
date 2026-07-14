@@ -49,3 +49,48 @@ def test_archived_project_allows_shot_edit_and_manual_storyboard_run(
     assert rerun.status_code == 200
     assert rerun.json()["engine"]["stage"] == "hero_gate"
     assert rerun.json()["engine"]["status"] == "awaiting_human"
+
+
+def test_manual_production_stops_before_compose(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "agentflow.db"
+    runs_root = tmp_path / "runs"
+    run_root = runs_root / "manual-shot"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    queue.init_db(db_path)
+    engine.start_pipeline(
+        "manual-shot",
+        product_id="便携恒温杯",
+        db_path=db_path,
+        run_root=run_root,
+        mock=True,
+    )
+    engine.run_until_blocked("manual-shot", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate(
+        "manual-shot", "script_gate", approver="test", db_path=db_path, run_root=run_root
+    )
+    engine.run_until_blocked("manual-shot", db_path=db_path, run_root=run_root, mock=True)
+    stale_compose_id = queue.enqueue_task(
+        project_id="manual-shot",
+        stage="compose",
+        agent="media",
+        payload={"run_root": run_root.as_posix(), "revision": "stale"},
+        db_path=db_path,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/manual/run",
+            json={"project_id": "manual-shot", "stage": "production", "shot_index": 1, "mock": True},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["engine"]["stage"] == "production"
+    assert response.json()["engine"]["status"] == "succeeded"
+    tasks = queue.list_tasks(project_id="manual-shot", db_path=db_path)
+    stale_compose = queue.get_task(stale_compose_id, db_path=db_path)
+    assert stale_compose.status == "queued"
+    assert not any(
+        task.stage == "compose" and task.payload_json.get("revision") != "stale"
+        for task in tasks
+    )

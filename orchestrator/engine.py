@@ -115,6 +115,28 @@ def run_until_blocked(
     raise RuntimeError(f"engine exceeded max_steps={max_steps} for {project_id}")
 
 
+def run_task(
+    task_id: int,
+    *,
+    db_path: str | Path | None = None,
+    run_root: str | Path | None = None,
+    mock: bool = True,
+) -> EngineRunStatus:
+    """Run exactly the requested queued task for node-level manual operation."""
+    queued = queue.get_task(task_id, db_path=db_path)
+    project_id = queued.project_id
+    root = _run_root(project_id, run_root)
+    task = queue.claim_task_by_id(
+        task_id,
+        "engine",
+        lease_seconds=60,
+        db_path=db_path,
+    )
+    if task is None:
+        return EngineRunStatus(project_id, None, "idle", "no queued task")
+    return _execute_task(task, root, mock=mock, db_path=db_path)
+
+
 def approve_gate(
     project_id: str,
     stage: str,
@@ -418,16 +440,18 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
             artifacts={"shot_report": "artifacts/shot_report.json"},
             run_root=root,
         )
-        _enqueue_stage(
-            task.project_id,
-            "compose",
-            {
-                "run_root": root.as_posix(),
-                "upstream_task_id": task.id,
-                "revision": task.payload_json.get("revision"),
-            },
-            db_path=db_path,
-        )
+        if not task.payload_json.get("manual_only"):
+            _enqueue_stage(
+                task.project_id,
+                "compose",
+                {
+                    "run_root": root.as_posix(),
+                    "upstream_task_id": task.id,
+                    "revision": task.payload_json.get("revision"),
+                },
+                db_path=db_path,
+            )
+        return EngineRunStatus(task.project_id, "production", "succeeded", "shot completed")
     return EngineRunStatus(task.project_id, "production", "running", "shot completed")
 
 
