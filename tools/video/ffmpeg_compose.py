@@ -20,7 +20,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     if not context.mock and not _find_ffmpeg():
         raise ToolNotConfiguredError("ffmpeg executable not found")
 
-    run_root = context.run_root or (ROOT / "data" / "runs" / project_id)
+    run_root = (context.run_root or (ROOT / "data" / "runs" / project_id)).resolve()
     output_dir = run_root / "artifacts"
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / "final-video.mp4"
@@ -32,9 +32,12 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "fps": 30,
             "audio_streams": 1,
         }
+        input_probes = [dict(ffprobe) for _ in shot_report.get("shots") or []]
     else:
         ffmpeg = _find_ffmpeg()
-        _compose_real(_shot_paths(shot_report), output, ffmpeg)
+        shot_paths = _shot_paths(shot_report)
+        input_probes = [_probe_media(path, ffmpeg) for path in shot_paths]
+        _compose_real(shot_paths, output, ffmpeg)
         ffprobe = _probe_media(output, ffmpeg)
 
     render_report = {
@@ -42,6 +45,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "project_id": project_id,
         "output_path": output.as_posix(),
         "ffprobe": ffprobe,
+        "input_probes": input_probes,
     }
     artifacts.validate_artifact("render_report", render_report)
     return ToolResult.success(
@@ -69,12 +73,15 @@ def _compose_real(paths: list[Path], output: Path, ffmpeg: str | None) -> None:
     if not paths:
         raise ValueError("shot_report did not contain any video paths")
     output.parent.mkdir(parents=True, exist_ok=True)
-    if len(paths) == 1:
-        shutil.copy2(paths[0], output)
-        return
+    normalized_dir = output.parent / "normalized-shots"
+    normalized_dir.mkdir(parents=True, exist_ok=True)
+    normalized = [
+        _normalize_shot(path, normalized_dir / f"shot-{index:03d}.mp4", ffmpeg)
+        for index, path in enumerate(paths, start=1)
+    ]
     concat_file = output.parent / "concat-list.txt"
     concat_file.write_text(
-        "\n".join(_concat_line(path) for path in paths) + "\n",
+        "\n".join(_concat_line(path) for path in normalized) + "\n",
         encoding="utf-8",
     )
     command = [
@@ -95,6 +102,42 @@ def _compose_real(paths: list[Path], output: Path, ffmpeg: str | None) -> None:
         raise RuntimeError(f"ffmpeg compose failed: {completed.stderr[-1200:]}")
 
 
+def _normalize_shot(source: Path, output: Path, ffmpeg: str) -> Path:
+    if not source.is_file():
+        raise FileNotFoundError(f"shot video not found: {source}")
+    video_filter = (
+        "scale=1080:1920:force_original_aspect_ratio=decrease,"
+        "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p"
+    )
+    command = [ffmpeg, "-y", "-i", source.as_posix()]
+    if _media_has_audio(source, ffmpeg):
+        command += [
+            "-vf", video_filter, "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+            "-c:a", "aac", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", output.as_posix(),
+        ]
+    else:
+        command += [
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+            "-vf", video_filter, "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+            "-c:a", "aac", "-shortest", "-movflags", "+faststart", output.as_posix(),
+        ]
+    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if completed.returncode != 0 or not output.is_file():
+        raise RuntimeError(f"ffmpeg shot normalization failed: {completed.stderr[-1200:]}")
+    return output
+
+
+def _media_has_audio(path: Path, ffmpeg: str) -> bool:
+    completed = subprocess.run(
+        [ffmpeg, "-hide_banner", "-i", path.as_posix()],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return bool(re.search(r"Stream #\d+:\d+.*Audio:", completed.stderr))
+
+
 def _shot_paths(shot_report: dict[str, Any]) -> list[Path]:
     paths = []
     for shot in sorted(shot_report.get("shots") or [], key=lambda item: int(item.get("number") or 0)):
@@ -107,7 +150,7 @@ def _shot_paths(shot_report: dict[str, Any]) -> list[Path]:
 
 
 def _concat_line(path: Path) -> str:
-    return "file '" + path.as_posix().replace("'", "'\\''") + "'"
+    return "file '" + path.resolve().as_posix().replace("'", "'\\''") + "'"
 
 
 def _probe_media(path: Path, ffmpeg: str | None) -> dict[str, Any]:
@@ -139,7 +182,7 @@ def _parse_duration(text: str) -> float:
 
 
 def _parse_resolution(text: str) -> str:
-    match = re.search(r"Video:.*?,\s*(\d{2,5})x(\d{2,5})[,\\s]", text)
+    match = re.search(r"Video:[^\r\n]*?\b(\d{2,5})x(\d{2,5})\b", text)
     return f"{match.group(1)}x{match.group(2)}" if match else ""
 
 

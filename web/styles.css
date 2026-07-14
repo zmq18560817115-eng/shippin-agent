@@ -177,7 +177,7 @@ textarea {
 
 .startBar {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(160px, 1fr) auto;
+  grid-template-columns: minmax(180px, 240px) minmax(130px, 160px) minmax(160px, 1fr) auto;
   gap: 12px;
   align-items: end;
   min-width: 0;
@@ -194,7 +194,7 @@ textarea {
 
 .collectForm {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(260px, 1fr) auto;
+  grid-template-columns: minmax(150px, 190px) minmax(180px, 240px) minmax(260px, 1fr) auto;
   gap: 12px;
   align-items: end;
   min-width: 0;
@@ -550,6 +550,14 @@ pre {
   display: block;
   border-radius: 8px;
   background: #101820;
+}
+
+.runSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 #feedbackInput {

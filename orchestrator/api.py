@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from libshared import artifacts, checkpoint
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, engine, queue
-from tools.collect import manual_import, product_library
+from tools.collect import manual_import, product_library, tiktok_oembed
 
 
 WEB_ROOT = ROOT / "web"
@@ -71,6 +71,10 @@ class ManualCollectRequest(BaseModel):
     items: list[dict[str, Any]] | None = None
     product_id: str = "便携恒温杯"
     source_keyword: str = "manual_tiktok"
+
+
+class TikTokCollectRequest(ManualCollectRequest):
+    source_keyword: str = "tiktok_oembed"
 
 
 class ProductLibraryRefreshRequest(BaseModel):
@@ -131,6 +135,21 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/v2/runtime")
+def runtime_status() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "real_ready": bool(os.environ.get("DOUBAO_API_KEY") and os.environ.get("SEEDANCE_API_KEY")),
+        "providers": {
+            "doubao": {"configured": bool(os.environ.get("DOUBAO_API_KEY"))},
+            "seedance": {"configured": bool(os.environ.get("SEEDANCE_API_KEY"))},
+            "tiktok_oembed": {"configured": True},
+        },
+        "budget_mode": "observe",
+        "pricing_calibrated": False,
+    }
+
+
 @app.get("/api/v2/products")
 def products(refresh: bool = Query(default=False)) -> dict[str, Any]:
     index = _load_product_library(refresh=refresh)
@@ -178,6 +197,33 @@ def collect_manual(request: ManualCollectRequest) -> dict[str, Any]:
         event_type="collector.manual_import",
         message=f"{result.data['imported_count']} links",
         meta={"library_root": result.data["library_root"]},
+        db_path=_db_path(),
+    )
+    return result.data
+
+
+@app.post("/api/v2/collect/tiktok")
+def collect_tiktok(request: TikTokCollectRequest) -> dict[str, Any]:
+    payload = {
+        "links_text": request.links_text,
+        "urls": request.urls or [],
+        "items": request.items or [],
+        "product_id": request.product_id,
+        "source_keyword": request.source_keyword,
+        "library_root": _material_library_root().as_posix(),
+    }
+    result = tiktok_oembed.execute(payload, context=_tool_context())
+    if not result.ok:
+        error = result.error or {"message": "TikTok collection failed"}
+        status_code = 422 if error.get("category") == "validation" else 502
+        raise HTTPException(status_code=status_code, detail=error.get("message") or error)
+    queue.record_event(
+        event_type="collector.tiktok_oembed",
+        message=f"{result.data['imported_count']} links",
+        meta={
+            "library_root": result.data["library_root"],
+            "failed_count": result.data["failed_count"],
+        },
         db_path=_db_path(),
     )
     return result.data
@@ -254,6 +300,11 @@ def list_pipeline(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any
 @app.get("/api/v2/pipeline/{project_id}")
 def get_pipeline(project_id: str) -> dict[str, Any]:
     return _project_summary(_validate_project_id(project_id))
+
+
+@app.get("/api/v2/reports/{project_id}")
+def get_run_report(project_id: str) -> dict[str, Any]:
+    return _run_report(_validate_project_id(project_id))
 
 
 @app.get("/api/v2/artifacts/{project_id}/{artifact_name}")
@@ -600,6 +651,86 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
     }
 
 
+def _run_report(project_id: str) -> dict[str, Any]:
+    project = _project_summary(project_id)
+    root = _run_root(project_id)
+    tasks = queue.list_tasks(project_id=project_id, db_path=_db_path())
+    with queue.get_conn(_db_path()) as conn:
+        cost_rows = conn.execute(
+            "SELECT agent, tool, cost_cny, meta_json, created_at FROM cost_entries WHERE project_id = ? ORDER BY id",
+            (project_id,),
+        ).fetchall()
+    task_rows = [
+        {
+            "task_id": task.id,
+            "stage": task.stage,
+            "agent": task.agent,
+            "status": task.status,
+            "attempt": task.attempt,
+            "duration_s": _duration_seconds(task.started_at, task.finished_at),
+            "error": _redact(task.error_json),
+        }
+        for task in tasks
+    ]
+    providers = [
+        {
+            "agent": row["agent"],
+            "tool": row["tool"],
+            "cost_cny": float(row["cost_cny"]),
+            "meta": _redact(cost_tracker.loads_meta(row["meta_json"])),
+            "created_at": row["created_at"],
+        }
+        for row in cost_rows
+    ]
+    render = _load_artifact_or_none(project_id, "render_report")
+    qa = _load_artifact_or_none(project_id, "qa_report")
+    started = min((task.started_at for task in tasks if task.started_at), default=None)
+    finished = max((task.finished_at for task in tasks if task.finished_at), default=None)
+    return {
+        "version": "2.0",
+        "project_id": project_id,
+        "product_id": project["product_id"],
+        "status": project["status"],
+        "current_stage": project["current_stage"],
+        "source_material_id": project["source_material_id"],
+        "started_at": started,
+        "finished_at": finished,
+        "elapsed_s": _duration_seconds(started, finished),
+        "budget_mode": project["budget_mode"],
+        "pricing_calibrated": False,
+        "cost": project["cost"],
+        "tasks": task_rows,
+        "providers": providers,
+        "failures": [item for item in task_rows if item["error"]],
+        "render_report": render,
+        "qa_report": qa,
+        "artifacts": project["artifacts"],
+        "run_root": root.as_posix(),
+    }
+
+
+def _duration_seconds(started_at: str | None, finished_at: str | None) -> float | None:
+    if not started_at or not finished_at:
+        return None
+    try:
+        started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        finished = datetime.fromisoformat(finished_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return round(max(0.0, (finished - started).total_seconds()), 3)
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): "[REDACTED]" if any(part in str(key).casefold() for part in ("key", "token", "auth")) else _redact(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact(item) for item in value]
+    return value
+
+
 def _stage_statuses(tasks: list[queue.Task], checkpoints: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     latest_checkpoints: dict[str, dict[str, Any]] = {}
     for item in checkpoints:
@@ -671,6 +802,8 @@ def _current_stage(
 ) -> str | None:
     if pending_gate:
         return pending_gate
+    if stages.get("archive", {}).get("status") == "succeeded":
+        return "archive"
     for stage, item in stages.items():
         if item["status"] in {"failed", "blocked", "needs_review"}:
             return stage
@@ -843,6 +976,7 @@ def _build_delivery_zip(project_id: str) -> Path:
         raise HTTPException(status_code=404, detail="run not found")
     delivery_dir = run_root / "delivery"
     delivery_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write_json(delivery_dir / "run_report.json", _run_report(project_id))
     zip_path = delivery_dir / f"{project_id}.zip"
     files = [
         path

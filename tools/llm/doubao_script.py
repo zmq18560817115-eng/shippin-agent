@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from libshared import artifacts
@@ -29,6 +30,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     project_id = str(payload.get("project_id") or "ref-real")
     product_id = str(payload.get("product_id") or "便携恒温杯")
     analysis_report = payload.get("analysis_report") or {}
+    rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
     response, meta = ark.chat_json(
         context,
         api_key_names=("DOUBAO_API_KEY", "ARK_DOUBAO_API_KEY", "ARK_API_KEY"),
@@ -47,6 +49,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     f"{product_id}. Use exactly 3 sections with roles 钩子, 方案, 行动号召 and continuous timings "
                     "0-5s, 5-10s, 10-15s. Product fact: portable warming cup is separate from baby bottle; "
                     "milk is poured into the cup, warmed/kept warm, then poured through the spout into a clean bottle. "
+                    f"Previous review feedback that must be fixed: {rewrite_reason or 'none'}. "
                     f"Analysis: {analysis_report}"
                 ),
             },
@@ -107,6 +110,9 @@ def _clean_voiceover(value: str) -> str:
         "increase milk supply": "fit feeding into your routine",
         "boost lactation": "fit feeding into your routine",
         "guaranteed": "designed",
+        "never settle": "make room",
+        "never": "",
+        "always": "",
         "best": "useful",
         "#1": "useful",
         "FDA approved": "approved",
@@ -115,8 +121,11 @@ def _clean_voiceover(value: str) -> str:
     lowered = text.casefold()
     for forbidden, safe in replacements.items():
         if forbidden.casefold() in lowered:
-            text = text.replace(forbidden, safe)
+            text = re.sub(re.escape(forbidden), safe, text, flags=re.IGNORECASE)
+            text = " ".join(text.split())
             lowered = text.casefold()
+    if text:
+        text = text[:1].upper() + text[1:]
     return text[:220] or "Save this for calmer feeds at home or on the go."
 
 

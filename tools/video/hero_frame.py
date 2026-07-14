@@ -19,19 +19,19 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     if not seedance_source:
         return ToolResult.failure("validation", "seedance_source is required")
 
-    run_root = context.run_root or (ROOT / "data" / "runs" / project_id)
+    run_root = (context.run_root or (ROOT / "data" / "runs" / project_id)).resolve()
     shots_dir = run_root / "shots"
     shots_dir.mkdir(parents=True, exist_ok=True)
     source_path = _resolve_path(seedance_source)
+    if not source_path.is_file():
+        return ToolResult.failure("validation", f"seedance_source file not found: {seedance_source}")
     hero_frames = []
     for shot in shot_plan.get("shots", []):
         number = int(shot["number"])
         target = shots_dir / f"hero_{number:03d}{source_path.suffix or '.png'}"
-        if context.mock:
-            if source_path.is_file():
-                shutil.copy2(source_path, target)
-            else:
-                target.write_bytes(b"mock hero frame")
+        shutil.copy2(source_path, target)
+        if not target.is_file() or target.stat().st_size == 0:
+            return ToolResult.failure("filesystem", f"hero frame copy failed: {target}")
         hero_frames.append(
             {
                 "number": number,

@@ -70,6 +70,7 @@ def create_seedance_video(
     *,
     prompt: str,
     image_path: str,
+    image_paths: list[str] | None = None,
     output_path: Path,
     duration_sec: int = 5,
 ) -> dict[str, Any]:
@@ -79,12 +80,27 @@ def create_seedance_video(
     timeout_s = float(context.env.get("ARK_TIMEOUT_S") or 120)
     poll_s = float(context.env.get("SEEDANCE_POLL_INTERVAL_S") or 5)
     max_wait_s = float(context.env.get("SEEDANCE_MAX_WAIT_S") or 900)
-    source_path = _resolve_path(image_path)
+    requested_paths = [image_path, *(image_paths or [])]
+    source_paths: list[Path] = []
+    seen: set[str] = set()
+    for path_text in requested_paths:
+        source = _resolve_path(path_text)
+        key = str(source.resolve())
+        if key not in seen:
+            seen.add(key)
+            source_paths.append(source)
     body = {
         "model": model,
         "content": [
             {"type": "text", "text": _seedance_prompt(prompt, duration_sec)},
-            {"type": "image_url", "image_url": {"url": _image_data_url(source_path)}},
+            *[
+                {
+                    "type": "image_url",
+                    "image_url": {"url": _image_data_url(source)},
+                    "role": "reference_image",
+                }
+                for source in source_paths
+            ],
         ],
     }
     created = _post_json(
@@ -118,6 +134,7 @@ def create_seedance_video(
                 "task_id": task_id,
                 "status": status,
                 "video_url": video_url,
+                "reference_count": len(source_paths),
             }
         if status in {"failed", "error", "cancelled", "canceled"}:
             raise ArkProviderError(f"Seedance task failed: {_safe_payload(last_payload)}")
@@ -178,7 +195,8 @@ def _seedance_prompt(prompt: str, duration_sec: int) -> str:
         f"{prompt}\n"
         "Use the provided product image as the strict product identity reference. "
         "Do not invent product shape, logo, display, lid, spout, or accessories. "
-        f"Duration {duration_sec} seconds, vertical 9:16, product-safe commercial short video shot."
+        f"Duration {duration_sec} seconds, vertical 9:16, product-safe commercial short video shot. "
+        f"--ratio 9:16 --dur {duration_sec}"
     )
 
 

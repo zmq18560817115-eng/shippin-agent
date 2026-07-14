@@ -27,6 +27,13 @@
             <select id="productSelect" name="product_id"></select>
           </label>
           <label>
+            运行模式
+            <select id="runtimeMode">
+              <option value="mock">Mock</option>
+              <option value="real">Real</option>
+            </select>
+          </label>
+          <label>
             link_id
             <input id="linkInput" name="link_id" inputmode="numeric" placeholder="101" />
           </label>
@@ -47,13 +54,20 @@
 
       <section class="band">
         <div class="sectionHead">
-          <h2>采集通道3</h2>
+          <h2>TikTok 参考素材采集</h2>
           <span id="collectState"></span>
         </div>
         <form class="collectForm" id="collectForm">
           <label>
+            采集方式
+            <select id="collectMode">
+              <option value="official">官方元数据</option>
+              <option value="manual">人工导入</option>
+            </select>
+          </label>
+          <label>
             来源关键词
-            <input id="sourceKeywordInput" value="manual_tiktok" />
+            <input id="sourceKeywordInput" value="tiktok_oembed" />
           </label>
           <label class="collectLinks">
             TikTok 链接
@@ -61,7 +75,7 @@
           </label>
           <button type="submit">导入素材</button>
         </form>
-        <div id="materialLibrary" class="emptyState">暂无人工导入素材</div>
+        <div id="materialLibrary" class="emptyState">暂无参考素材</div>
       </section>
 
       <section class="band">

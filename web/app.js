@@ -11,6 +11,7 @@ const state = {
   shotPlan: null,
   assetManifest: null,
   renderReport: null,
+  runReport: null,
   refreshing: false,
 };
 
@@ -222,6 +223,7 @@ async function startProject(event) {
     const body = {
       product_id: $("#productSelect").value,
       link_id: $("#linkInput").value.trim() || null,
+      mock: $("#runtimeMode").value !== "real",
     };
     const payload = await api("/api/v2/pipeline/run", {
       method: "POST",
@@ -244,12 +246,13 @@ async function collectLinks(event) {
   button.disabled = true;
   $("#collectState").textContent = "导入中";
   try {
-    const payload = await api("/api/v2/collect/manual", {
+    const official = $("#collectMode").value === "official";
+    const payload = await api(official ? "/api/v2/collect/tiktok" : "/api/v2/collect/manual", {
       method: "POST",
       body: JSON.stringify({
         links_text: $("#collectLinksInput").value,
         product_id: $("#productSelect").value,
-        source_keyword: $("#sourceKeywordInput").value.trim() || "manual_tiktok",
+        source_keyword: $("#sourceKeywordInput").value.trim() || (official ? "tiktok_oembed" : "manual_tiktok"),
       }),
     });
     $("#collectLinksInput").value = "";
@@ -270,6 +273,7 @@ async function startFromMaterial(materialId) {
       body: JSON.stringify({
         product_id: $("#productSelect").value,
         source_material_id: materialId,
+        mock: $("#runtimeMode").value !== "real",
       }),
     });
     state.selectedId = payload.project_id;
@@ -339,6 +343,7 @@ async function loadSelectedProject(projectId) {
   state.shotPlan = null;
   state.assetManifest = null;
   state.renderReport = null;
+  state.runReport = null;
 
   if (state.selected.current_gate === "script_gate") {
     state.scriptCopy = await safeArtifact(projectId, "script_copy");
@@ -350,6 +355,7 @@ async function loadSelectedProject(projectId) {
   }
   if (state.selected.status === "succeeded") {
     state.renderReport = await safeArtifact(projectId, "render_report");
+    state.runReport = await safeRunReport(projectId);
   }
   renderPanels();
 }
@@ -357,6 +363,14 @@ async function loadSelectedProject(projectId) {
 async function safeArtifact(projectId, artifactName) {
   try {
     return await api(`/api/v2/artifacts/${encodeURIComponent(projectId)}/${artifactName}`);
+  } catch {
+    return null;
+  }
+}
+
+async function safeRunReport(projectId) {
+  try {
+    return await api(`/api/v2/reports/${encodeURIComponent(projectId)}`);
   } catch {
     return null;
   }
@@ -646,6 +660,11 @@ function renderDelivery() {
   const renderUrl = state.renderReport?.output_path
     ? runFileUrl(selectedDelivered.project_id, state.renderReport.output_path)
     : "";
+  const report = state.runReport;
+  const probe = report?.render_report?.ffprobe || {};
+  const qaStatus = report?.qa_report?.status || "待生成";
+  const elapsed = report?.elapsed_s == null ? "--" : `${Number(report.elapsed_s).toFixed(1)}s`;
+  const failureCount = report?.failures?.length || 0;
   host.innerHTML = `
     <div class="deliveryList">
       ${delivered.map((project) => `
@@ -656,8 +675,15 @@ function renderDelivery() {
     </div>
     <div class="deliveryDetail">
       ${renderUrl ? `<video controls src="${escapeAttr(renderUrl)}"></video>` : ""}
+      <div class="runSummary">
+        <span>耗时 ${escapeHtml(elapsed)}</span>
+        <span>画面 ${escapeHtml(probe.resolution || "--")}</span>
+        <span>QA ${escapeHtml(qaStatus)}</span>
+        <span>失败 ${failureCount}</span>
+      </div>
       <div class="actionBar">
         <a class="buttonLink" href="/api/v2/download/${encodeURIComponent(selectedDelivered.project_id)}">下载 zip</a>
+        <a class="buttonLink" target="_blank" rel="noopener" href="/api/v2/reports/${encodeURIComponent(selectedDelivered.project_id)}">运行报告</a>
         <input id="feedbackInput" placeholder="一句话反馈" />
         <button type="button" id="sendFeedback">写入反馈</button>
       </div>

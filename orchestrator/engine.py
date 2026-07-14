@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -248,6 +249,7 @@ def _run_script(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path
             "project_id": task.project_id,
             "product_id": product_id,
             "analysis_report": _load_artifact(root, "analysis_report"),
+            "rewrite_reason": task.payload_json.get("rewrite_reason"),
         },
         root,
         mock=mock,
@@ -404,7 +406,11 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         meta=result.meta,
         db_path=db_path,
     )
-    if _all_production_succeeded(task.project_id, db_path=db_path):
+    if _all_production_succeeded(
+        task.project_id,
+        revision=task.payload_json.get("revision"),
+        db_path=db_path,
+    ):
         checkpoint.write_checkpoint(
             task.project_id,
             "production",
@@ -412,7 +418,16 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
             artifacts={"shot_report": "artifacts/shot_report.json"},
             run_root=root,
         )
-        _enqueue_stage(task.project_id, "compose", {"run_root": root.as_posix()}, db_path=db_path)
+        _enqueue_stage(
+            task.project_id,
+            "compose",
+            {
+                "run_root": root.as_posix(),
+                "upstream_task_id": task.id,
+                "revision": task.payload_json.get("revision"),
+            },
+            db_path=db_path,
+        )
     return EngineRunStatus(task.project_id, "production", "running", "shot completed")
 
 
@@ -438,29 +453,87 @@ def _run_compose(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pat
 
 
 def _run_final_qa(task: queue.Task, root: Path, *, db_path: str | Path | None) -> EngineRunStatus:
-    report = {
-        "version": "2.0",
-        "project_id": task.project_id,
-        "artifact_type": "qa_report",
-        "status": "PASS",
-        "qa": {
-            "ffprobe_duration_within": True,
-            "has_audio_stream": True,
-            "resolution_matches_aspect": True,
-        },
-        "comments": ["Mock final QA passed."],
-    }
+    render_report = _load_artifact(root, "render_report")
+    shot_plan = _load_artifact(root, "shot_plan")
+    shot_report = _load_artifact(root, "shot_report")
+    report = _build_final_qa_report(task.project_id, root, render_report, shot_plan, shot_report)
     artifacts.save_artifact(task.project_id, "qa_report", report, run_root=root)
     queue.complete_task(task.id, "engine", {"qa_report": report}, db_path=db_path)
+    passed = report["status"] == "PASS"
     checkpoint.write_checkpoint(
         task.project_id,
         "final_qa",
-        status="succeeded",
+        status="succeeded" if passed else "blocked",
         artifacts={"qa_report": "artifacts/qa_report.json"},
+        data={"failed_checks": report.get("failed_checks", [])},
         run_root=root,
     )
-    _enqueue_stage(task.project_id, "archive", {"run_root": root.as_posix()}, db_path=db_path)
-    return EngineRunStatus(task.project_id, "final_qa", "succeeded")
+    if passed:
+        _enqueue_stage(
+            task.project_id,
+            "archive",
+            {
+                "run_root": root.as_posix(),
+                "upstream_task_id": task.id,
+                "revision": task.payload_json.get("revision"),
+            },
+            db_path=db_path,
+        )
+        return EngineRunStatus(task.project_id, "final_qa", "succeeded")
+    return EngineRunStatus(task.project_id, "final_qa", "blocked", "final media QA failed")
+
+
+def _build_final_qa_report(
+    project_id: str,
+    root: Path,
+    render_report: dict[str, Any],
+    shot_plan: dict[str, Any],
+    shot_report: dict[str, Any],
+) -> dict[str, Any]:
+    probe = render_report.get("ffprobe") or {}
+    resolution = str(probe.get("resolution") or "")
+    duration = float(probe.get("duration") or 0)
+    planned_shots = shot_plan.get("shots") or []
+    rendered_shots = shot_report.get("shots") or []
+    output_path = Path(str(render_report.get("output_path") or ""))
+    if not output_path.is_absolute():
+        output_path = output_path.resolve() if output_path.is_file() else root / output_path
+    checks = {
+        "ffprobe_duration_within": 1 <= duration <= 180,
+        "has_audio_stream": int(probe.get("audio_streams") or 0) >= 1,
+        "resolution_matches_aspect": resolution == "1080x1920",
+        "fps_supported": 24 <= float(probe.get("fps") or 0) <= 60,
+        "shot_count_matches_plan": len(rendered_shots) == len(planned_shots) and len(planned_shots) > 0,
+        "all_shots_succeeded": bool(rendered_shots)
+        and all(str(item.get("status")) == "succeeded" for item in rendered_shots),
+        "output_file_present": output_path.is_file() and output_path.stat().st_size > 0,
+        "source_clips_vertical": _source_clips_vertical(render_report),
+    }
+    failed = [name for name, passed in checks.items() if not passed]
+    return {
+        "version": "2.0",
+        "project_id": project_id,
+        "artifact_type": "qa_report",
+        "status": "BLOCKED" if failed else "PASS",
+        "qa": checks,
+        "failed_checks": failed,
+        "comments": ["Final media QA passed."] if not failed else [f"Blocked by: {', '.join(failed)}"],
+    }
+
+
+def _source_clips_vertical(render_report: dict[str, Any]) -> bool:
+    probes = render_report.get("input_probes") or []
+    if not probes:
+        return False
+    for probe in probes:
+        resolution = str((probe or {}).get("resolution") or "")
+        match = re.fullmatch(r"(\d+)x(\d+)", resolution)
+        if not match:
+            return False
+        width, height = (int(value) for value in match.groups())
+        if height <= width or abs((width / height) - (9 / 16)) > 0.03:
+            return False
+    return True
 
 
 def _run_archive(task: queue.Task, root: Path, *, db_path: str | Path | None) -> EngineRunStatus:
@@ -475,7 +548,7 @@ def _run_archive(task: queue.Task, root: Path, *, db_path: str | Path | None) ->
             "feedback_library": "data/05_反馈库",
         },
         "feedback_constraints": [],
-        "comments": ["Mock archive completed."],
+        "comments": ["Archive completed after final QA PASS."],
     }
     artifacts.save_artifact(task.project_id, "publish_archive", archive, run_root=root)
     queue.complete_task(task.id, "engine", {"publish_archive": archive}, db_path=db_path)
@@ -508,7 +581,12 @@ def _complete_with_artifact(
         artifacts={artifact_name: f"artifacts/{artifact_name}.json"},
         run_root=root,
     )
-    _enqueue_stage(task.project_id, next_stage, {"run_root": root.as_posix()}, db_path=db_path)
+    _enqueue_stage(
+        task.project_id,
+        next_stage,
+        {"run_root": root.as_posix(), "upstream_task_id": task.id},
+        db_path=db_path,
+    )
     return EngineRunStatus(task.project_id, task.stage, "succeeded", f"{artifact_name} saved")
 
 
@@ -554,11 +632,15 @@ def _stage_task_exists(
     *,
     db_path: str | Path | None,
 ) -> bool:
-    shot_index = (payload or {}).get("shot_index")
+    discriminators = {
+        key: (payload or {}).get(key)
+        for key in ("shot_index", "upstream_task_id", "revision")
+        if (payload or {}).get(key) is not None
+    }
     for task in queue.list_tasks(project_id=project_id, db_path=db_path):
         if task.stage != stage_name:
             continue
-        if shot_index is not None and task.payload_json.get("shot_index") != shot_index:
+        if any(task.payload_json.get(key) != value for key, value in discriminators.items()):
             continue
         if task.status in {"queued", "running", "succeeded", "awaiting_human"}:
             return True
@@ -616,13 +698,25 @@ def _merge_shot_report(root: Path, project_id: str, new_report: dict[str, Any]) 
     artifacts.save_artifact(project_id, "shot_report", merged, run_root=root)
 
 
-def _all_production_succeeded(project_id: str, *, db_path: str | Path | None) -> bool:
+def _all_production_succeeded(
+    project_id: str,
+    *,
+    revision: Any = None,
+    db_path: str | Path | None,
+) -> bool:
     tasks = [
         task
         for task in queue.list_tasks(project_id=project_id, db_path=db_path)
-        if task.stage == "production"
+        if task.stage == "production" and task.payload_json.get("revision") == revision
     ]
-    return bool(tasks) and all(task.status == "succeeded" for task in tasks)
+    latest_by_shot: dict[int, queue.Task] = {}
+    for production_task in tasks:
+        shot_index = int(production_task.payload_json.get("shot_index") or 0)
+        latest_by_shot[shot_index] = production_task
+    return bool(latest_by_shot) and all(
+        production_task.status == "succeeded"
+        for production_task in latest_by_shot.values()
+    )
 
 
 def _terminal_status(
@@ -631,10 +725,19 @@ def _terminal_status(
     *,
     db_path: str | Path | None,
 ) -> EngineRunStatus | None:
+    latest_production: dict[tuple[Any, int], queue.Task] = {}
+    for production_task in queue.list_tasks(project_id=project_id, db_path=db_path):
+        if production_task.stage != "production":
+            continue
+        key = (
+            production_task.payload_json.get("revision"),
+            int(production_task.payload_json.get("shot_index") or 0),
+        )
+        latest_production[key] = production_task
     failed = [
-        task
-        for task in queue.list_tasks(project_id=project_id, status="failed", db_path=db_path)
-        if task.stage == "production"
+        production_task
+        for production_task in latest_production.values()
+        if production_task.status == "failed"
     ]
     if failed and not _has_queued_production(project_id, db_path=db_path):
         return EngineRunStatus(project_id, "production", "failed", "production has failed shot tasks")
@@ -658,7 +761,14 @@ def _requeue_script_or_needs_review(task: queue.Task, root: Path, *, db_path: st
         if item.stage == "script"
     ]
     if len(script_tasks) <= 2:
-        _enqueue_stage(task.project_id, "script", {"run_root": root.as_posix()}, db_path=db_path)
+        review = _load_artifact(root, "review_report")
+        reason = "; ".join(str(item) for item in review.get("comments") or [] if str(item).strip())
+        _enqueue_stage(
+            task.project_id,
+            "script",
+            {"run_root": root.as_posix(), "rewrite_reason": reason},
+            db_path=db_path,
+        )
         return EngineRunStatus(task.project_id, "script", "queued", "script review requested rewrite")
     checkpoint.write_checkpoint(task.project_id, "script_review", status="needs_review", run_root=root)
     return EngineRunStatus(task.project_id, "script_review", "needs_review", "script rewrite limit exceeded")

@@ -175,6 +175,11 @@ def _extract_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return items
 
 
+def extract_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return normalized collector inputs for provider-backed collectors."""
+    return _extract_items(payload)
+
+
 def _resolve_library_root(value: Any, context: ToolContext) -> Path:
     if value:
         path = Path(str(value))
@@ -231,7 +236,10 @@ def _material_meta(
             "forbidden_use": "Do not copy competitor dialogue, claims, logos, product details, or visual identity.",
             "scene_tags": [],
             "claim_tags": [],
-            "notes": "Manual channel-3 intake; metadata parsed from pasted link unless fields are supplied.",
+            "notes": str(
+                item.get("asset_intake_notes")
+                or "Manual channel-3 intake; metadata parsed from pasted link unless fields are supplied."
+            ),
         },
     }
     return meta

@@ -41,6 +41,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             context,
             prompt=_shot_prompt(shot, asset_manifest),
             image_path=str(asset_manifest.get("seedance_source") or ""),
+            image_paths=[str(path) for path in shot.get("reference_paths") or [] if str(path)],
             output_path=output,
             duration_sec=_duration_sec(shot),
         )
@@ -67,6 +68,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "mock": context.mock,
             "shot_index": number,
             "seedance_source": asset_manifest.get("seedance_source"),
+            "reference_paths": shot.get("reference_paths") or [],
             **provider_meta,
         },
     )
