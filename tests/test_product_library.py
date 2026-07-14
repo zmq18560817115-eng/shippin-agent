@@ -61,6 +61,36 @@ def test_product_library_can_allow_new_sku_by_env(tmp_path: Path, monkeypatch) -
     assert {product["id"] for product in payload["products"]} == {"新硬件产品"}
 
 
+def test_product_library_loads_machine_readable_temperature_fact(tmp_path: Path) -> None:
+    root, _ = _sample_product_root(tmp_path)
+    (root / "便携恒温杯.yaml").write_text(
+        "product_id: 便携恒温杯\ndisplay:\n  approved_value: '98°F'\n  temperature_scale: Fahrenheit\n",
+        encoding="utf-8",
+    )
+
+    payload = product_library.refresh_index([root], path=tmp_path / "index.json")
+
+    product = _only_product(payload)
+    assert product["facts"]["display"]["approved_value"] == "98°F"
+    assert product["facts"]["display"]["temperature_scale"] == "Fahrenheit"
+
+
+def test_product_guardrail_text_exposes_fahrenheit_rule(tmp_path: Path, monkeypatch) -> None:
+    root, _ = _sample_product_root(tmp_path)
+    index_path = tmp_path / "index.json"
+    (root / "便携恒温杯.yaml").write_text(
+        "product_id: 便携恒温杯\ndisplay:\n  approved_value: '98°F'\n  forbidden_values: ['98°C']\n",
+        encoding="utf-8",
+    )
+    product_library.refresh_index([root], path=index_path)
+    monkeypatch.setenv("VAF_PRODUCT_LIBRARY_INDEX", str(index_path))
+
+    guardrails = product_library.product_guardrail_text("便携恒温杯")
+
+    assert "98°F" in guardrails
+    assert "98°C" in guardrails
+
+
 def _sample_product_root(tmp_path: Path) -> tuple[Path, Path]:
     root = tmp_path / "产品资料"
     root.mkdir()

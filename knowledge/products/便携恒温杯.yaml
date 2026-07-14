@@ -1,0 +1,18 @@
+product_id: 便携恒温杯
+display:
+  approved_value: "98°F"
+  temperature_scale: Fahrenheit
+  forbidden_values:
+    - "98°C"
+    - "98摄氏度"
+visual_guardrails:
+  - The temperature display must read 98°F when a temperature is visible.
+  - Never render 98°C or describe the display as Celsius.
+  - Match the approved flip lid, round pouring spout, purple body, vertical display and oval power button.
+usage_guardrails:
+  - Pour liquid into the warming cup, then pour through the round spout into a separate clean bottle.
+  - Never place a baby bottle inside the cup.
+review_required:
+  - temperature unit
+  - lid and spout geometry
+  - pour direction

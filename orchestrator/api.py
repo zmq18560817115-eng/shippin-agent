@@ -107,6 +107,13 @@ class TaskRetryRequest(BaseModel):
     mock: bool = True
 
 
+class ManualStageRunRequest(BaseModel):
+    project_id: str
+    stage: str
+    shot_index: int | None = None
+    mock: bool = True
+
+
 class FeedbackRequest(BaseModel):
     project_id: str
     text: str
@@ -325,15 +332,29 @@ def put_artifact(
 ) -> dict[str, Any]:
     project_id = _validate_project_id(project_id)
     artifact_name = _validate_artifact_name(artifact_name)
-    if artifact_name != "script_copy":
-        raise HTTPException(status_code=400, detail="block6 only allows script_copy edits")
+    if artifact_name not in {"script_copy", "shot_plan"}:
+        raise HTTPException(status_code=400, detail="only script_copy and shot_plan can be edited")
     if payload.get("project_id") != project_id:
         raise HTTPException(status_code=400, detail="artifact project_id does not match URL")
 
     old_payload = _load_artifact_or_none(project_id, artifact_name)
-    stale_sections = _changed_script_sections(old_payload, payload)
+    stale_sections = (
+        _changed_script_sections(old_payload, payload)
+        if artifact_name == "script_copy"
+        else _changed_shots(old_payload, payload)
+    )
     try:
-        artifacts.save_artifact(project_id, artifact_name, payload, run_root=_run_root(project_id))
+        artifacts.save_artifact(
+            project_id,
+            artifact_name,
+            payload,
+            run_root=_run_root(project_id),
+            script_copy=(
+                _load_artifact(project_id, "script_copy")
+                if artifact_name == "shot_plan"
+                else None
+            ),
+        )
     except artifacts.ArtifactValidationError as exc:
         raise HTTPException(
             status_code=422,
@@ -343,7 +364,8 @@ def put_artifact(
             ],
         ) from exc
 
-    _refresh_script_gate_checkpoint(project_id, stale_sections)
+    if artifact_name == "script_copy":
+        _refresh_script_gate_checkpoint(project_id, stale_sections)
     queue.record_event(
         project_id=project_id,
         event_type="artifact.saved",
@@ -357,6 +379,86 @@ def put_artifact(
         "artifact_name": artifact_name,
         "stale_sections": stale_sections,
         "artifact": payload,
+    }
+
+
+@app.post("/api/v2/manual/run")
+def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
+    project_id = _validate_project_id(request.project_id)
+    root = _run_root(project_id)
+    revision = queue.utc_now()
+    stage = request.stage.strip().casefold()
+
+    if stage == "script":
+        task_stage, agent, payload = "script", "script", {
+            "run_root": root.as_posix(),
+            "rewrite_reason": "manual workbench regeneration",
+            "revision": revision,
+        }
+    elif stage == "storyboard":
+        _load_artifact(project_id, "script_copy")
+        task_stage, agent, payload = "storyboard", "storyboard", {
+            "run_root": root.as_posix(),
+            "revision": revision,
+        }
+    elif stage == "production":
+        if request.shot_index is None or request.shot_index < 1:
+            raise HTTPException(status_code=400, detail="production requires shot_index >= 1")
+        shot_plan = _load_artifact(project_id, "shot_plan")
+        shot = next(
+            (item for item in shot_plan.get("shots", []) if int(item.get("number") or 0) == request.shot_index),
+            None,
+        )
+        if shot is None:
+            raise HTTPException(status_code=404, detail=f"shot {request.shot_index} not found")
+        _load_artifact(project_id, "asset_manifest")
+        task_stage, agent, payload = "production", "media", {
+            "run_root": root.as_posix(),
+            "shot_index": request.shot_index,
+            "shot": shot,
+            "revision": revision,
+        }
+    elif stage == "compose":
+        _load_artifact(project_id, "shot_report")
+        task_stage, agent, payload = "compose", "media", {
+            "run_root": root.as_posix(),
+            "revision": revision,
+        }
+    else:
+        raise HTTPException(status_code=400, detail="stage must be script, storyboard, production, or compose")
+
+    checkpoint.write_checkpoint(
+        project_id,
+        task_stage,
+        status="queued",
+        data={"manual": True, "revision": revision},
+        run_root=root,
+    )
+    task_id = queue.enqueue_task(
+        project_id=project_id,
+        stage=task_stage,
+        agent=agent,
+        payload=payload,
+        db_path=_db_path(),
+    )
+    queue.record_event(
+        project_id=project_id,
+        task_id=task_id,
+        event_type="manual.stage_requested",
+        message=task_stage,
+        meta={"shot_index": request.shot_index, "revision": revision},
+        db_path=_db_path(),
+    )
+    status = engine.run_until_blocked(
+        project_id,
+        db_path=_db_path(),
+        run_root=root,
+        mock=request.mock,
+    )
+    return {
+        "task_id": task_id,
+        "engine": _engine_status(status),
+        "project": _project_summary(project_id),
     }
 
 
@@ -741,7 +843,7 @@ def _stage_statuses(tasks: list[queue.Task], checkpoints: list[dict[str, Any]]) 
         stage_tasks = [task for task in tasks if task.stage == stage]
         task_status = _aggregate_status([task.status for task in stage_tasks])
         checkpoint_status = latest_checkpoints.get(stage, {}).get("status")
-        status = _aggregate_status([task_status, str(checkpoint_status or "idle")])
+        status = str(checkpoint_status) if checkpoint_status else task_status
         result[stage] = {
             "status": status,
             "task_count": len(stage_tasks),
@@ -912,6 +1014,24 @@ def _changed_script_sections(
         ):
             changed.append(number)
     return changed
+
+
+def _changed_shots(
+    old_payload: dict[str, Any] | None,
+    new_payload: dict[str, Any],
+) -> list[int]:
+    if old_payload is None:
+        return [int(shot["number"]) for shot in new_payload.get("shots", [])]
+    old_by_number = {
+        int(shot["number"]): shot
+        for shot in old_payload.get("shots", [])
+        if "number" in shot
+    }
+    return [
+        int(shot["number"])
+        for shot in new_payload.get("shots", [])
+        if old_by_number.get(int(shot["number"])) != shot
+    ]
 
 
 def _refresh_script_gate_checkpoint(project_id: str, stale_sections: list[int]) -> None:

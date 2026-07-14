@@ -345,14 +345,10 @@ async function loadSelectedProject(projectId) {
   state.renderReport = null;
   state.runReport = null;
 
-  if (state.selected.current_gate === "script_gate") {
-    state.scriptCopy = await safeArtifact(projectId, "script_copy");
-    state.reviewReport = await safeArtifact(projectId, "review_report");
-  }
-  if (state.selected.current_gate === "hero_gate") {
-    state.shotPlan = await safeArtifact(projectId, "shot_plan");
-    state.assetManifest = await safeArtifact(projectId, "asset_manifest");
-  }
+  state.scriptCopy = await safeArtifact(projectId, "script_copy");
+  state.reviewReport = await safeArtifact(projectId, "review_report");
+  state.shotPlan = await safeArtifact(projectId, "shot_plan");
+  state.assetManifest = await safeArtifact(projectId, "asset_manifest");
   if (state.selected.status === "succeeded") {
     state.renderReport = await safeArtifact(projectId, "render_report");
     state.runReport = await safeRunReport(projectId);
@@ -402,7 +398,7 @@ function renderProjectRows() {
     `;
     tbody.appendChild(row);
 
-    const errors = project.tasks.filter((task) => task.error_json);
+    const errors = project.tasks.filter((task) => task.error_json && isUnresolvedTask(project, task));
     if (errors.length) {
       const errorRow = document.createElement("tr");
       errorRow.className = "errorRow";
@@ -432,12 +428,27 @@ function renderNodes(nodes) {
 }
 
 function renderProjectActions(project) {
-  const failedShot = project.tasks.find((task) => task.stage === "production" && task.status === "failed");
+  const failedShot = project.tasks.find(
+    (task) => task.stage === "production" && task.status === "failed" && isUnresolvedTask(project, task),
+  );
   if (failedShot) {
     const shot = failedShot.payload_json.shot_index;
     return `<button type="button" data-project="${escapeAttr(project.project_id)}" data-retry-shot="${shot}">重试镜头 ${shot}</button>`;
   }
   return `<button type="button" data-open="${escapeAttr(project.project_id)}">打开</button>`;
+}
+
+function isUnresolvedTask(project, task) {
+  const shot = task.payload_json?.shot_index ?? null;
+  const revision = task.payload_json?.revision ?? null;
+  const laterEquivalent = project.tasks.some((candidate) =>
+    candidate.id > task.id
+    && candidate.stage === task.stage
+    && (candidate.payload_json?.shot_index ?? null) === shot
+    && (candidate.payload_json?.revision ?? null) === revision
+    && candidate.status === "succeeded"
+  );
+  return !laterEquivalent;
 }
 
 function renderErrors(projectId, errors) {
@@ -465,13 +476,14 @@ function renderPanels() {
   $("#activeProject").textContent = label;
   renderScriptGate();
   renderHeroGate();
+  renderShotWorkbench();
   renderDelivery();
 }
 
 function renderScriptGate() {
   const host = $("#scriptEditor");
   $("#scriptGateState").textContent = state.selected?.current_gate === "script_gate" ? "待确认" : "";
-  if (!state.selected || state.selected.current_gate !== "script_gate" || !state.scriptCopy) {
+  if (!state.selected || !state.scriptCopy) {
     host.className = "emptyState";
     host.textContent = "等待脚本闸门项目";
     return;
@@ -495,15 +507,17 @@ function renderScriptGate() {
     </div>
     <div class="actionBar">
       <button type="button" id="saveScript">保存</button>
-      <button type="button" id="approveScript">保存并通过</button>
-      <button type="button" id="rewriteScript">退回重写</button>
+      ${state.selected.current_gate === "script_gate" ? '<button type="button" id="approveScript">保存并通过</button>' : ""}
+      <button type="button" id="regenerateScript">单独重新生成脚本</button>
+      ${state.selected.current_gate === "script_gate" ? '<button type="button" id="rewriteScript">退回重写</button>' : ""}
     </div>
   `;
   $("#saveScript").addEventListener("click", () => {
     saveScript().catch((error) => toast(error.message, "error"));
   });
-  $("#approveScript").addEventListener("click", approveScriptGate);
-  $("#rewriteScript").addEventListener("click", rewriteScript);
+  $("#approveScript")?.addEventListener("click", approveScriptGate);
+  $("#rewriteScript")?.addEventListener("click", rewriteScript);
+  $("#regenerateScript").addEventListener("click", () => runManualStage("script"));
 }
 
 function renderScriptRow(section) {
@@ -562,6 +576,88 @@ async function rewriteScript() {
       body: JSON.stringify({ project_id: state.selectedId, stage: "script_gate", reason: "human rewrite requested" }),
     });
     toast(`已退回，当前 ${payload.engine.stage}`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function renderShotWorkbench() {
+  const host = $("#shotEditor");
+  $("#shotWorkbenchState").textContent = state.shotPlan ? `${state.shotPlan.shots.length} 镜` : "";
+  if (!state.selected || !state.shotPlan) {
+    host.className = "emptyState";
+    host.textContent = "选择已有分镜的项目";
+    return;
+  }
+  host.className = "editor";
+  host.innerHTML = `
+    <div class="tableWrap">
+      <table class="scriptTable">
+        <thead><tr><th>#</th><th>画面</th><th>生成提示词</th><th>时长</th><th>操作</th></tr></thead>
+        <tbody>${state.shotPlan.shots.map(renderShotRow).join("")}</tbody>
+      </table>
+    </div>
+    <div class="actionBar">
+      <button type="button" id="saveShots">保存分镜</button>
+      <button type="button" id="regenerateStoryboard">根据当前脚本重新生成分镜</button>
+      <button type="button" id="composeVideo">使用现有成功镜头重新合成</button>
+    </div>
+  `;
+  $("#saveShots").addEventListener("click", () => saveShotPlan().catch((error) => toast(error.message, "error")));
+  $("#regenerateStoryboard").addEventListener("click", () => runManualStage("storyboard"));
+  $("#composeVideo").addEventListener("click", () => runManualStage("compose"));
+  host.querySelectorAll("[data-run-shot]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await saveShotPlan();
+      await runManualStage("production", Number(button.dataset.runShot));
+    });
+  });
+}
+
+function renderShotRow(shot) {
+  const duration = shot.camera_motion?.duration_sec || 5;
+  return `
+    <tr>
+      <td>${Number(shot.number)}</td>
+      <td><textarea data-shot="${shot.number}" data-shot-field="visual">${escapeHtml(shot.visual || "")}</textarea></td>
+      <td><textarea data-shot="${shot.number}" data-shot-field="seedance_prompt">${escapeHtml(shot.seedance_prompt || shot.visual_prompt || "")}</textarea></td>
+      <td><input type="number" min="3" max="10" data-shot="${shot.number}" data-shot-field="duration" value="${Number(duration)}" /></td>
+      <td><button type="button" data-run-shot="${shot.number}">只重跑此镜</button></td>
+    </tr>
+  `;
+}
+
+async function saveShotPlan() {
+  const draft = structuredClone(state.shotPlan);
+  draft.shots.forEach((shot) => {
+    shot.visual = $(`[data-shot="${shot.number}"][data-shot-field="visual"]`).value.trim();
+    shot.seedance_prompt = $(`[data-shot="${shot.number}"][data-shot-field="seedance_prompt"]`).value.trim();
+    shot.visual_prompt = shot.seedance_prompt;
+    shot.camera_motion = shot.camera_motion || {};
+    shot.camera_motion.duration_sec = Number($(`[data-shot="${shot.number}"][data-shot-field="duration"]`).value || 5);
+  });
+  const saved = await api(`/api/v2/artifacts/${encodeURIComponent(state.selectedId)}/shot_plan`, {
+    method: "PUT",
+    body: JSON.stringify(draft),
+  });
+  state.shotPlan = saved.artifact;
+  toast(`分镜已保存，变更镜头：${saved.stale_sections.join(",") || "无"}`);
+  return saved;
+}
+
+async function runManualStage(stage, shotIndex = null) {
+  try {
+    const payload = await api("/api/v2/manual/run", {
+      method: "POST",
+      body: JSON.stringify({
+        project_id: state.selectedId,
+        stage,
+        shot_index: shotIndex,
+        mock: $("#runMode").value !== "real",
+      }),
+    });
+    toast(`${stage}${shotIndex ? ` 镜头 ${shotIndex}` : ""} 已运行到 ${payload.engine.stage}`);
     await refreshProjects();
   } catch (error) {
     toast(error.message, "error");

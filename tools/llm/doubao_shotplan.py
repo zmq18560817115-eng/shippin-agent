@@ -6,6 +6,7 @@ from libshared import artifacts
 from tools.base_tool import ToolContext, ToolResult, require_env
 from tools.llm.mock_artifacts import mock_script_copy, mock_shot_plan
 from tools.providers import ark
+from tools.collect import product_library
 from tools.tool_registry import register_tool
 
 
@@ -16,6 +17,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         return _execute_real(payload, context)
     project_id = str(payload.get("project_id") or "ref-mock")
     script_copy = payload.get("script_copy") or mock_script_copy(project_id)
+    product_facts = product_library.product_guardrail_text(str(script_copy.get("product_id") or ""))
     shot_plan = mock_shot_plan(project_id, script_copy)
     artifacts.validate_artifact("shot_plan", shot_plan, script_copy=script_copy)
     return ToolResult.success(
@@ -45,7 +47,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "Create shot_plan JSON with one shot per script section, vertical 9:16. "
                     "Use product-only, hands-only, bedside or travel-parent scenes. "
                     "Do not show a whole baby bottle inserted into the cup. Script: "
-                    f"{script_copy}"
+                    f"{script_copy}. Approved product facts and hard constraints: {product_facts or 'not provided'}"
                 ),
             },
         ],

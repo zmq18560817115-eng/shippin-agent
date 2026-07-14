@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
+import yaml
+
 from libshared.paths import DATA_ROOT, ROOT
 
 
@@ -25,6 +27,7 @@ PROHIBITED_MARKERS = ("竞品", "对比", "vs", "贝亲", "世喜", "momcozy", "
 
 def default_source_roots() -> list[Path]:
     return [
+        ROOT / "knowledge" / "products",
         ROOT / "data" / "01_素材库" / "产品资料",
         Path(r"C:\Users\bu\Documents\海外视频本地化工作流\01_素材库\产品资料"),
         Path(r"C:\Users\bu\Documents\海外视频本地化工作流\海外视频本地化MVP\产品资料"),
@@ -110,7 +113,21 @@ def resolve_seedance_source(product_id: str) -> str:
     return fallback.as_posix() if fallback.exists() else ""
 
 
+def product_guardrail_text(product_id: str) -> str:
+    product = get_product(product_id)
+    facts = product.get("facts") if product else {}
+    if not isinstance(facts, dict) or not facts:
+        return ""
+    return json.dumps(facts, ensure_ascii=False, sort_keys=True)
+
+
 def _scan_root(root: Path, products: dict[str, dict[str, Any]]) -> None:
+    for facts_file in _safe_glob(root, "*.yaml"):
+        product_id = _infer_product_id(facts_file, root)
+        if product_id:
+            product = _product(products, product_id)
+            product["facts"] = _load_product_facts(facts_file)
+            product["docs"].append(_doc_payload(facts_file, root))
     for markdown in _safe_glob(root, "*.md"):
         product_id = _infer_product_id(markdown, root)
         if product_id:
@@ -156,6 +173,7 @@ def _product(products: dict[str, dict[str, Any]], product_id: str) -> dict[str, 
             "issues": [],
             "source_dirs": [],
             "ds223_refreshed": False,
+            "facts": {},
         }
     return products[canonical]
 
@@ -211,6 +229,14 @@ def _doc_payload(path: Path, source_root: Path) -> dict[str, Any]:
         "source_root": source_root.as_posix(),
         "title": path.stem,
     }
+
+
+def _load_product_facts(path: Path) -> dict[str, Any]:
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _classify_asset(path: Path) -> tuple[str, str, str, str]:

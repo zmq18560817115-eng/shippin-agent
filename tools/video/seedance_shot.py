@@ -8,6 +8,7 @@ from libshared import artifacts
 from libshared.paths import ROOT
 from tools.base_tool import ToolContext, ToolResult, require_env
 from tools.providers import ark
+from tools.collect import product_library
 from tools.tool_registry import register_tool
 
 
@@ -75,11 +76,13 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
 
 
 def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
+    product_facts = product_library.product_guardrail_text(str(asset_manifest.get("product_id") or ""))
     return " ".join(
         part
         for part in (
             str(shot.get("seedance_prompt") or shot.get("visual_prompt") or shot.get("visual") or ""),
             f"Seedance source: {asset_manifest.get('seedance_source')}",
+            f"Approved product facts and hard constraints: {product_facts}" if product_facts else "",
         )
         if part
     )

@@ -7,6 +7,7 @@ from libshared import artifacts
 from tools.base_tool import ToolContext, ToolResult, require_env
 from tools.llm.mock_artifacts import mock_script_copy
 from tools.providers import ark
+from tools.collect import product_library
 from tools.tool_registry import register_tool
 
 
@@ -31,6 +32,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     product_id = str(payload.get("product_id") or "便携恒温杯")
     analysis_report = payload.get("analysis_report") or {}
     rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
+    product_facts = product_library.product_guardrail_text(product_id)
     response, meta = ark.chat_json(
         context,
         api_key_names=("DOUBAO_API_KEY", "ARK_DOUBAO_API_KEY", "ARK_API_KEY"),
@@ -49,6 +51,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     f"{product_id}. Use exactly 3 sections with roles 钩子, 方案, 行动号召 and continuous timings "
                     "0-5s, 5-10s, 10-15s. Product fact: portable warming cup is separate from baby bottle; "
                     "milk is poured into the cup, warmed/kept warm, then poured through the spout into a clean bottle. "
+                    f"Approved product facts and hard constraints: {product_facts or 'not provided'}. "
                     f"Previous review feedback that must be fixed: {rewrite_reason or 'none'}. "
                     f"Analysis: {analysis_report}"
                 ),
