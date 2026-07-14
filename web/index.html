@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>七 Agent 闸门工作台</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260714-2" />
   </head>
   <body>
     <header class="topbar">
@@ -15,8 +15,21 @@
       <div class="health" id="health">连接中</div>
     </header>
 
+    <nav class="workflowNav" aria-label="制作流程">
+      <a href="#projectSetup">创建</a>
+      <a href="#productAssets">素材</a>
+      <a href="#referenceIntake">采集</a>
+      <a href="#projectQueue">项目</a>
+      <a href="#scriptGate">脚本</a>
+      <a href="#storyboardNode">分镜</a>
+      <a href="#heroGate">关键帧</a>
+      <a href="#productionNode">单镜</a>
+      <a href="#composeNode">合成</a>
+      <a href="#deliveryNode">交付</a>
+    </nav>
+
     <main class="workspace">
-      <section class="band">
+      <section class="band" id="projectSetup">
         <div class="sectionHead">
           <h2>新建项目</h2>
           <span id="startState"></span>
@@ -41,7 +54,7 @@
         </form>
       </section>
 
-      <section class="band">
+      <section class="band" id="productAssets">
         <div class="sectionHead">
           <h2>产品素材库</h2>
           <div class="headActions">
@@ -52,7 +65,7 @@
         <div id="productLibraryPanel" class="emptyState">等待产品素材库索引</div>
       </section>
 
-      <section class="band">
+      <section class="band" id="referenceIntake">
         <div class="sectionHead">
           <h2>TikTok 参考素材采集</h2>
           <span id="collectState"></span>
@@ -78,7 +91,7 @@
         <div id="materialLibrary" class="emptyState">暂无参考素材</div>
       </section>
 
-      <section class="band">
+      <section class="band" id="projectQueue">
         <div class="sectionHead">
           <h2>项目列表</h2>
           <button type="button" id="refreshButton">刷新</button>
@@ -139,7 +152,7 @@
         <div id="composePanel" class="emptyState">等待成功镜头</div>
       </section>
 
-      <section class="band">
+      <section class="band" id="deliveryNode">
         <div class="sectionHead">
           <h2>交付区</h2>
           <span id="deliveryState"></span>
@@ -149,6 +162,6 @@
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20260714-2"></script>
   </body>
 </html>

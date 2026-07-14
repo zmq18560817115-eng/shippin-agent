@@ -3,9 +3,9 @@
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     "Microsoft YaHei", sans-serif;
-  --bg: #f5f6f1;
+  --bg: #f4f6f8;
   --surface: #ffffff;
-  --line: #d9ded7;
+  --line: #d7dde5;
   --text: #18212b;
   --muted: #687486;
   --teal: #16837a;
@@ -90,15 +90,15 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px clamp(16px, 4vw, 36px);
+  padding: 11px clamp(16px, 3vw, 32px);
   border-bottom: 1px solid var(--line);
-  background: rgba(245, 246, 241, 0.94);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(12px);
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   letter-spacing: 0;
 }
 
@@ -110,13 +110,44 @@ textarea {
 
 .health {
   min-width: 72px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid var(--line);
   padding: 6px 10px;
   background: #ffffff;
   text-align: center;
   color: var(--muted);
   font-size: 13px;
+}
+
+.workflowNav {
+  position: fixed;
+  top: 65px;
+  bottom: 0;
+  left: 0;
+  z-index: 8;
+  width: 176px;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  border-right: 1px solid var(--line);
+  padding: 18px 12px;
+  background: #ffffff;
+}
+
+.workflowNav a {
+  border-radius: 5px;
+  padding: 9px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.workflowNav a:hover,
+.workflowNav a:focus-visible {
+  background: #eef3f8;
+  color: var(--text);
+  outline: none;
 }
 
 .health[data-status="ok"] {
@@ -131,19 +162,22 @@ textarea {
 
 .workspace {
   display: grid;
-  gap: 18px;
+  gap: 0;
   min-width: 0;
-  max-width: 1320px;
+  max-width: 1480px;
   margin: 0 auto;
-  padding: 18px clamp(12px, 3vw, 28px) 40px;
+  padding: 0 clamp(18px, 3vw, 36px) 48px;
+  margin-left: 176px;
 }
 
 .band {
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  scroll-margin-top: 76px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
   background: var(--surface);
-  padding: 16px;
+  padding: 22px 4px;
 }
 
 .sectionHead {
@@ -158,7 +192,7 @@ textarea {
 
 .sectionHead h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   letter-spacing: 0;
 }
 
@@ -247,7 +281,7 @@ textarea {
 
 .productLibrary {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 10px;
   min-width: 0;
 }
@@ -258,8 +292,8 @@ textarea {
   align-content: start;
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px;
+  border-radius: 6px;
+  padding: 12px;
   background: #fbfcfb;
 }
 
@@ -311,7 +345,7 @@ table {
 th,
 td {
   border-bottom: 1px solid #edf0ed;
-  padding: 10px;
+  padding: 8px 10px;
   text-align: left;
   vertical-align: top;
 }
@@ -358,7 +392,7 @@ th {
   display: inline-flex;
   align-items: center;
   min-height: 26px;
-  border-radius: 999px;
+  border-radius: 4px;
   padding: 3px 8px;
   background: #f3f5f6;
   color: var(--muted);
@@ -417,11 +451,11 @@ pre {
 }
 
 .emptyState {
-  min-height: 80px;
+  min-height: 64px;
   display: grid;
   place-items: center;
   border: 1px dashed #c9d0d7;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--muted);
   background: #fbfcfb;
 }
@@ -434,7 +468,7 @@ pre {
 }
 
 .reviewStrip span {
-  border-radius: 999px;
+  border-radius: 4px;
   background: #edf5f7;
   color: #245663;
   padding: 5px 9px;
@@ -596,8 +630,42 @@ pre {
 
 @media (max-width: 760px) {
   .topbar {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
+    padding: 10px 12px;
+  }
+
+  .topbar h1 {
+    font-size: 16px;
+  }
+
+  .topbar p {
+    max-width: 230px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workflowNav {
+    position: sticky;
+    top: 59px;
+    width: 100%;
+    height: auto;
+    display: flex;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 7px 10px;
+  }
+
+  .workflowNav a {
+    flex: 0 0 auto;
+    padding: 7px 10px;
+  }
+
+  .workspace {
+    margin-left: 0;
+    padding: 0 12px 36px;
   }
 
   .sectionHead {
@@ -628,6 +696,16 @@ pre {
   }
 
   .projectTable {
-    min-width: 760px;
+    min-width: 680px;
+  }
+
+  .band {
+    padding: 18px 0;
+  }
+
+  .actionBar button,
+  .actionBar .buttonLink {
+    flex: 1 1 180px;
+    white-space: normal;
   }
 }
