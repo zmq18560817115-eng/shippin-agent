@@ -9,7 +9,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
         "project_id": project_id,
         "product_id": product_id,
         "source_link_id": None,
-        "total_duration_s": 15,
+        "total_duration_s": 30,
         "generator": {
             "provider": provider,
             "model": "mock",
@@ -19,7 +19,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
             {
                 "number": 1,
                 "role": "钩子",
-                "timing": "0-3s",
+                "timing": "0-6s",
                 "voiceover_en": "Night feeds should feel easier.",
                 "subtitle_en": "Night feeds should feel easier.",
                 "selling_points": [],
@@ -27,7 +27,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
             {
                 "number": 2,
                 "role": "痛点",
-                "timing": "3-6s",
+                "timing": "6-12s",
                 "voiceover_en": "Cold milk and long waits make bedtime harder.",
                 "subtitle_en": "Cold milk and long waits make bedtime harder.",
                 "selling_points": [],
@@ -35,7 +35,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
             {
                 "number": 3,
                 "role": "方案",
-                "timing": "6-9s",
+                "timing": "12-18s",
                 "voiceover_en": "Pour milk into the cup and warm it for bottle prep.",
                 "subtitle_en": "Pour milk into the cup and warm it for bottle prep.",
                 "selling_points": ["USB-C rechargeable"],
@@ -43,7 +43,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
             {
                 "number": 4,
                 "role": "证明",
-                "timing": "9-12s",
+                "timing": "18-24s",
                 "voiceover_en": "The compact cup fits your nightstand or bag.",
                 "subtitle_en": "The compact cup fits your nightstand or bag.",
                 "selling_points": ["portable"],
@@ -51,7 +51,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
             {
                 "number": 5,
                 "role": "行动号召",
-                "timing": "12-15s",
+                "timing": "24-30s",
                 "voiceover_en": "Save this for your next night feed.",
                 "subtitle_en": "Save this for your next night feed.",
                 "selling_points": [],
@@ -79,7 +79,7 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
                 "footage_type": "AI_VIDEO" if role in {"方案", "证明", "行动号召"} else "AI_BROLL",
                 "camera_motion": {
                     "type": "dolly_in" if number == 1 else "static",
-                    "duration_sec": 3,
+                    "duration_sec": 6,
                 },
             }
         )

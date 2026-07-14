@@ -476,7 +476,9 @@ function renderPanels() {
   $("#activeProject").textContent = label;
   renderScriptGate();
   renderHeroGate();
-  renderShotWorkbench();
+  renderStoryboardNode();
+  renderProductionNode();
+  renderComposeNode();
   renderDelivery();
 }
 
@@ -582,9 +584,12 @@ async function rewriteScript() {
   }
 }
 
-function renderShotWorkbench() {
+function renderStoryboardNode() {
   const host = $("#shotEditor");
-  $("#shotWorkbenchState").textContent = state.shotPlan ? `${state.shotPlan.shots.length} 镜` : "";
+  const currentDuration = plannedDuration();
+  $("#storyboardNodeState").textContent = state.shotPlan
+    ? `${state.shotPlan.shots.length} 镜 · 当前 ${currentDuration} 秒 · 目标 30 秒`
+    : "";
   if (!state.selected || !state.shotPlan) {
     host.className = "emptyState";
     host.textContent = "选择已有分镜的项目";
@@ -594,19 +599,43 @@ function renderShotWorkbench() {
   host.innerHTML = `
     <div class="tableWrap">
       <table class="scriptTable">
-        <thead><tr><th>#</th><th>画面</th><th>生成提示词</th><th>时长</th><th>操作</th></tr></thead>
+        <thead><tr><th>#</th><th>画面</th><th>生成提示词</th><th>时长</th></tr></thead>
         <tbody>${state.shotPlan.shots.map(renderShotRow).join("")}</tbody>
       </table>
     </div>
     <div class="actionBar">
       <button type="button" id="saveShots">保存分镜</button>
       <button type="button" id="regenerateStoryboard">根据当前脚本重新生成分镜</button>
-      <button type="button" id="composeVideo">使用现有成功镜头重新合成</button>
     </div>
   `;
   $("#saveShots").addEventListener("click", () => saveShotPlan().catch((error) => toast(error.message, "error")));
   $("#regenerateStoryboard").addEventListener("click", () => runManualStage("storyboard"));
-  $("#composeVideo").addEventListener("click", () => runManualStage("compose"));
+}
+
+function renderShotRow(shot) {
+  const duration = shot.camera_motion?.duration_sec || 6;
+  return `
+    <tr>
+      <td>${Number(shot.number)}</td>
+      <td><textarea data-shot="${shot.number}" data-shot-field="visual">${escapeHtml(shot.visual || "")}</textarea></td>
+      <td><textarea data-shot="${shot.number}" data-shot-field="seedance_prompt">${escapeHtml(shot.seedance_prompt || shot.visual_prompt || "")}</textarea></td>
+      <td><input type="number" min="3" max="10" data-shot="${shot.number}" data-shot-field="duration" value="${Number(duration)}" /></td>
+    </tr>
+  `;
+}
+
+function renderProductionNode() {
+  const host = $("#productionPanel");
+  $("#productionNodeState").textContent = state.shotPlan ? "逐镜独立运行" : "";
+  if (!state.selected || !state.shotPlan) {
+    host.className = "emptyState";
+    host.textContent = "等待分镜";
+    return;
+  }
+  host.className = "editor";
+  host.innerHTML = `<div class="actionBar">${state.shotPlan.shots.map((shot) => `
+    <button type="button" data-run-shot="${shot.number}">运行镜头 ${shot.number} · ${shot.camera_motion?.duration_sec || 6}s</button>
+  `).join("")}</div>`;
   host.querySelectorAll("[data-run-shot]").forEach((button) => {
     button.addEventListener("click", async () => {
       await saveShotPlan();
@@ -615,17 +644,27 @@ function renderShotWorkbench() {
   });
 }
 
-function renderShotRow(shot) {
-  const duration = shot.camera_motion?.duration_sec || 5;
-  return `
-    <tr>
-      <td>${Number(shot.number)}</td>
-      <td><textarea data-shot="${shot.number}" data-shot-field="visual">${escapeHtml(shot.visual || "")}</textarea></td>
-      <td><textarea data-shot="${shot.number}" data-shot-field="seedance_prompt">${escapeHtml(shot.seedance_prompt || shot.visual_prompt || "")}</textarea></td>
-      <td><input type="number" min="3" max="10" data-shot="${shot.number}" data-shot-field="duration" value="${Number(duration)}" /></td>
-      <td><button type="button" data-run-shot="${shot.number}">只重跑此镜</button></td>
-    </tr>
-  `;
+function renderComposeNode() {
+  const host = $("#composePanel");
+  if (!state.selected || !state.shotPlan) {
+    host.className = "emptyState";
+    host.textContent = "等待成功镜头";
+    return;
+  }
+  host.className = "editor";
+  const currentDuration = plannedDuration();
+  const ready = Math.abs(currentDuration - 30) <= 2;
+  host.innerHTML = `<div class="actionBar"><button type="button" id="composeVideo" ${ready ? "" : "disabled"}>${
+    ready ? "使用现有成功镜头合成 30 秒视频" : `当前仅 ${currentDuration} 秒，请先更新分镜并重跑镜头`
+  }</button></div>`;
+  $("#composeVideo").addEventListener("click", () => runManualStage("compose"));
+}
+
+function plannedDuration() {
+  return (state.shotPlan?.shots || []).reduce(
+    (total, shot) => total + Number(shot.camera_motion?.duration_sec || 0),
+    0,
+  );
 }
 
 async function saveShotPlan() {
@@ -635,7 +674,7 @@ async function saveShotPlan() {
     shot.seedance_prompt = $(`[data-shot="${shot.number}"][data-shot-field="seedance_prompt"]`).value.trim();
     shot.visual_prompt = shot.seedance_prompt;
     shot.camera_motion = shot.camera_motion || {};
-    shot.camera_motion.duration_sec = Number($(`[data-shot="${shot.number}"][data-shot-field="duration"]`).value || 5);
+    shot.camera_motion.duration_sec = Number($(`[data-shot="${shot.number}"][data-shot-field="duration"]`).value || 6);
   });
   const saved = await api(`/api/v2/artifacts/${encodeURIComponent(state.selectedId)}/shot_plan`, {
     method: "PUT",

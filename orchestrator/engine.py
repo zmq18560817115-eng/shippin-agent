@@ -498,8 +498,18 @@ def _build_final_qa_report(
     output_path = Path(str(render_report.get("output_path") or ""))
     if not output_path.is_absolute():
         output_path = output_path.resolve() if output_path.is_file() else root / output_path
+    planned_duration = sum(
+        float((item.get("camera_motion") or {}).get("duration_sec") or 0)
+        for item in planned_shots
+    )
+    if planned_duration <= 0:
+        planned_duration = sum(
+            float((item or {}).get("duration") or 0)
+            for item in render_report.get("input_probes") or []
+        )
     checks = {
-        "ffprobe_duration_within": 1 <= duration <= 180,
+        "target_duration_30s": abs(duration - 30.0) <= 2.0,
+        "duration_matches_plan": planned_duration > 0 and abs(duration - planned_duration) <= 2.0,
         "has_audio_stream": int(probe.get("audio_streams") or 0) >= 1,
         "resolution_matches_aspect": resolution == "1080x1920",
         "fps_supported": 24 <= float(probe.get("fps") or 0) <= 60,

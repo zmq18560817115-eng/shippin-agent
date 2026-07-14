@@ -48,8 +48,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "role": "user",
                 "content": (
                     "Create script_copy JSON for product_id "
-                    f"{product_id}. Use exactly 3 sections with roles 钩子, 方案, 行动号召 and continuous timings "
-                    "0-5s, 5-10s, 10-15s. Product fact: portable warming cup is separate from baby bottle; "
+                    f"{product_id}. Use exactly 5 sections with roles 钩子, 痛点, 方案, 证明, 行动号召 and continuous timings "
+                    "0-6s, 6-12s, 12-18s, 18-24s, 24-30s. Product fact: portable warming cup is separate from baby bottle; "
                     "milk is poured into the cup, warmed/kept warm, then poured through the spout into a clean bottle. "
                     f"Approved product facts and hard constraints: {product_facts or 'not provided'}. "
                     f"Previous review feedback that must be fixed: {rewrite_reason or 'none'}. "
@@ -64,7 +64,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "project_id": project_id,
         "product_id": product_id,
         "source_link_id": analysis_report.get("source_link_id"),
-        "total_duration_s": 15,
+        "total_duration_s": 30,
         "generator": {
             "provider": "ark",
             "model": str(meta.get("model") or "doubao"),
@@ -83,9 +83,11 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
 
 def _normalize_sections(value: Any) -> list[dict[str, Any]]:
     defaults = [
-        ("钩子", "0-5s", "Bottle prep should not take over your night."),
-        ("方案", "5-10s", "Pour milk into the warming cup, then prep a clean bottle when it is ready."),
-        ("行动号召", "10-15s", "Save this for calmer feeds at home or on the go."),
+        ("钩子", "0-6s", "Bottle prep should not take over your night."),
+        ("痛点", "6-12s", "Cold milk and long waits can make late feeds harder."),
+        ("方案", "12-18s", "Pour milk into the warming cup and prepare a clean bottle when it is ready."),
+        ("证明", "18-24s", "Its portable shape fits a nightstand or travel bag."),
+        ("行动号召", "24-30s", "Save this for calmer feeds at home or on the go."),
     ]
     raw = value if isinstance(value, list) else []
     sections: list[dict[str, Any]] = []

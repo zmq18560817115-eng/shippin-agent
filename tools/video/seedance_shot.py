@@ -57,6 +57,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "path": output.as_posix(),
                 "cost_cny": context.pricing_for("seedance_shot") if not context.mock else 0.0,
                 "attempt": int(payload.get("attempt") or 1),
+                "duration_sec": _duration_sec(shot),
             }
         ],
     }

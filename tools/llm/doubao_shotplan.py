@@ -87,7 +87,7 @@ def _normalize_shots(value: Any, script_copy: dict[str, Any]) -> list[dict[str, 
                 "footage_type": "AI_VIDEO",
                 "camera_motion": {
                     "type": _motion_type(str(motion_value or motions[min(index - 1, len(motions) - 1)])),
-                    "duration_sec": 5,
+                    "duration_sec": 6,
                 },
             }
         )

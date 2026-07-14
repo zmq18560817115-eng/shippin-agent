@@ -24,11 +24,11 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "structure": ["钩子", "痛点", "方案", "证明", "行动号召"],
         "voiceover_text": transcript or "Mock transcript for portable warming cup.",
         "pacing": [
-            {"start_s": 0, "end_s": 3, "role": "钩子"},
-            {"start_s": 3, "end_s": 6, "role": "痛点"},
-            {"start_s": 6, "end_s": 9, "role": "方案"},
-            {"start_s": 9, "end_s": 12, "role": "证明"},
-            {"start_s": 12, "end_s": 15, "role": "行动号召"},
+            {"start_s": 0, "end_s": 6, "role": "钩子"},
+            {"start_s": 6, "end_s": 12, "role": "痛点"},
+            {"start_s": 12, "end_s": 18, "role": "方案"},
+            {"start_s": 18, "end_s": 24, "role": "证明"},
+            {"start_s": 24, "end_s": 30, "role": "行动号召"},
         ],
         "keyframes": [],
         "fingerprint": "mock-analysis",
@@ -59,7 +59,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "role": "user",
                 "content": (
                     "Create an analysis_report JSON object with fields: hook_3s, structure, "
-                    "voiceover_text, pacing, keyframes, fingerprint. Product: portable warming cup. "
+                    "voiceover_text, pacing, keyframes, fingerprint for a 30-second video. Product: portable warming cup. "
                     "Use only generic structure insights from the source. Source text/link: "
                     f"{transcript[:1500]}"
                 ),
@@ -87,16 +87,16 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
 
 
 def _normalize_pacing(value: Any) -> list[dict[str, Any]]:
-    roles = ["钩子", "痛点", "方案", "行动号召"]
+    roles = ["钩子", "痛点", "方案", "证明", "行动号召"]
     if isinstance(value, list):
         result = []
         for index, item in enumerate(value[:6]):
             if not isinstance(item, dict):
                 continue
-            start = _number(item.get("start_s"), index * 3)
-            end = _number(item.get("end_s"), start + 3)
+            start = _number(item.get("start_s"), index * 6)
+            end = _number(item.get("end_s"), start + 6)
             if end <= start:
-                end = start + 3
+                end = start + 6
             result.append(
                 {
                     "start_s": start,
@@ -108,10 +108,11 @@ def _normalize_pacing(value: Any) -> list[dict[str, Any]]:
         if result:
             return result
     return [
-        {"start_s": 0, "end_s": 3, "role": "钩子"},
-        {"start_s": 3, "end_s": 6, "role": "痛点"},
-        {"start_s": 6, "end_s": 12, "role": "方案"},
-        {"start_s": 12, "end_s": 15, "role": "行动号召"},
+        {"start_s": 0, "end_s": 6, "role": "钩子"},
+        {"start_s": 6, "end_s": 12, "role": "痛点"},
+        {"start_s": 12, "end_s": 18, "role": "方案"},
+        {"start_s": 18, "end_s": 24, "role": "证明"},
+        {"start_s": 24, "end_s": 30, "role": "行动号召"},
     ]
 
 

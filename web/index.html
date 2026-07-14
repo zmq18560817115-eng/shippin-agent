@@ -16,14 +16,6 @@
     </header>
 
     <main class="workspace">
-      <section class="band" id="shotWorkbench">
-        <div class="sectionHead">
-          <h2>人工分镜工作台</h2>
-          <span id="shotWorkbenchState"></span>
-        </div>
-        <div id="shotEditor" class="emptyState">选择已有分镜的项目</div>
-      </section>
-
       <section class="band">
         <div class="sectionHead">
           <h2>新建项目</h2>
@@ -115,12 +107,36 @@
         <div id="scriptEditor" class="emptyState">等待脚本闸门项目</div>
       </section>
 
+      <section class="band" id="storyboardNode">
+        <div class="sectionHead">
+          <h2>分镜节点</h2>
+          <span id="storyboardNodeState"></span>
+        </div>
+        <div id="shotEditor" class="emptyState">选择已有分镜的项目</div>
+      </section>
+
       <section class="band gate" id="heroGate">
         <div class="sectionHead">
           <h2>闸门② 关键帧确认</h2>
           <span id="heroGateState"></span>
         </div>
         <div id="heroEditor" class="emptyState">等待关键帧闸门项目</div>
+      </section>
+
+      <section class="band" id="productionNode">
+        <div class="sectionHead">
+          <h2>单镜生产节点</h2>
+          <span id="productionNodeState"></span>
+        </div>
+        <div id="productionPanel" class="emptyState">等待分镜</div>
+      </section>
+
+      <section class="band" id="composeNode">
+        <div class="sectionHead">
+          <h2>合成节点</h2>
+          <span>目标成片 30 秒</span>
+        </div>
+        <div id="composePanel" class="emptyState">等待成功镜头</div>
       </section>
 
       <section class="band">

@@ -32,7 +32,13 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "fps": 30,
             "audio_streams": 1,
         }
-        input_probes = [dict(ffprobe) for _ in shot_report.get("shots") or []]
+        input_probes = [
+            {
+                **ffprobe,
+                "duration": float(shot.get("duration_sec") or 6),
+            }
+            for shot in shot_report.get("shots") or []
+        ]
     else:
         ffmpeg = _find_ffmpeg()
         shot_paths = _shot_paths(shot_report)
@@ -192,5 +198,5 @@ def _parse_fps(text: str) -> float:
 
 
 def _duration_from_shots(shot_report: dict[str, Any]) -> float:
-    count = len(shot_report.get("shots") or [])
-    return float(max(1, count) * 3)
+    shots = shot_report.get("shots") or []
+    return float(sum(float(shot.get("duration_sec") or 6) for shot in shots) or 6)
