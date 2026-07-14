@@ -91,6 +91,28 @@
             <button type="submit" value="analyze" class="primary">采集并分析</button>
           </div>
         </form>
+        <form class="crawlForm" id="crawlForm">
+          <div class="nodeToolHead">
+            <div><strong>主动爬取任务</strong><span>按关键词或账号发现视频，下载入库并批量运行分析</span></div>
+            <span id="crawlState"></span>
+          </div>
+          <label>
+            发现方式
+            <select id="crawlTargetType">
+              <option value="keyword">关键词</option>
+              <option value="account">账号主页</option>
+            </select>
+          </label>
+          <label class="collectLinks">
+            关键词 / TikTok 账号主页
+            <input id="crawlTarget" placeholder="例如 heated cup 或 https://www.tiktok.com/@brand" />
+          </label>
+          <label>
+            抓取数量
+            <input id="crawlLimit" type="number" min="1" max="5" value="3" />
+          </label>
+          <button type="submit" class="primary">开始爬取并分析</button>
+        </form>
         <div id="materialLibrary" class="emptyState">暂无参考素材</div>
         <div class="nodeTools" id="researchNode">
           <div class="nodeToolHead">

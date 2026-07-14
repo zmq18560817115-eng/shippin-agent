@@ -101,6 +101,7 @@ async function runFlowCapability(action, button, resultSelector) {
 function bindEvents() {
   $("#startForm").addEventListener("submit", startProject);
   $("#collectForm").addEventListener("submit", collectLinks);
+  $("#crawlForm").addEventListener("submit", crawlTikTok);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
   $("#refreshProductLibrary").addEventListener("click", refreshProductLibrary);
   $("#runResearch").addEventListener("click", (event) => runFlowCapability("research", event.currentTarget, "#researchResult"));
@@ -318,6 +319,33 @@ async function collectLinks(event) {
   } finally {
     button.disabled = false;
     $("#collectState").textContent = "";
+  }
+}
+
+async function crawlTikTok(event) {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  $("#crawlState").textContent = "发现与下载中";
+  try {
+    const payload = await api("/api/v2/collect/tiktok/crawl", {
+      method: "POST",
+      body: JSON.stringify({
+        target_type: $("#crawlTargetType").value,
+        target: $("#crawlTarget").value.trim(),
+        limit: Number($("#crawlLimit").value || 3),
+        product_id: $("#productSelect").value,
+        mock: $("#runtimeMode").value !== "real",
+      }),
+    });
+    if (payload.results?.length) state.selectedId = payload.results[0].project_id;
+    toast(`发现 ${payload.discovered_count} 条，完成 ${payload.completed_count} 条，失败 ${payload.failed_count} 条`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    $("#crawlState").textContent = "";
   }
 }
 

@@ -234,6 +234,28 @@ textarea {
   min-width: 0;
 }
 
+.crawlForm {
+  display: grid;
+  grid-template-columns: minmax(150px, 190px) minmax(260px, 1fr) minmax(110px, 140px) auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.crawlForm .nodeToolHead {
+  grid-column: 1 / -1;
+}
+
+.crawlForm label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .collectLinks textarea {
   min-height: 86px;
 }
@@ -694,7 +716,7 @@ pre {
   font-size: 12px;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .topbar {
     align-items: center;
     flex-direction: row;
@@ -749,6 +771,7 @@ pre {
   }
 
   .collectForm,
+  .crawlForm,
   .materialItem {
     grid-template-columns: minmax(0, 1fr);
   }

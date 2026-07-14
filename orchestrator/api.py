@@ -92,6 +92,14 @@ class TikTokIntakeRunRequest(BaseModel):
     mock: bool = True
 
 
+class TikTokCrawlRequest(BaseModel):
+    target_type: str = "keyword"
+    target: str
+    limit: int = 3
+    product_id: str = "便携恒温杯"
+    mock: bool = True
+
+
 class ProductLibraryRefreshRequest(BaseModel):
     source_roots: list[str] | None = None
 
@@ -175,6 +183,7 @@ def runtime_status() -> dict[str, Any]:
             "seedance": {"configured": bool(os.environ.get("SEEDANCE_API_KEY"))},
             "tiktok_oembed": {"configured": True},
             "tiktok_video": {"configured": bool(shutil.which("yt-dlp"))},
+            "tiktok_keyword_crawler": {"configured": bool(os.environ.get("APIFY_API_TOKEN"))},
             "speech_to_text": {"configured": False, "mode": "subtitle_or_operator_text"},
         },
         "budget_mode": "observe",
@@ -414,6 +423,62 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
         "engine": _engine_status(status),
         "project": _project_summary(project_id),
         "warnings": [] if capture.get("transcript_text") else ["未取得字幕，请在研究节点补充转写后重新运行研究分析。"],
+    }
+
+
+@app.post("/api/v2/collect/tiktok/crawl")
+def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
+    limit = max(1, min(request.limit, 5))
+    discovered = tool_registry.execute_tool(
+        "tiktok_crawler",
+        {"target_type": request.target_type, "target": request.target, "limit": limit},
+        context={"mock": request.mock, "env": os.environ},
+    )
+    if not discovered.ok:
+        error = discovered.error or {"category": "provider", "message": "TikTok crawl failed"}
+        status_code = 400 if error.get("category") == "validation" else 503 if error.get("category") == "not_configured" else 502
+        raise HTTPException(status_code=status_code, detail=error["message"])
+
+    results: list[dict[str, Any]] = []
+    failures: list[dict[str, str]] = []
+    for item in discovered.data.get("items", [])[:limit]:
+        url = str(item.get("url") or "")
+        try:
+            result = collect_tiktok_and_run(
+                TikTokIntakeRunRequest(
+                    url=url,
+                    product_id=request.product_id,
+                    transcript_text=str(item.get("caption") or "") or None,
+                    mock=request.mock,
+                )
+            )
+            results.append(
+                {
+                    "url": url,
+                    "material_id": result["material"]["material_id"],
+                    "project_id": result["project_id"],
+                    "stage": result["engine"]["stage"],
+                    "warnings": result["warnings"],
+                }
+            )
+        except HTTPException as exc:
+            failures.append({"url": url, "error": str(exc.detail)})
+    queue.record_event(
+        event_type="collector.tiktok_crawl_completed",
+        message=f"{len(results)}/{len(discovered.data.get('items', []))} videos",
+        meta={"provider": discovered.data.get("provider"), "target_type": request.target_type, "target": request.target},
+        db_path=_db_path(),
+    )
+    return {
+        "ok": bool(results),
+        "provider": discovered.data.get("provider"),
+        "target_type": request.target_type,
+        "target": request.target,
+        "discovered_count": len(discovered.data.get("items", [])),
+        "completed_count": len(results),
+        "failed_count": len(failures),
+        "results": results,
+        "failures": failures,
     }
 
 
