@@ -4,6 +4,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import zipfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -81,6 +82,14 @@ class ManualCollectRequest(BaseModel):
 
 class TikTokCollectRequest(ManualCollectRequest):
     source_keyword: str = "tiktok_oembed"
+
+
+class TikTokIntakeRunRequest(BaseModel):
+    url: str
+    product_id: str = "便携恒温杯"
+    transcript_text: str | None = None
+    project_id: str | None = None
+    mock: bool = True
 
 
 class ProductLibraryRefreshRequest(BaseModel):
@@ -165,6 +174,8 @@ def runtime_status() -> dict[str, Any]:
             "doubao": {"configured": bool(os.environ.get("DOUBAO_API_KEY"))},
             "seedance": {"configured": bool(os.environ.get("SEEDANCE_API_KEY"))},
             "tiktok_oembed": {"configured": True},
+            "tiktok_video": {"configured": bool(shutil.which("yt-dlp"))},
+            "speech_to_text": {"configured": False, "mode": "subtitle_or_operator_text"},
         },
         "budget_mode": "observe",
         "pricing_calibrated": False,
@@ -315,6 +326,95 @@ def collect_tiktok(request: TikTokCollectRequest) -> dict[str, Any]:
         db_path=_db_path(),
     )
     return result.data
+
+
+@app.post("/api/v2/collect/tiktok/run")
+def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
+    root = _material_library_root()
+    collect_payload = {
+        "urls": [request.url],
+        "product_id": request.product_id,
+        "source_keyword": "tiktok_active_capture",
+        "library_root": root.as_posix(),
+    }
+    collector = manual_import.execute if request.mock else tiktok_oembed.execute
+    collected = collector(collect_payload, context=_tool_context(mock=request.mock))
+    if not collected.ok:
+        error = collected.error or {"category": "provider", "message": "TikTok collection failed"}
+        raise HTTPException(status_code=422 if error.get("category") == "validation" else 502, detail=error["message"])
+
+    item = collected.data["items"][0]
+    material_id = str(item["material_id"])
+    material_dir = root / material_id
+    captured = tool_registry.execute_tool(
+        "tiktok_video",
+        {
+            "url": request.url,
+            "material_dir": material_dir.as_posix(),
+            "transcript_text": request.transcript_text or "",
+        },
+        context={"mock": request.mock},
+    )
+    if not captured.ok:
+        error = captured.error or {"category": "provider", "message": "TikTok capture failed"}
+        raise HTTPException(status_code=422 if error.get("category") == "validation" else 502, detail=error["message"])
+
+    capture = captured.data
+    current = manual_import.load_material_meta(material_id, root)
+    intake = dict(current.get("asset_intake") or {})
+    intake["notes"] = (
+        "Active TikTok capture completed. Reference use only: structure, pacing, hook style, shot rhythm, and audience insight."
+    )
+    meta = manual_import.update_material_meta(
+        material_id,
+        {
+            "processing_status": "captured" if capture.get("local_video_path") else "metadata_only",
+            "transcript_text": str(capture.get("transcript_text") or "")[:12000],
+            "local_video_path": str(capture.get("local_video_path") or ""),
+            "ai_analysis_json": json.dumps(
+                {
+                    "capture_status": capture.get("status"),
+                    "transcript_source": capture.get("transcript_source"),
+                    "frame_paths": capture.get("frame_paths") or [],
+                },
+                ensure_ascii=False,
+            ),
+            "asset_intake": intake,
+        },
+        root,
+    )
+
+    project_id = _validate_project_id(request.project_id or _new_project_id())
+    run_root = _run_root(project_id)
+    source_text = str(meta.get("transcript_text") or meta.get("caption") or "")[:8000]
+    task_id = engine.start_pipeline(
+        project_id,
+        product_id=request.product_id,
+        source_material_id=material_id,
+        source_url=request.url,
+        source_text=source_text,
+        db_path=_db_path(),
+        run_root=run_root,
+        mock=request.mock,
+    )
+    status = engine.run_until_blocked(project_id, db_path=_db_path(), run_root=run_root, mock=request.mock)
+    queue.record_event(
+        project_id=project_id,
+        event_type="collector.tiktok_active_capture",
+        message=material_id,
+        meta={"mock": request.mock, "transcript_source": capture.get("transcript_source")},
+        db_path=_db_path(),
+    )
+    return {
+        "ok": True,
+        "material": meta,
+        "capture": capture,
+        "project_id": project_id,
+        "task_id": task_id,
+        "engine": _engine_status(status),
+        "project": _project_summary(project_id),
+        "warnings": [] if capture.get("transcript_text") else ["未取得字幕，请在研究节点补充转写后重新运行研究分析。"],
+    }
 
 
 @app.get("/api/v2/collect/library")
@@ -753,12 +853,12 @@ def _feedback_root() -> Path:
     return DATA_ROOT / "05_反馈库"
 
 
-def _tool_context() -> manual_import.ToolContext:
+def _tool_context(*, mock: bool = True) -> manual_import.ToolContext:
     from tools.base_tool import ToolContext
 
     return ToolContext.from_mapping(
         {
-            "mock": True,
+            "mock": mock,
             "env": os.environ,
         }
     )

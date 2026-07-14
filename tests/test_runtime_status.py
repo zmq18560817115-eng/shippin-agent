@@ -15,4 +15,6 @@ def test_runtime_status_never_exposes_secret_values(monkeypatch) -> None:
     assert payload["real_ready"] is False
     assert payload["providers"]["doubao"]["configured"] is True
     assert payload["providers"]["seedance"]["configured"] is False
+    assert "tiktok_video" in payload["providers"]
+    assert payload["providers"]["speech_to_text"]["configured"] is False
     assert "private-doubao-value" not in response.text

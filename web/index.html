@@ -86,7 +86,10 @@
             TikTok 链接
             <textarea id="collectLinksInput" placeholder="每行一条 TikTok 链接"></textarea>
           </label>
-          <button type="submit">导入素材</button>
+          <div class="formActions">
+            <button type="submit" value="import">仅导入</button>
+            <button type="submit" value="analyze" class="primary">采集并分析</button>
+          </div>
         </form>
         <div id="materialLibrary" class="emptyState">暂无参考素材</div>
         <div class="nodeTools" id="researchNode">

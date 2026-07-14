@@ -21,3 +21,5 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert 'id="runScriptBreakdown"' in html
     assert "runFlowCapability" in script
     assert 'api("/api/v2/agents/run"' in script
+    assert "采集并分析" in html
+    assert 'api("/api/v2/collect/tiktok/run"' in script

@@ -118,6 +118,23 @@ def load_material_meta(material_id: str, library_root: str | os.PathLike[str] | 
     return payload
 
 
+def update_material_meta(
+    material_id: str,
+    updates: dict[str, Any],
+    library_root: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    root = Path(library_root) if library_root is not None else default_library_root()
+    payload = load_material_meta(material_id, root)
+    allowed = {"processing_status", "transcript_text", "ai_analysis_json", "local_video_path", "asset_intake"}
+    unknown = set(updates) - allowed
+    if unknown:
+        raise ValueError(f"unsupported material metadata fields: {', '.join(sorted(unknown))}")
+    payload.update(updates)
+    artifacts.validate_artifact("material_meta", payload)
+    _atomic_write_json(root / material_id / "material_meta.json", payload)
+    return payload
+
+
 def upsert_library_index(
     library_root: Path,
     imported: list[dict[str, Any]],

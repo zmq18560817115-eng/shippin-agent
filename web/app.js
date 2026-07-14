@@ -279,8 +279,28 @@ async function collectLinks(event) {
   event.preventDefault();
   const button = event.submitter;
   button.disabled = true;
-  $("#collectState").textContent = "导入中";
+  const action = button.value || "import";
+  $("#collectState").textContent = action === "analyze" ? "采集并分析中" : "导入中";
   try {
+    if (action === "analyze") {
+      const urls = $("#collectLinksInput").value.match(/https?:\/\/[^\s,;]+/g) || [];
+      if (urls.length !== 1) throw new Error("采集并分析每次需要且仅支持一条 TikTok 链接");
+      const result = await api("/api/v2/collect/tiktok/run", {
+        method: "POST",
+        body: JSON.stringify({
+          url: urls[0],
+          product_id: $("#productSelect").value,
+          transcript_text: $("#researchSourceText").value.trim() || null,
+          mock: $("#runtimeMode").value !== "real",
+        }),
+      });
+      state.selectedId = result.project_id;
+      $("#collectLinksInput").value = "";
+      const warning = (result.warnings || [])[0];
+      toast(warning || `采集完成，项目已运行到 ${result.engine.stage}`, warning ? "warning" : "success");
+      await refreshProjects();
+      return;
+    }
     const official = $("#collectMode").value === "official";
     const payload = await api(official ? "/api/v2/collect/tiktok" : "/api/v2/collect/manual", {
       method: "POST",
