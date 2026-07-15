@@ -100,7 +100,6 @@ def run_until_blocked(
         task = queue.claim_task(
             "engine",
             project_id=project_id,
-            lease_seconds=60,
             db_path=db_path,
         )
         if task is None:
@@ -132,7 +131,6 @@ def run_task(
     task = queue.claim_task_by_id(
         task_id,
         "engine",
-        lease_seconds=60,
         db_path=db_path,
     )
     if task is None:

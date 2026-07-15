@@ -131,7 +131,14 @@ def capability_map() -> dict[str, Any]:
         },
         "collector": {
             "status": "partial",
-            "available": ["TikTok oEmbed metadata", "manual URL intake", "manual transcript intake"],
-            "missing": ["authorized video download", "automatic ASR", "frame sampling"],
+            "available": [
+                "TikTok oEmbed metadata",
+                "manual URL intake",
+                "account and keyword discovery adapters",
+                "yt-dlp video download",
+                "subtitle intake",
+                "frame sampling",
+            ],
+            "missing": ["automatic ASR", "shot-boundary detection", "OCR", "stable cookie/proxy session management"],
         },
     }

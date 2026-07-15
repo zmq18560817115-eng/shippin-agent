@@ -11,7 +11,8 @@ database:
 
 runtime:
   media_concurrency: 1
-  lease_seconds: 60
+  # Real LLM and video provider calls can legitimately take several minutes.
+  lease_seconds: 1200
   worker_poll_interval_s: 1.0
   budget_mode: "observe"
 

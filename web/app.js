@@ -675,7 +675,10 @@ function renderStoryboardNode() {
     : "";
   if (!state.selected || !state.shotPlan) {
     host.className = "emptyState";
-    host.textContent = "选择已有分镜的项目";
+    const storyboardErrors = state.selected?.stages?.storyboard?.errors || [];
+    host.textContent = storyboardErrors.length
+      ? `分镜生成失败：${storyboardErrors.map((item) => item.error_json?.message || "未知错误").join("；")}`
+      : "脚本通过后将在这里生成并展示可编辑分镜";
     return;
   }
   host.className = "editor";
