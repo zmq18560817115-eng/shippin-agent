@@ -11,6 +11,9 @@ from libshared.paths import ROOT
 from tools.base_tool import ToolContext, ToolResult, ToolNotConfiguredError
 from tools.tool_registry import register_tool
 
+DELIVERY_WIDTH = 720
+DELIVERY_HEIGHT = 1280
+
 
 @register_tool("ffmpeg_compose")
 def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -43,8 +46,10 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         ffmpeg = _find_ffmpeg()
         shot_paths = _shot_paths(shot_report)
         input_probes = [_probe_media(path, ffmpeg) for path in shot_paths]
-        _compose_real(shot_paths, output, ffmpeg)
+        _compose_real(shot_paths, output, ffmpeg, shot_report)
         ffprobe = _probe_media(output, ffmpeg)
+        if ffprobe.get("resolution") != f"{DELIVERY_WIDTH}x{DELIVERY_HEIGHT}":
+            raise RuntimeError("final video must be exactly 720x1280")
 
     review_frame_dir = output_dir / "review_frames"
     review_frames = _extract_review_frames(output, review_frame_dir, _find_ffmpeg()) if output.is_file() else []
@@ -77,7 +82,7 @@ def _find_ffmpeg() -> str | None:
         return None
 
 
-def _compose_real(paths: list[Path], output: Path, ffmpeg: str | None) -> None:
+def _compose_real(paths: list[Path], output: Path, ffmpeg: str | None, shot_report: dict[str, Any]) -> None:
     if not ffmpeg:
         raise ToolNotConfiguredError("ffmpeg executable not found")
     if not paths:
@@ -116,8 +121,8 @@ def _normalize_shot(source: Path, output: Path, ffmpeg: str, duration_sec: float
     if not source.is_file():
         raise FileNotFoundError(f"shot video not found: {source}")
     video_filter = (
-        "scale=720:1280:force_original_aspect_ratio=decrease,"
-        "pad=720:1280:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p"
+        f"scale={DELIVERY_WIDTH}:{DELIVERY_HEIGHT}:force_original_aspect_ratio=decrease,"
+        f"pad={DELIVERY_WIDTH}:{DELIVERY_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p"
     )
     command = [ffmpeg, "-y", "-i", source.as_posix(), "-t", str(max(1, duration_sec))]
     if _media_has_audio(source, ffmpeg):
