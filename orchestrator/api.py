@@ -158,6 +158,17 @@ class FeedbackRequest(BaseModel):
     author: str = "operator"
 
 
+class FinalVisualReviewRequest(BaseModel):
+    project_id: str
+    product_identity: bool
+    no_invented_brand: bool
+    temperature_display: bool
+    usage_flow: bool
+    person_scene_continuity: bool
+    reviewer: str = "operator"
+    notes: str | None = None
+
+
 class AgentRunRequest(BaseModel):
     project_id: str
     action: str
@@ -417,6 +428,7 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
                 ensure_ascii=False,
             ),
             "asset_intake": intake,
+            "source_mode": "mock" if request.mock else "real",
             **_discovery_meta_updates(request.source_item),
         },
         root,
@@ -593,6 +605,8 @@ def run_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
     project_id = _validate_project_id(request.project_id or _new_project_id())
     source_link_id = _normalize_source_link_id(request.source_link_id, request.link_id)
     source_meta = _source_material_or_none(request.source_material_id)
+    if not request.mock and source_meta and str(source_meta.get("source_mode") or "") == "mock":
+        raise HTTPException(status_code=409, detail="真实运行不能使用演练素材，请重新抓取真实 TikTok 来源")
     product_id = request.product_id or str((source_meta or {}).get("product_id") or "便携恒温杯")
     run_root = _run_root(project_id)
     task_id = engine.start_pipeline(
@@ -745,12 +759,14 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
             "revision": revision,
         }
     elif stage == "storyboard":
+        _require_approved_gate(project_id, "script_gate", root)
         _load_artifact(project_id, "script_copy")
         task_stage, agent, payload = "storyboard", "storyboard", {
             "run_root": root.as_posix(),
             "revision": revision,
         }
     elif stage == "production":
+        _require_approved_gate(project_id, "hero_gate", root)
         if request.shot_index is None or request.shot_index < 1:
             raise HTTPException(status_code=400, detail="production requires shot_index >= 1")
         shot_plan = _load_artifact(project_id, "shot_plan")
@@ -770,7 +786,9 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
             "take_id": request.take_id,
         }
     elif stage == "compose":
+        _require_approved_gate(project_id, "hero_gate", root)
         _load_artifact(project_id, "shot_report")
+        _require_selected_playable_takes(project_id, root)
         task_stage, agent, payload = "compose", "media", {
             "run_root": root.as_posix(),
             "revision": revision,
@@ -824,6 +842,8 @@ def select_take(request: TakeSelectRequest) -> dict[str, Any]:
     selected = next((item for item in shot_entry.get("takes", []) if item.get("take_id") == request.take_id), None)
     if selected is None:
         raise HTTPException(status_code=404, detail=f"take {request.take_id} not found")
+    if not _is_playable_take_path(root, str(selected.get("path") or "")):
+        raise HTTPException(status_code=409, detail="该 Take 不是可播放的真实媒体，不能选用或参与合成")
     shot_entry["selected_take_id"] = request.take_id
     for item in shot_entry.get("takes", []):
         item["status"] = "selected" if item.get("take_id") == request.take_id else "needs_review"
@@ -1043,6 +1063,52 @@ def write_feedback(request: FeedbackRequest) -> dict[str, Any]:
     return {"ok": True, "path": str(path), "feedback": payload}
 
 
+@app.post("/api/v2/review/final-visual")
+def approve_final_visual_review(request: FinalVisualReviewRequest) -> dict[str, Any]:
+    """Record the mandatory human visual review before final QA can pass."""
+    project_id = _validate_project_id(request.project_id)
+    root = _run_root(project_id)
+    _load_artifact(project_id, "render_report")
+    checks = {
+        "product_identity": request.product_identity,
+        "no_invented_brand": request.no_invented_brand,
+        "temperature_display": request.temperature_display,
+        "usage_flow": request.usage_flow,
+        "person_scene_continuity": request.person_scene_continuity,
+    }
+    failed = [name for name, passed in checks.items() if not passed]
+    review = {
+        "version": "2.0",
+        "project_id": project_id,
+        "artifact_type": "final_visual_review",
+        "status": "approved" if not failed else "blocked",
+        "checks": checks,
+        "reviewer": request.reviewer.strip() or "operator",
+        "notes": (request.notes or "").strip(),
+        "created_at": queue.utc_now(),
+    }
+    _atomic_write_json(root / "artifacts" / "final_visual_review.json", review)
+    queue.record_event(
+        project_id=project_id,
+        event_type="final_visual_review.saved",
+        message=review["status"],
+        meta={"failed_checks": failed},
+        db_path=_db_path(),
+    )
+    if failed:
+        raise HTTPException(status_code=409, detail=f"视觉验收未通过：{', '.join(failed)}")
+
+    task_id = queue.enqueue_task(
+        project_id=project_id,
+        stage="final_qa",
+        agent="review",
+        payload={"run_root": root.as_posix(), "revision": queue.utc_now()},
+        db_path=_db_path(),
+    )
+    status = engine.run_until_blocked(project_id, db_path=_db_path(), run_root=root, mock=False)
+    return {"ok": True, "review": review, "task_id": task_id, "engine": _engine_status(status), "project": _project_summary(project_id)}
+
+
 def _db_path() -> Path:
     return queue.resolve_db_path()
 
@@ -1080,6 +1146,42 @@ def _tool_context(*, mock: bool = True) -> manual_import.ToolContext:
             "env": os.environ,
         }
     )
+
+
+def _require_approved_gate(project_id: str, stage: str, root: Path) -> None:
+    latest = _latest_checkpoint_for_stage(project_id, stage, root)
+    if latest is None or latest.get("status") != "succeeded":
+        labels = {"script_gate": "脚本确认", "hero_gate": "关键帧确认"}
+        raise HTTPException(status_code=409, detail=f"请先完成{labels.get(stage, stage)}后再运行此节点")
+
+
+def _is_playable_take_path(root: Path, path_text: str) -> bool:
+    if not path_text:
+        return False
+    candidate = Path(path_text)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    try:
+        candidate.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return _is_playable_delivery_file(candidate)
+
+
+def _require_selected_playable_takes(project_id: str, root: Path) -> None:
+    plan = _load_artifact(project_id, "shot_plan")
+    manifest = _load_artifact(project_id, "take_manifest")
+    by_number = {int(item.get("number") or 0): item for item in manifest.get("shots", [])}
+    failures: list[str] = []
+    for shot in plan.get("shots", []):
+        number = int(shot.get("number") or 0)
+        entry = by_number.get(number) or {}
+        selected_id = entry.get("selected_take_id")
+        selected = next((take for take in entry.get("takes", []) if take.get("take_id") == selected_id), None)
+        if selected is None or not _is_playable_take_path(root, str(selected.get("path") or "")):
+            failures.append(f"镜头 {number}")
+    if failures:
+        raise HTTPException(status_code=409, detail=f"请先为以下镜头选用可播放 Take：{', '.join(failures)}")
 
 
 def _storyboard_preflight_errors(project_id: str) -> list[dict[str, Any]]:

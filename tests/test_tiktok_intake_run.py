@@ -33,6 +33,7 @@ def test_tiktok_intake_runs_to_script_gate_in_mock_mode(tmp_path: Path, monkeypa
     assert payload["warnings"] == []
     meta = manual_import.load_material_meta(payload["material"]["material_id"], library_root)
     assert meta["processing_status"] == "analyzed"
+    assert meta["source_mode"] == "mock"
     assert meta["transcript_text"].startswith("A 30 second")
     assert json.loads(meta["ai_analysis_json"])["analysis"]["hook_3s"]
     project_root = runs_root / payload["project_id"]

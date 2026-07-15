@@ -554,7 +554,10 @@ def _run_final_qa(task: queue.Task, root: Path, *, db_path: str | Path | None) -
     render_report = _load_artifact(root, "render_report")
     shot_plan = _load_artifact(root, "shot_plan")
     shot_report = _load_artifact(root, "shot_report")
-    report = _build_final_qa_report(task.project_id, root, render_report, shot_plan, shot_report)
+    visual_review = _load_artifact_or_none(root, "final_visual_review")
+    report = _build_final_qa_report(
+        task.project_id, root, render_report, shot_plan, shot_report, visual_review=visual_review
+    )
     artifacts.save_artifact(task.project_id, "qa_report", report, run_root=root)
     queue.complete_task(task.id, "engine", {"qa_report": report}, db_path=db_path)
     passed = report["status"] == "PASS"
@@ -587,6 +590,8 @@ def _build_final_qa_report(
     render_report: dict[str, Any],
     shot_plan: dict[str, Any],
     shot_report: dict[str, Any],
+    *,
+    visual_review: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     probe = render_report.get("ffprobe") or {}
     resolution = str(probe.get("resolution") or "")
@@ -617,6 +622,7 @@ def _build_final_qa_report(
         "output_file_present": output_path.is_file() and output_path.stat().st_size > 0,
         "output_file_playable": _is_playable_mp4(output_path),
         "source_clips_vertical": _source_clips_vertical(render_report),
+        "human_visual_review": _approved_visual_review(visual_review),
     }
     failed = [name for name, passed in checks.items() if not passed]
     return {
@@ -628,6 +634,20 @@ def _build_final_qa_report(
         "failed_checks": failed,
         "comments": ["Final media QA passed."] if not failed else [f"Blocked by: {', '.join(failed)}"],
     }
+
+
+def _approved_visual_review(review: dict[str, Any] | None) -> bool:
+    if not review or review.get("status") != "approved":
+        return False
+    checks = review.get("checks") or {}
+    required = {
+        "product_identity",
+        "no_invented_brand",
+        "temperature_display",
+        "usage_flow",
+        "person_scene_continuity",
+    }
+    return all(checks.get(name) is True for name in required)
 
 
 def _is_playable_mp4(path: Path) -> bool:

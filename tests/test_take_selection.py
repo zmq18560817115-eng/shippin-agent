@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -17,6 +18,7 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
     engine.run_until_blocked("take-demo", db_path=db_path, run_root=run_root, mock=True)
     engine.approve_gate("take-demo", "script_gate", approver="test", db_path=db_path, run_root=run_root)
     engine.run_until_blocked("take-demo", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("take-demo", "hero_gate", approver="test", db_path=db_path, run_root=run_root)
 
     with TestClient(app) as client:
         take_a = client.post(
@@ -27,6 +29,15 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
             "/api/v2/manual/run",
             json={"project_id": "take-demo", "stage": "production", "shot_index": 1, "take_id": "B", "mock": True},
         )
+        rejected = client.post(
+            "/api/v2/takes/select",
+            json={"project_id": "take-demo", "shot_index": 1, "take_id": "B"},
+        )
+        manifest = json.loads((run_root / "artifacts" / "take_manifest.json").read_text(encoding="utf-8"))
+        take_b_path = next(item for item in manifest["shots"][0]["takes"] if item["take_id"] == "B")["path"]
+        output = run_root / take_b_path
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 1024))
         selected = client.post(
             "/api/v2/takes/select",
             json={"project_id": "take-demo", "shot_index": 1, "take_id": "B"},
@@ -35,6 +46,7 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
 
     assert take_a.status_code == 200, take_a.text
     assert take_b.status_code == 200, take_b.text
+    assert rejected.status_code == 409, rejected.text
     assert selected.status_code == 200, selected.text
     assert displayed.status_code == 200, displayed.text
     manifest = selected.json()["take_manifest"]

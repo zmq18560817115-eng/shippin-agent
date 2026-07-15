@@ -611,10 +611,8 @@ async function loadSelectedProject(projectId) {
   state.shotPlan = await safeArtifact(projectId, "shot_plan");
   state.assetManifest = await safeArtifact(projectId, "asset_manifest");
   state.takeManifest = await safeArtifact(projectId, "take_manifest");
-  if (state.selected.status === "succeeded") {
-    state.renderReport = await safeArtifact(projectId, "render_report");
-    state.runReport = await safeRunReport(projectId);
-  }
+  state.renderReport = await safeArtifact(projectId, "render_report");
+  state.runReport = await safeRunReport(projectId);
   renderPanels();
 }
 
@@ -1007,10 +1005,59 @@ function renderComposeNode() {
   host.className = "editor";
   const currentDuration = plannedDuration();
   const ready = Math.abs(currentDuration - 30) <= 2;
+  const visualReview = state.renderReport?.output_path ? renderVisualReview() : "";
   host.innerHTML = `<div class="actionBar"><button type="button" id="composeVideo" ${ready ? "" : "disabled"}>${
     ready ? "使用现有成功镜头合成 30 秒视频" : `当前仅 ${currentDuration} 秒，请先更新分镜并重跑镜头`
-  }</button></div>`;
+  }</button></div>${visualReview}`;
   $("#composeVideo").addEventListener("click", () => runManualStage("compose"));
+  $("#submitVisualReview")?.addEventListener("click", submitVisualReview);
+}
+
+function renderVisualReview() {
+  const qa = state.runReport?.qa_report;
+  const blocked = qa?.failed_checks?.includes("human_visual_review");
+  return `
+    <section class="visualReview">
+      <div class="nodeToolHead"><div><strong>成片人工视觉验收</strong><span>${blocked ? "技术质检已完成，必须完成以下人工验收后才会交付。" : "合成完成后，请确认成片中没有产品、温标和场景错误。"}</span></div></div>
+      <div class="reviewChecklist">
+        <label><input id="reviewProductIdentity" type="checkbox" /> 产品外观与素材库一致</label>
+        <label><input id="reviewNoInventedBrand" type="checkbox" /> 无虚构品牌、文字或 Logo</label>
+        <label><input id="reviewTemperature" type="checkbox" /> 温标为 98°F（华氏），非摄氏</label>
+        <label><input id="reviewUsageFlow" type="checkbox" /> 倒液方向和使用流程正确</label>
+        <label><input id="reviewContinuity" type="checkbox" /> 人物、服装、场景连续</label>
+      </div>
+      <textarea id="visualReviewNotes" class="visualReviewNotes" placeholder="可填写需要返工的镜头、产品或画面问题"></textarea>
+      <div class="actionBar"><button type="button" id="submitVisualReview" class="primary">确认视觉验收并进入交付</button></div>
+    </section>
+  `;
+}
+
+async function submitVisualReview() {
+  const checks = {
+    product_identity: $("#reviewProductIdentity").checked,
+    no_invented_brand: $("#reviewNoInventedBrand").checked,
+    temperature_display: $("#reviewTemperature").checked,
+    usage_flow: $("#reviewUsageFlow").checked,
+    person_scene_continuity: $("#reviewContinuity").checked,
+  };
+  if (Object.values(checks).some((value) => !value)) {
+    toast("请逐项确认；任一项不通过时应返回对应镜头重新生成", "error");
+    return;
+  }
+  try {
+    beginOperation("正在执行最终质检与归档", 25);
+    await api("/api/v2/review/final-visual", {
+      method: "POST",
+      body: JSON.stringify({ project_id: state.selectedId, ...checks, notes: $("#visualReviewNotes").value.trim() }),
+    });
+    toast("视觉验收已记录，成片已进入交付检查");
+    await refreshProjects();
+    showView("delivery");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    endOperation();
+  }
 }
 
 function plannedDuration() {

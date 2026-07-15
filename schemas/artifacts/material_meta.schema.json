@@ -21,6 +21,7 @@
     "music_title": {"type": "string"},
     "cover_url": {"type": "string"},
     "source_keyword": {"type": "string", "minLength": 1},
+    "source_mode": {"enum": ["real", "mock"]},
     "crawl_time": {"type": "string", "minLength": 1},
     "processing_status": {"type": "string"},
     "transcript_text": {"type": "string"},

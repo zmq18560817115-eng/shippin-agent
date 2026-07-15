@@ -978,6 +978,39 @@ pre {
   max-width: 360px;
 }
 
+.visualReview {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.reviewChecklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 18px;
+  margin: 14px 0;
+}
+
+.reviewChecklist label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.reviewChecklist input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.visualReviewNotes {
+  display: block;
+  width: min(100%, 760px);
+  min-height: 92px;
+  resize: vertical;
+}
+
 #toast {
   position: fixed;
   right: 16px;
