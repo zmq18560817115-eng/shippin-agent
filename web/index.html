@@ -3,33 +3,45 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>七 Agent 闸门工作台</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260714-2" />
+    <title>视频内容工厂</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260715-1" />
   </head>
   <body>
     <header class="topbar">
-      <div>
-        <h1>七 Agent 闸门工作台</h1>
-        <p id="activeProject">未选择项目</p>
+      <div class="brandBlock">
+        <span class="brandMark" aria-hidden="true">VF</span>
+        <div>
+          <h1>视频内容工厂</h1>
+          <p id="activeProject">未选择项目</p>
+        </div>
       </div>
-      <div class="health" id="health">连接中</div>
+      <div class="topActions">
+        <button type="button" id="continueProject" class="continueButton" disabled>继续当前节点</button>
+        <div class="health" id="health">连接中</div>
+      </div>
     </header>
 
     <nav class="workflowNav" aria-label="制作流程">
-      <a href="#projectSetup">创建</a>
-      <a href="#productAssets">素材</a>
-      <a href="#referenceIntake">采集</a>
-      <a href="#projectQueue">项目</a>
-      <a href="#scriptGate">脚本</a>
-      <a href="#storyboardNode">分镜</a>
-      <a href="#heroGate">关键帧</a>
-      <a href="#productionNode">单镜</a>
-      <a href="#composeNode">合成</a>
-      <a href="#deliveryNode">交付</a>
+      <div class="navLabel">工作流程</div>
+      <button type="button" data-view="projects" class="active"><span>01</span><strong>项目</strong><small>创建与任务队列</small></button>
+      <button type="button" data-view="assets"><span>02</span><strong>素材采集</strong><small>产品库与参考视频</small></button>
+      <button type="button" data-view="script"><span>03</span><strong>脚本</strong><small>策略、拆解与确认</small></button>
+      <button type="button" data-view="storyboard"><span>04</span><strong>分镜</strong><small>镜头与关键帧</small></button>
+      <button type="button" data-view="production"><span>05</span><strong>制作</strong><small>单镜生成与合成</small></button>
+      <button type="button" data-view="delivery"><span>06</span><strong>交付</strong><small>质检、下载与反馈</small></button>
+      <div class="navFoot">人工闸门会暂停流程，确认后从当前节点继续。</div>
     </nav>
 
     <main class="workspace">
-      <section class="band" id="projectSetup">
+      <div class="viewIntro">
+        <div>
+          <span id="viewStep">01 / 06</span>
+          <h2 id="viewTitle">项目</h2>
+          <p id="viewDescription">创建任务，或打开一个在制项目继续工作。</p>
+        </div>
+        <span id="currentStage" class="currentStage">暂无在制项目</span>
+      </div>
+      <section class="band" id="projectSetup" data-view-section="projects">
         <div class="sectionHead">
           <h2>新建项目</h2>
           <span id="startState"></span>
@@ -54,7 +66,7 @@
         </form>
       </section>
 
-      <section class="band" id="productAssets">
+      <section class="band" id="productAssets" data-view-section="assets" hidden>
         <div class="sectionHead">
           <h2>产品素材库</h2>
           <div class="headActions">
@@ -65,7 +77,7 @@
         <div id="productLibraryPanel" class="emptyState">等待产品素材库索引</div>
       </section>
 
-      <section class="band" id="referenceIntake">
+      <section class="band" id="referenceIntake" data-view-section="assets" hidden>
         <div class="sectionHead">
           <h2>TikTok 参考素材采集</h2>
           <span id="collectState"></span>
@@ -138,10 +150,14 @@
         </div>
       </section>
 
-      <section class="band" id="projectQueue">
+      <section class="band" id="projectQueue" data-view-section="projects">
         <div class="sectionHead">
           <h2>项目列表</h2>
-          <button type="button" id="refreshButton">刷新</button>
+          <div class="headActions">
+            <span id="projectCount"></span>
+            <button type="button" id="toggleProjects">显示全部</button>
+            <button type="button" id="refreshButton">刷新</button>
+          </div>
         </div>
         <div class="tableWrap">
           <table class="projectTable">
@@ -159,7 +175,7 @@
         </div>
       </section>
 
-      <section class="band gate" id="scriptGate">
+      <section class="band gate" id="scriptGate" data-view-section="script" hidden>
         <div class="sectionHead">
           <h2>闸门① 脚本确认</h2>
           <span id="scriptGateState"></span>
@@ -183,7 +199,7 @@
         <div id="scriptEditor" class="emptyState">等待脚本闸门项目</div>
       </section>
 
-      <section class="band" id="storyboardNode">
+      <section class="band" id="storyboardNode" data-view-section="storyboard" hidden>
         <div class="sectionHead">
           <h2>分镜节点</h2>
           <span id="storyboardNodeState"></span>
@@ -191,7 +207,7 @@
         <div id="shotEditor" class="emptyState">选择已有分镜的项目</div>
       </section>
 
-      <section class="band gate" id="heroGate">
+      <section class="band gate" id="heroGate" data-view-section="storyboard" hidden>
         <div class="sectionHead">
           <h2>闸门② 关键帧确认</h2>
           <span id="heroGateState"></span>
@@ -199,7 +215,7 @@
         <div id="heroEditor" class="emptyState">等待关键帧闸门项目</div>
       </section>
 
-      <section class="band" id="productionNode">
+      <section class="band" id="productionNode" data-view-section="production" hidden>
         <div class="sectionHead">
           <h2>单镜生产节点</h2>
           <span id="productionNodeState"></span>
@@ -207,7 +223,7 @@
         <div id="productionPanel" class="emptyState">等待分镜</div>
       </section>
 
-      <section class="band" id="composeNode">
+      <section class="band" id="composeNode" data-view-section="production" hidden>
         <div class="sectionHead">
           <h2>合成节点</h2>
           <span>目标成片 30 秒</span>
@@ -215,7 +231,7 @@
         <div id="composePanel" class="emptyState">等待成功镜头</div>
       </section>
 
-      <section class="band" id="deliveryNode">
+      <section class="band" id="deliveryNode" data-view-section="delivery" hidden>
         <div class="sectionHead">
           <h2>交付区</h2>
           <span id="deliveryState"></span>
@@ -225,6 +241,6 @@
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js?v=20260714-5"></script>
+    <script src="/static/app.js?v=20260715-1"></script>
   </body>
 </html>

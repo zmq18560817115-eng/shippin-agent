@@ -14,6 +14,17 @@ const state = {
   renderReport: null,
   runReport: null,
   refreshing: false,
+  currentView: "projects",
+  showAllProjects: false,
+};
+
+const views = {
+  projects: { step: "01 / 06", title: "项目", description: "创建任务，或打开一个在制项目继续工作。" },
+  assets: { step: "02 / 06", title: "素材采集", description: "管理产品事实素材，采集并分析参考视频。" },
+  script: { step: "03 / 06", title: "脚本", description: "审阅内容策略、脚本拆解与文案，确认后进入分镜。" },
+  storyboard: { step: "04 / 06", title: "分镜", description: "调整镜头计划，确认产品关键帧与视觉连续性。" },
+  production: { step: "05 / 06", title: "制作", description: "逐镜生成、选择最佳 Take，并合成为 30 秒成片。" },
+  delivery: { step: "06 / 06", title: "交付", description: "检查质检结果，下载交付包并记录反馈。" },
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -60,6 +71,8 @@ function toast(message, kind = "ok") {
 
 async function boot() {
   bindEvents();
+  const initialView = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
+  showView(views[initialView] ? initialView : "projects", { updateUrl: false });
   await checkHealth();
   await loadProductLibrary();
   await loadProducts();
@@ -104,10 +117,54 @@ function bindEvents() {
   $("#collectForm").addEventListener("submit", collectLinks);
   $("#crawlForm").addEventListener("submit", crawlTikTok);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
+  $("#toggleProjects").addEventListener("click", () => {
+    state.showAllProjects = !state.showAllProjects;
+    renderProjectRows();
+  });
   $("#refreshProductLibrary").addEventListener("click", refreshProductLibrary);
   $("#runResearch").addEventListener("click", (event) => runFlowCapability("research", event.currentTarget, "#researchResult"));
   $("#runStrategy").addEventListener("click", (event) => runFlowCapability("strategy", event.currentTarget, "#strategyResult"));
   $("#runScriptBreakdown").addEventListener("click", (event) => runFlowCapability("script_breakdown", event.currentTarget, "#scriptBreakdownResult"));
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.view));
+  });
+  $("#continueProject").addEventListener("click", continueCurrentProject);
+  window.addEventListener("hashchange", () => {
+    const view = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
+    if (views[view]) showView(view, { updateUrl: false });
+  });
+}
+
+function showView(view, { updateUrl = true } = {}) {
+  const next = views[view] ? view : "projects";
+  state.currentView = next;
+  document.querySelectorAll("[data-view-section]").forEach((section) => {
+    section.hidden = section.dataset.viewSection !== next;
+  });
+  document.querySelectorAll(".workflowNav [data-view]").forEach((button) => {
+    const active = button.dataset.view === next;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+  const meta = views[next];
+  $("#viewStep").textContent = meta.step;
+  $("#viewTitle").textContent = meta.title;
+  $("#viewDescription").textContent = meta.description;
+  if (updateUrl) history.replaceState(null, "", `#view=${next}`);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function viewForStage(stage) {
+  if (["analysis", "research", "strategy", "script", "script_breakdown", "script_review", "script_gate"].includes(stage)) return "script";
+  if (["storyboard", "asset", "hero_gate"].includes(stage)) return "storyboard";
+  if (["production", "compose", "final_qa"].includes(stage)) return "production";
+  if (["archive", "succeeded"].includes(stage)) return "delivery";
+  return "projects";
+}
+
+function continueCurrentProject() {
+  if (!state.selected) return;
+  showView(viewForStage(state.selected.current_stage || state.selected.status));
 }
 
 async function checkHealth() {
@@ -269,6 +326,7 @@ async function startProject(event) {
     state.selectedId = payload.project_id;
     toast(`项目 ${payload.project_id} 已到 ${payload.engine.stage}`);
     await refreshProjects();
+    continueCurrentProject();
   } catch (error) {
     toast(error.message, "error");
   } finally {
@@ -301,6 +359,7 @@ async function collectLinks(event) {
       const warning = (result.warnings || [])[0];
       toast(warning || `采集完成，项目已运行到 ${result.engine.stage}`, warning ? "warning" : "success");
       await refreshProjects();
+      continueCurrentProject();
       return;
     }
     const official = $("#collectMode").value === "official";
@@ -343,6 +402,7 @@ async function crawlTikTok(event) {
     if (payload.results?.length) state.selectedId = payload.results[0].project_id;
     toast(`发现 ${payload.discovered_count} 条，完成 ${payload.completed_count} 条，失败 ${payload.failed_count} 条`);
     await refreshProjects();
+    if (payload.results?.length) continueCurrentProject();
   } catch (error) {
     toast(error.message, "error");
   } finally {
@@ -364,6 +424,7 @@ async function startFromMaterial(materialId) {
     state.selectedId = payload.project_id;
     toast(`素材 ${materialId} 已发起：${payload.engine.stage}`);
     await refreshProjects();
+    continueCurrentProject();
   } catch (error) {
     toast(error.message, "error");
   }
@@ -462,11 +523,15 @@ async function safeRunReport(projectId) {
 function renderProjectRows() {
   const tbody = $("#projectRows");
   tbody.innerHTML = "";
+  const visibleProjects = state.showAllProjects ? state.projects : state.projects.slice(0, 10);
+  $("#projectCount").textContent = `${Math.min(visibleProjects.length, state.projects.length)} / ${state.projects.length}`;
+  $("#toggleProjects").textContent = state.showAllProjects ? "收起列表" : "显示全部";
+  $("#toggleProjects").hidden = state.projects.length <= 10;
   if (!state.projects.length) {
     tbody.innerHTML = '<tr><td colspan="5" class="muted">暂无项目</td></tr>';
     return;
   }
-  state.projects.forEach((project) => {
+  visibleProjects.forEach((project) => {
     const row = document.createElement("tr");
     row.className = project.project_id === state.selectedId ? "selected" : "";
     row.innerHTML = `
@@ -495,9 +560,10 @@ function renderProjectRows() {
   });
 
   tbody.querySelectorAll("[data-open]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       state.selectedId = button.dataset.open;
-      refreshProjects();
+      await refreshProjects();
+      continueCurrentProject();
     });
   });
   tbody.querySelectorAll("[data-retry-shot]").forEach((button) => {
@@ -567,6 +633,11 @@ function renderPanels() {
     ? `${state.selected.project_id} · ${state.selected.current_stage || state.selected.status}`
     : "未选择项目";
   $("#activeProject").textContent = label;
+  const continueButton = $("#continueProject");
+  continueButton.disabled = !state.selected;
+  $("#currentStage").textContent = state.selected
+    ? `当前节点：${state.selected.current_stage || state.selected.status}`
+    : "暂无在制项目";
   renderScriptGate();
   renderHeroGate();
   renderStoryboardNode();
