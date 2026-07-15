@@ -26,6 +26,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             source_keyword=str(payload.get("source_keyword") or "tiktok_oembed"),
             library_root=payload.get("library_root"),
             timeout_s=float(payload.get("timeout_s") or 20),
+            proxy=str(context.env.get("TIKTOK_PROXY") or "").strip() or None,
         )
     except ValueError as exc:
         return ToolResult.failure("validation", str(exc))
@@ -42,11 +43,12 @@ def collect_links(
     library_root: str | None = None,
     timeout_s: float = 20,
     fetch_json: FetchJson | None = None,
+    proxy: str | None = None,
 ) -> dict[str, Any]:
     if not items:
         raise ValueError("at least one TikTok URL is required")
 
-    fetch = fetch_json or _http_fetcher(timeout_s)
+    fetch = fetch_json or _http_fetcher(timeout_s, proxy=proxy)
     enriched: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
     for item in items:
@@ -78,9 +80,9 @@ def collect_links(
     return imported
 
 
-def _http_fetcher(timeout_s: float) -> FetchJson:
+def _http_fetcher(timeout_s: float, *, proxy: str | None = None) -> FetchJson:
     def fetch(url: str) -> dict[str, Any]:
-        with httpx.Client(timeout=timeout_s, follow_redirects=True) as client:
+        with httpx.Client(timeout=timeout_s, follow_redirects=True, proxy=proxy) as client:
             response = client.get(OEMBED_URL, params={"url": url})
         response.raise_for_status()
         payload = response.json()

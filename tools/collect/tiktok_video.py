@@ -54,8 +54,11 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "vtt",
         "-o",
         str(material_dir / "source.%(ext)s"),
-        url,
     ]
+    proxy = str(context.env.get("TIKTOK_PROXY") or "").strip()
+    if proxy:
+        command.extend(["--proxy", proxy])
+    command.append(url)
     try:
         completed = subprocess.run(command, capture_output=True, text=True, timeout=300, check=False)
     except subprocess.TimeoutExpired:

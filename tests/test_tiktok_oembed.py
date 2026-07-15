@@ -48,3 +48,34 @@ def test_oembed_collector_rejects_non_tiktok_urls(tmp_path: Path) -> None:
         assert "unsupported TikTok URL" in str(exc)
     else:
         raise AssertionError("non-TikTok URL should be rejected")
+
+
+def test_http_fetcher_passes_proxy(monkeypatch) -> None:
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"title": "demo"}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, *args, **kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(tiktok_oembed.httpx, "Client", FakeClient)
+    payload = tiktok_oembed._http_fetcher(10, proxy="http://127.0.0.1:7897")(
+        "https://www.tiktok.com/@demo/video/1"
+    )
+    assert payload["title"] == "demo"
+    assert captured["proxy"] == "http://127.0.0.1:7897"

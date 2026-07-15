@@ -73,7 +73,23 @@ def test_auto_account_falls_back_to_ytdlp_when_tiktok_api_fails(monkeypatch) -> 
         ToolContext(mock=False, env={"TIKTOK_MS_TOKEN": "secret"}),
     )
     assert result.ok is True
-    assert result.data["provider"] == "yt-dlp-fallback"
+    assert result.data["provider"] == "yt_dlp_fallback"
+
+
+def test_explicit_ytdlp_provider_does_not_enter_tiktok_api(monkeypatch) -> None:
+    monkeypatch.setattr(tiktok_api_adapter, "discover", lambda **kwargs: (_ for _ in ()).throw(AssertionError("wrong backend")))
+    monkeypatch.setattr(tiktok_crawler.shutil, "which", lambda name: "yt-dlp.exe")
+    monkeypatch.setattr(
+        tiktok_crawler,
+        "_discover_account",
+        lambda url, limit: [{"url": "https://www.tiktok.com/@brand/video/100"}],
+    )
+    result = tiktok_crawler.execute(
+        {"target_type": "account", "provider": "yt_dlp", "target": "https://www.tiktok.com/@brand", "limit": 1},
+        ToolContext(mock=False, env={}),
+    )
+    assert result.ok is True
+    assert result.data["provider"] == "yt_dlp"
 
 
 def test_mock_crawler_discovers_requested_number() -> None:

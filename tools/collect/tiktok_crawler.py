@@ -48,7 +48,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         except (httpx.HTTPError, ValueError) as exc:
             return ToolResult.failure("provider", f"TikTok keyword discovery failed: {exc}")
         provider = "apify"
-    elif provider == "yt-dlp":
+    elif provider == "yt_dlp":
         if target_type != "account":
             return ToolResult.failure("validation", "yt-dlp provider currently supports account targets only")
         if not _is_account_url(target):
@@ -57,7 +57,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             items = _discover_account(target, limit)
         except (RuntimeError, subprocess.TimeoutExpired) as exc:
             return ToolResult.failure("provider", f"TikTok account discovery failed: {exc}")
-        provider = "yt-dlp"
+        provider = "yt_dlp"
     else:
         try:
             items = tiktok_api_adapter.discover(
@@ -104,7 +104,7 @@ def _select_provider(requested: str, target_type: str, context: ToolContext) -> 
     if tiktok_api_adapter.configured(context.env):
         return "tiktok_api"
     if target_type == "account" and shutil.which("yt-dlp"):
-        return "yt-dlp"
+        return "yt_dlp"
     if target_type == "keyword":
         raise RuntimeError(
             "关键词采集尚未配置：可设置 APIFY_API_TOKEN，或安装 TikTokApi 并设置 TIKTOK_MS_TOKEN（按话题采集）"
@@ -123,7 +123,7 @@ def _fallback_account_discovery(
     if not shutil.which("yt-dlp"):
         return None
     try:
-        return _discover_account(target, limit), "yt-dlp-fallback"
+        return _discover_account(target, limit), "yt_dlp_fallback"
     except (RuntimeError, subprocess.TimeoutExpired):
         return None
 
