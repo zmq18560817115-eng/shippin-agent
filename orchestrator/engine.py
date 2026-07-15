@@ -615,6 +615,7 @@ def _build_final_qa_report(
         "all_shots_succeeded": bool(rendered_shots)
         and all(str(item.get("status")) == "succeeded" for item in rendered_shots),
         "output_file_present": output_path.is_file() and output_path.stat().st_size > 0,
+        "output_file_playable": _is_playable_mp4(output_path),
         "source_clips_vertical": _source_clips_vertical(render_report),
     }
     failed = [name for name, passed in checks.items() if not passed]
@@ -627,6 +628,18 @@ def _build_final_qa_report(
         "failed_checks": failed,
         "comments": ["Final media QA passed."] if not failed else [f"Blocked by: {', '.join(failed)}"],
     }
+
+
+def _is_playable_mp4(path: Path) -> bool:
+    """Reject mock placeholders before they can be shown as a finished delivery."""
+    if not path.is_file() or path.stat().st_size < 1024:
+        return False
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(12)
+    except OSError:
+        return False
+    return len(header) >= 8 and header[4:8] == b"ftyp"
 
 
 def _source_clips_vertical(render_report: dict[str, Any]) -> bool:

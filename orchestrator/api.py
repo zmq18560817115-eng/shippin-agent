@@ -1120,6 +1120,7 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
     current_stage = _current_stage(stages, checkpoints, pending_gate)
     status = _project_status(stages, pending_gate)
     nodes = _node_statuses(stages)
+    delivery_ready = status == "succeeded" and _is_playable_delivery_file(root / "artifacts" / "final-video.mp4")
     if payload.get("source_material_id") or payload.get("source_url"):
         nodes[0]["status"] = "succeeded"
     return {
@@ -1129,6 +1130,7 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
         "source_material_id": payload.get("source_material_id"),
         "source_url": payload.get("source_url"),
         "status": status,
+        "delivery_ready": delivery_ready,
         "current_stage": current_stage,
         "current_gate": pending_gate,
         "budget_cny": float(row["budget_cny"]),
@@ -1142,6 +1144,17 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def _is_playable_delivery_file(path: Path) -> bool:
+    if not path.is_file() or path.stat().st_size < 1024:
+        return False
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(12)
+    except OSError:
+        return False
+    return len(header) >= 8 and header[4:8] == b"ftyp"
 
 
 def _run_report(project_id: str) -> dict[str, Any]:

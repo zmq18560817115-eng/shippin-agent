@@ -428,6 +428,21 @@ textarea {
   object-fit: contain;
 }
 
+.mediaState {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mediaState.ok {
+  color: var(--green);
+}
+
+.mediaState.error {
+  color: #a12626;
+}
+
 .materialItem {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -833,10 +848,16 @@ pre {
   display: grid;
   align-content: start;
   gap: 8px;
+  max-height: 610px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .deliveryList button {
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .deliveryList button.active {
@@ -846,6 +867,9 @@ pre {
 
 .deliveryDetail {
   min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
 }
 
 .deliveryDetail video {

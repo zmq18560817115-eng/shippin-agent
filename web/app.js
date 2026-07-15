@@ -884,7 +884,8 @@ function renderProductionNode() {
     const entry = takeByShot.get(Number(shot.number));
     const candidates = (entry?.takes || []).map((take) => `
       <div class="takeCandidate">
-        <video controls preload="metadata" src="${runFileUrl(state.selectedId, take.path)}"></video>
+        <video controls preload="metadata" data-video-state src="${runFileUrl(state.selectedId, take.path)}"></video>
+        <span class="mediaState" data-media-state>正在读取镜头预览...</span>
         <span>Take ${escapeHtml(take.take_id)} · ${escapeHtml(take.status)}</span>
         <button type="button" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}" ${take.status === "selected" ? "disabled" : ""}>${take.status === "selected" ? "已选用" : "选用此 Take"}</button>
       </div>
@@ -907,6 +908,7 @@ function renderProductionNode() {
   host.querySelectorAll("[data-select-take]").forEach((button) => {
     button.addEventListener("click", () => selectTake(Number(button.dataset.selectShot), button.dataset.selectTake));
   });
+  bindVideoPreviewStates(host, "镜头预览不可播放，请重新生成该 Take 后再选用。");
 }
 
 function renderComposeNode() {
@@ -1079,7 +1081,7 @@ async function retryTask(taskId) {
 
 function renderDelivery() {
   const host = $("#deliveryPanel");
-  const delivered = state.projects.filter((project) => project.status === "succeeded");
+  const delivered = state.projects.filter((project) => project.status === "succeeded" && project.delivery_ready);
   $("#deliveryState").textContent = delivered.length ? `${delivered.length} 个可交付` : "";
   if (!delivered.length) {
     host.className = "emptyState";
@@ -1087,11 +1089,11 @@ function renderDelivery() {
     return;
   }
   host.className = "delivery";
-  const selectedDelivered = state.selected?.status === "succeeded" ? state.selected : delivered[0];
-  const renderUrl = state.renderReport?.output_path
+  const selectedDelivered = delivered.find((project) => project.project_id === state.selectedId) || null;
+  const renderUrl = selectedDelivered && state.renderReport?.output_path
     ? runFileUrl(selectedDelivered.project_id, state.renderReport.output_path)
     : "";
-  const report = state.runReport;
+  const report = selectedDelivered ? state.runReport : null;
   const probe = report?.render_report?.ffprobe || {};
   const qaStatus = report?.qa_report?.status || "待生成";
   const elapsed = report?.elapsed_s == null ? "--" : `${Number(report.elapsed_s).toFixed(1)}s`;
@@ -1099,13 +1101,16 @@ function renderDelivery() {
   host.innerHTML = `
     <div class="deliveryList">
       ${delivered.map((project) => `
-        <button type="button" data-open="${escapeAttr(project.project_id)}" class="${project.project_id === selectedDelivered.project_id ? "active" : ""}">
+        <button type="button" data-open="${escapeAttr(project.project_id)}" class="${project.project_id === selectedDelivered?.project_id ? "active" : ""}" title="${escapeAttr(project.project_id)}">
           ${escapeHtml(project.project_id)} · ¥${Number(project.cost.total_cost_cny || 0).toFixed(2)}
         </button>
       `).join("")}
     </div>
     <div class="deliveryDetail">
-      ${renderUrl ? `<video controls src="${escapeAttr(renderUrl)}"></video>` : ""}
+      ${selectedDelivered ? (renderUrl
+        ? `<video controls preload="metadata" data-video-state src="${escapeAttr(renderUrl)}"></video><p class="mediaState" data-media-state>正在读取交付成片...</p>`
+        : `<p class="mediaState error">当前项目没有可播放的交付成片，请回到“生产”完成合成与质检。</p>`
+      ) : `<p class="mediaState">请从左侧选择一个可交付项目。</p>`}
       <div class="runSummary">
         <span>耗时 ${escapeHtml(elapsed)}</span>
         <span>画面 ${escapeHtml(probe.resolution || "--")}</span>
@@ -1113,8 +1118,8 @@ function renderDelivery() {
         <span>失败 ${failureCount}</span>
       </div>
       <div class="actionBar">
-        <a class="buttonLink" href="/api/v2/download/${encodeURIComponent(selectedDelivered.project_id)}">下载 zip</a>
-        <a class="buttonLink" target="_blank" rel="noopener" href="/api/v2/reports/${encodeURIComponent(selectedDelivered.project_id)}">运行报告</a>
+        ${selectedDelivered ? `<a class="buttonLink" href="/api/v2/download/${encodeURIComponent(selectedDelivered.project_id)}">下载 zip</a>
+        <a class="buttonLink" target="_blank" rel="noopener" href="/api/v2/reports/${encodeURIComponent(selectedDelivered.project_id)}">运行报告</a>` : ""}
         <input id="feedbackInput" placeholder="一句话反馈" />
         <button type="button" id="sendFeedback">写入反馈</button>
       </div>
@@ -1126,7 +1131,10 @@ function renderDelivery() {
       refreshProjects();
     });
   });
-  $("#sendFeedback").addEventListener("click", () => sendFeedback(selectedDelivered.project_id));
+  if (selectedDelivered) {
+    $("#sendFeedback").addEventListener("click", () => sendFeedback(selectedDelivered.project_id));
+  }
+  bindVideoPreviewStates(host, "交付成片不可播放。该项目已被识别为无效媒体，请重新合成并通过质检。");
 }
 
 async function sendFeedback(projectId) {
@@ -1145,9 +1153,33 @@ async function sendFeedback(projectId) {
 
 function runFileUrl(projectId, pathText) {
   const normal = String(pathText || "").replace(/\\/g, "/");
-  const parts = normal.split("/");
-  const file = parts[parts.length - 1];
-  return `/api/v2/runs/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(file)}`;
+  const marker = `/data/runs/${projectId}/`.toLowerCase();
+  const position = normal.toLowerCase().lastIndexOf(marker);
+  const relative = position >= 0
+    ? normal.slice(position + marker.length)
+    : /^(artifacts|shots)\//.test(normal)
+      ? normal
+      : `artifacts/${normal.split("/").pop()}`;
+  const encodedPath = relative.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  return `/api/v2/runs/${encodeURIComponent(projectId)}/${encodedPath}`;
+}
+
+function bindVideoPreviewStates(host, errorMessage) {
+  host.querySelectorAll("video[data-video-state]").forEach((video) => {
+    const stateLabel = video.parentElement.querySelector("[data-media-state]");
+    if (!stateLabel) return;
+    video.addEventListener("loadedmetadata", () => {
+      const seconds = Number(video.duration);
+      stateLabel.className = "mediaState ok";
+      stateLabel.textContent = Number.isFinite(seconds) && seconds > 0
+        ? `媒体已就绪：${seconds.toFixed(1)} 秒`
+        : "媒体已就绪";
+    });
+    video.addEventListener("error", () => {
+      stateLabel.className = "mediaState error";
+      stateLabel.textContent = errorMessage;
+    });
+  });
 }
 
 function statusClass(status) {

@@ -7,7 +7,7 @@ from orchestrator.engine import _build_final_qa_report
 
 def _inputs(tmp_path: Path, resolution: str = "1080x1920") -> tuple[dict, dict, dict]:
     output = tmp_path / "final-video.mp4"
-    output.write_bytes(b"video")
+    output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 1024))
     render = {
         "output_path": output.as_posix(),
         "ffprobe": {"duration": 30.0, "resolution": resolution, "fps": 30, "audio_streams": 1},
@@ -44,7 +44,7 @@ def test_final_qa_accepts_existing_workspace_relative_output(tmp_path: Path, mon
     monkeypatch.chdir(tmp_path)
     output = Path("data/runs/demo/artifacts/final-video.mp4")
     output.parent.mkdir(parents=True)
-    output.write_bytes(b"video")
+    output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 1024))
     render = {
         "output_path": output.as_posix(),
         "ffprobe": {"duration": 30, "resolution": "1080x1920", "fps": 30, "audio_streams": 1},
@@ -72,3 +72,13 @@ def test_final_qa_blocks_video_shorter_than_30_second_plan(tmp_path: Path) -> No
 
     assert report["status"] == "BLOCKED"
     assert "duration_matches_plan" in report["failed_checks"]
+
+
+def test_final_qa_blocks_placeholder_media(tmp_path: Path) -> None:
+    render, plan, shots = _inputs(tmp_path)
+    Path(render["output_path"]).write_bytes(b"mock video placeholder")
+
+    report = _build_final_qa_report("placeholder", tmp_path, render, plan, shots)
+
+    assert report["status"] == "BLOCKED"
+    assert "output_file_playable" in report["failed_checks"]
