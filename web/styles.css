@@ -864,6 +864,44 @@ pre {
   grid-column: 1 / -1;
 }
 
+.standaloneLauncher {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 2fr) auto;
+  gap: 12px;
+  align-items: start;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.standaloneLauncher > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.standaloneLauncher > div:first-child span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.standaloneLauncher textarea {
+  min-height: 82px;
+  width: 100%;
+  resize: vertical;
+}
+
+.standaloneLauncher .nodeResult {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .standaloneLauncher {
+    grid-template-columns: 1fr;
+  }
+}
+
 .heroGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

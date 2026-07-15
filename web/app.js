@@ -177,6 +177,9 @@ function bindEvents() {
   $("#runScriptBreakdown").addEventListener("click", (event) => runFlowCapability("script_breakdown", event.currentTarget, "#scriptBreakdownResult"));
   $("#runIndependentAgent").addEventListener("click", runIndependentAgent);
   $("#independentAgentAction").addEventListener("change", updateIndependentAgentUI);
+  document.querySelectorAll("[data-run-standalone]").forEach((button) => {
+    button.addEventListener("click", () => runStandaloneLauncher(button));
+  });
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
@@ -188,6 +191,45 @@ function bindEvents() {
   updateCrawlTargetUI();
   updateIndependentAgentUI();
   updateRuntimeModeHint();
+}
+
+async function runStandaloneLauncher(button) {
+  const launcher = button.closest("[data-standalone-action]");
+  const action = launcher.dataset.standaloneAction;
+  const prompt = launcher.querySelector("[data-standalone-prompt]").value.trim();
+  const resultHost = launcher.querySelector("[data-standalone-result]");
+  if (!prompt) {
+    toast("请先输入本功能的需求或 Prompt", "error");
+    launcher.querySelector("[data-standalone-prompt]").focus();
+    return;
+  }
+  button.disabled = true;
+  resultHost.className = "nodeResult";
+  resultHost.textContent = "正在调用真实 Agent，请稍候...";
+  beginOperation(`正在独立运行${stageLabel(action)}`, action === "production" ? 90 : 35);
+  try {
+    const payload = await api("/api/v2/agents/run", {
+      method: "POST",
+      body: JSON.stringify({
+        action,
+        product_id: $("#productSelect").value || "便携恒温杯",
+        prompt,
+        source_text: prompt,
+        provider: "auto",
+        mock: $("#runtimeMode").value !== "real",
+      }),
+    });
+    resultHost.className = "nodeResult complete";
+    resultHost.innerHTML = `<strong>${escapeHtml(payload.artifact_name)}</strong><pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>`;
+    toast(`${stageLabel(action)}已独立运行完成`);
+  } catch (error) {
+    resultHost.className = "nodeResult error";
+    resultHost.textContent = error.message;
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    endOperation();
+  }
 }
 
 function updateIndependentAgentUI() {

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260715-6" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260715-7" />
   </head>
   <body>
     <header class="topbar">
@@ -222,6 +222,12 @@
             <div id="scriptBreakdownResult" class="nodeResult">脚本生成后自动拆解，也可独立重跑</div>
           </div>
         </div>
+        <div class="standaloneLauncher" data-standalone-action="script">
+          <div><strong>独立脚本生成</strong><span>不依赖当前项目，直接输入需求生成中文脚本</span></div>
+          <textarea data-standalone-prompt placeholder="输入产品、受众、平台和内容要求"></textarea>
+          <button type="button" class="primary" data-run-standalone>运行脚本 Agent</button>
+          <div class="nodeResult" data-standalone-result>等待输入</div>
+        </div>
         <div id="scriptEditor" class="emptyState">等待脚本闸门项目</div>
       </section>
 
@@ -229,6 +235,12 @@
         <div class="sectionHead">
           <h2>分镜节点</h2>
           <span id="storyboardNodeState"></span>
+        </div>
+        <div class="standaloneLauncher" data-standalone-action="storyboard">
+          <div><strong>独立分镜生成</strong><span>直接输入场景与动作，生成可编辑镜头计划</span></div>
+          <textarea data-standalone-prompt placeholder="输入场景、人物、动作、镜头运动和风格"></textarea>
+          <button type="button" class="primary" data-run-standalone>运行分镜 Agent</button>
+          <div class="nodeResult" data-standalone-result>等待输入</div>
         </div>
         <div id="shotEditor" class="emptyState">选择已有分镜的项目</div>
       </section>
@@ -245,6 +257,12 @@
         <div class="sectionHead">
           <h2>单镜生产节点</h2>
           <span id="productionNodeState"></span>
+        </div>
+        <div class="standaloneLauncher" data-standalone-action="production">
+          <div><strong>独立单镜生成</strong><span>使用产品素材库生成 720P 竖屏视频 Take</span></div>
+          <textarea data-standalone-prompt placeholder="输入本镜头画面、动作、产品和环境要求"></textarea>
+          <button type="button" class="primary" data-run-standalone>运行制作 Agent</button>
+          <div class="nodeResult" data-standalone-result>等待输入</div>
         </div>
         <div id="productionPanel" class="emptyState">等待分镜</div>
       </section>
@@ -267,6 +285,6 @@
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js?v=20260715-6"></script>
+    <script src="/static/app.js?v=20260715-7"></script>
   </body>
 </html>
