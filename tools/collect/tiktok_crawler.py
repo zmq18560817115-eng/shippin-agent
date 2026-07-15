@@ -23,11 +23,12 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     target = str(payload.get("target") or "").strip()
     limit = max(1, min(int(payload.get("limit") or 3), 10))
     if target_type not in {"keyword", "account", "hashtag", "trending"}:
-        return ToolResult.failure("validation", "target_type must be keyword, account, hashtag or trending")
+        return ToolResult.failure("validation", "发现方式必须是关键词、账号、话题或热门视频")
     if requested_provider not in {"auto", "tiktok_api", "apify", "yt_dlp"}:
-        return ToolResult.failure("validation", "provider must be auto, tiktok_api, apify or yt_dlp")
+        return ToolResult.failure("validation", "请选择有效的采集后端")
     if not target and target_type != "trending":
-        return ToolResult.failure("validation", "a keyword or TikTok account URL is required")
+        names = {"keyword": "关键词", "account": "TikTok 账号主页", "hashtag": "话题标签"}
+        return ToolResult.failure("validation", f"请输入{names.get(target_type, '采集目标')}")
     if context.mock:
         return ToolResult.success(
             {"provider": "mock", "target_type": target_type, "target": target, "items": _mock_items(target or "trending", limit)},

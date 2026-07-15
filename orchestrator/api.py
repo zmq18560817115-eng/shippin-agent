@@ -17,11 +17,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from libshared import artifacts, checkpoint
+from libshared.local_env import load_local_env
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, engine, queue
 from orchestrator.capabilities import capability_map
 from tools import tool_registry
 from tools.collect import manual_import, product_library, tiktok_oembed
+
+
+load_local_env()
 
 
 WEB_ROOT = ROOT / "web"
@@ -1031,6 +1035,14 @@ def _storyboard_preflight_errors(project_id: str) -> list[dict[str, Any]]:
                 missing.append("恒温杯与奶瓶分离规则")
             if "fahrenheit" not in lowered or "never celsius" not in lowered:
                 missing.append("98°F 华氏温标规则")
+            if any(token in prompt for token in ("掳F", "Â°F", "锟斤拷F")):
+                missing.append("98°F 温标文本编码")
+            if number == 4:
+                visible_action = " ".join(
+                    str(shot.get(key) or "") for key in ("visual", "visual_prompt")
+                ).casefold()
+                if not all(token in visible_action for token in ("pour", "spout", "baby bottle")):
+                    missing.append("第4镜倒液动作一致性")
         if missing:
             errors.append({"shot_index": number, "missing": missing})
     return errors
@@ -1090,6 +1102,9 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
     pending_gate = _pending_gate(checkpoints)
     current_stage = _current_stage(stages, checkpoints, pending_gate)
     status = _project_status(stages, pending_gate)
+    nodes = _node_statuses(stages)
+    if payload.get("source_material_id") or payload.get("source_url"):
+        nodes[0]["status"] = "succeeded"
     return {
         "project_id": project_id,
         "product_id": row["product_id"],
@@ -1102,7 +1117,7 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
         "budget_cny": float(row["budget_cny"]),
         "budget_mode": row["budget_mode"],
         "cost": cost_tracker.get_project_cost(project_id, db_path=_db_path()),
-        "nodes": _node_statuses(stages),
+        "nodes": nodes,
         "stages": stages,
         "tasks": [_task_to_dict(task) for task in tasks],
         "artifacts": _artifact_presence(project_id, root),

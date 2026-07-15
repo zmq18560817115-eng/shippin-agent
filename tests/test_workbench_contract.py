@@ -40,3 +40,5 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert 'id="continueProject"' in html
     assert "function viewForStage(stage)" in script
     assert "function continueCurrentProject()" in script
+    assert 'id="crawlTargetText"' in html
+    assert "function updateCrawlTargetUI()" in script

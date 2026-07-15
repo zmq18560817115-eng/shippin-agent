@@ -43,3 +43,18 @@ def test_real_shotplan_reads_product_facts_and_returns_five_shots(monkeypatch) -
     assert result.ok is True
     assert len(result.data["shot_plan"]["shots"]) == 5
     assert "Approved product facts" in captured["messages"][1]["content"]
+
+
+def test_normalization_repairs_temperature_encoding_and_shot_four_action() -> None:
+    script = mock_script_copy("repair-demo")
+    raw = [
+        {"visual": "scene", "visual_prompt": "scene"},
+        {"visual": "problem", "visual_prompt": "problem"},
+        {"visual": "display reads 98掳F", "visual_prompt": "display reads 98掳F"},
+        {"visual": "put the cup into a travel bag", "visual_prompt": "compact travel bag"},
+        {"visual": "CTA display 98°F", "visual_prompt": "CTA display 98°F"},
+    ]
+    shots = _normalize_shots(raw, script)
+    assert "98掳F" not in str(shots)
+    assert "98°F" not in str(shots)
+    assert "pour through the round spout" in shots[3]["visual"]

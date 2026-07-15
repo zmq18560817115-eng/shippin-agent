@@ -698,6 +698,36 @@ pre {
   gap: 12px;
 }
 
+.heroReview {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.identityAnchor,
+.shotContactSheet {
+  min-width: 0;
+}
+
+.identityAnchor .thumb {
+  aspect-ratio: 1 / 1;
+}
+
+.shotContactSheet {
+  display: grid;
+  gap: 0;
+}
+
+.contactShot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+
 .heroItem {
   display: grid;
   gap: 10px;
@@ -794,6 +824,8 @@ pre {
   padding: 10px 12px;
   background: #1f2933;
   color: #ffffff;
+  font-size: 14px;
+  line-height: 1.45;
   box-shadow: 0 12px 32px rgba(24, 33, 43, 0.18);
   opacity: 0;
   transform: translateY(8px);
@@ -991,6 +1023,10 @@ pre {
   }
 
   .splitNodes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .heroReview {
     grid-template-columns: minmax(0, 1fr);
   }
 

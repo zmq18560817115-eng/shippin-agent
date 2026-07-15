@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from libshared import artifacts
@@ -91,8 +92,12 @@ def _normalize_shots(
     for index, section in enumerate(script_copy.get("sections") or [], start=1):
         item = raw[index - 1] if index - 1 < len(raw) and isinstance(raw[index - 1], dict) else {}
         role = str(section.get("role") or "")
-        visual = str(item.get("visual") or _fallback_visual(index, role))
-        prompt = str(item.get("seedance_prompt") or item.get("visual_prompt") or visual)
+        visual = _clean_temperature_text(str(item.get("visual") or _fallback_visual(index, role)))
+        visual_prompt = _clean_temperature_text(str(item.get("visual_prompt") or visual))
+        if index == 4 and not _has_outbound_pour(visual + " " + visual_prompt):
+            visual = _fallback_visual(index, role)
+            visual_prompt = visual
+        prompt = _clean_temperature_text(str(item.get("seedance_prompt") or visual_prompt or visual))
         prompt = _lock_prompt(
             prompt,
             str(section.get("voiceover_en") or ""),
@@ -105,7 +110,7 @@ def _normalize_shots(
             {
                 "number": int(section.get("number") or index),
                 "visual": visual,
-                "visual_prompt": str(item.get("visual_prompt") or visual),
+                "visual_prompt": visual_prompt,
                 "seedance_prompt": prompt,
                 "footage_type": "AI_VIDEO",
                 "camera_motion": {
@@ -165,3 +170,13 @@ def _shot_action(index: int) -> str:
 def _motion_type(value: str) -> str:
     allowed = {"dolly_in", "dolly_out", "pan_left", "pan_right", "static", "arc", "crash_zoom"}
     return value if value in allowed else "static"
+
+
+def _clean_temperature_text(value: str) -> str:
+    value = re.sub(r"98[^A-Za-z0-9\s]{1,5}F", "98 F", value, flags=re.IGNORECASE)
+    return value.replace("98°F", "98 F").replace("98 F degrees", "98 degrees Fahrenheit")
+
+
+def _has_outbound_pour(value: str) -> bool:
+    lowered = value.casefold()
+    return "pour" in lowered and "spout" in lowered and "baby bottle" in lowered

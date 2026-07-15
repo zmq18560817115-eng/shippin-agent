@@ -102,6 +102,23 @@ def test_mock_crawler_discovers_requested_number() -> None:
     assert all("tiktok.com" in item["url"] for item in result.data["items"])
 
 
+def test_crawler_returns_specific_chinese_target_validation() -> None:
+    result = tiktok_crawler.execute(
+        {"target_type": "keyword", "target": "", "limit": 1},
+        ToolContext(mock=False, env={}),
+    )
+    assert result.ok is False
+    assert result.error == {"category": "validation", "message": "请输入关键词"}
+
+
+def test_trending_does_not_require_target() -> None:
+    result = tiktok_crawler.execute(
+        {"target_type": "trending", "target": "", "limit": 1},
+        ToolContext(mock=True, env={}),
+    )
+    assert result.ok is True
+
+
 def test_crawl_endpoint_creates_projects_for_discovered_videos(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "queue.db"))
     monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
@@ -123,3 +140,6 @@ def test_crawl_endpoint_creates_projects_for_discovered_videos(tmp_path: Path, m
     assert payload["completed_count"] == 2
     assert payload["failed_count"] == 0
     assert all(item["stage"] == "script_gate" for item in payload["results"])
+    project = client.get(f"/api/v2/pipeline/{payload['results'][0]['project_id']}").json()
+    collector = next(node for node in project["nodes"] if node["agent"] == "collector")
+    assert collector["status"] == "succeeded"

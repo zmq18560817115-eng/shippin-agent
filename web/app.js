@@ -116,6 +116,7 @@ function bindEvents() {
   $("#startForm").addEventListener("submit", startProject);
   $("#collectForm").addEventListener("submit", collectLinks);
   $("#crawlForm").addEventListener("submit", crawlTikTok);
+  $("#crawlTargetType").addEventListener("change", updateCrawlTargetUI);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
   $("#toggleProjects").addEventListener("click", () => {
     state.showAllProjects = !state.showAllProjects;
@@ -133,6 +134,24 @@ function bindEvents() {
     const view = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
     if (views[view]) showView(view, { updateUrl: false });
   });
+  updateCrawlTargetUI();
+}
+
+function updateCrawlTargetUI() {
+  const type = $("#crawlTargetType").value;
+  const input = $("#crawlTarget");
+  const presets = {
+    keyword: ["关键词", "例如 heated cup"],
+    account: ["TikTok 账号主页", "例如 https://www.tiktok.com/@brand"],
+    hashtag: ["话题标签", "例如 heatedcup 或 #heatedcup"],
+    trending: ["热门视频无需输入目标", "系统将读取当前地区热门公开视频"],
+  };
+  const [label, placeholder] = presets[type] || presets.keyword;
+  $("#crawlTargetText").textContent = label;
+  input.placeholder = placeholder;
+  input.disabled = type === "trending";
+  input.required = type !== "trending";
+  if (type === "trending") input.value = "";
 }
 
 function showView(view, { updateUrl = true } = {}) {
@@ -385,15 +404,23 @@ async function collectLinks(event) {
 async function crawlTikTok(event) {
   event.preventDefault();
   const button = event.submitter;
+  const targetType = $("#crawlTargetType").value;
+  const target = $("#crawlTarget").value.trim();
+  if (targetType !== "trending" && !target) {
+    const names = { keyword: "关键词", account: "TikTok 账号主页", hashtag: "话题标签" };
+    toast(`请输入${names[targetType] || "采集目标"}`, "error");
+    $("#crawlTarget").focus();
+    return;
+  }
   button.disabled = true;
   $("#crawlState").textContent = "发现与下载中";
   try {
     const payload = await api("/api/v2/collect/tiktok/crawl", {
       method: "POST",
       body: JSON.stringify({
-        target_type: $("#crawlTargetType").value,
+        target_type: targetType,
         provider: $("#crawlProvider").value,
-        target: $("#crawlTarget").value.trim(),
+        target,
         limit: Number($("#crawlLimit").value || 3),
         product_id: $("#productSelect").value,
         mock: $("#runtimeMode").value !== "real",
@@ -911,10 +938,18 @@ function renderHeroGate() {
     host.textContent = "等待关键帧闸门项目";
     return;
   }
-  host.className = "heroGrid";
+  host.className = "heroReview";
   const shots = new Map((state.shotPlan?.shots || []).map((shot) => [Number(shot.number), shot]));
+  const identityFrame = state.assetManifest.hero_frames[0];
   host.innerHTML = `
-    ${state.assetManifest.hero_frames.map((frame) => renderHeroFrame(frame, shots.get(Number(frame.number)))).join("")}
+    <div class="identityAnchor">
+      <div class="nodeToolHead"><div><strong>产品身份锚点</strong><span>所有镜头锁定同一产品外观，不代表场景关键帧</span></div></div>
+      <div class="thumb"><img src="${escapeAttr(identityFrame?.preview_url || "")}" alt="产品身份参考" /></div>
+    </div>
+    <div class="shotContactSheet">
+      <div class="nodeToolHead"><div><strong>逐镜核对表</strong><span>确认场景、动作、温标与前后连续性</span></div></div>
+      ${state.assetManifest.hero_frames.map((frame) => renderHeroFrame(frame, shots.get(Number(frame.number)))).join("")}
+    </div>
     <div class="actionBar wide"><button type="button" id="approveHero">全部确认</button></div>
   `;
   host.querySelectorAll("[data-regen]").forEach((button) => {
@@ -928,16 +963,13 @@ function renderHeroFrame(frame, shot) {
     ? `${shot.camera_motion.type || ""} · ${shot.camera_motion.duration_sec || 3}s`
     : "";
   return `
-    <article class="heroItem">
-      <div class="thumb">
-        <img src="${escapeAttr(frame.preview_url || "")}" alt="shot ${frame.number}" />
-      </div>
+    <article class="contactShot">
       <div class="heroMeta">
-        <strong>Shot ${frame.number}</strong>
+        <strong>镜头 ${frame.number}</strong>
         <span>${escapeHtml(camera)}</span>
         <p>${escapeHtml(shot?.visual || "")}</p>
       </div>
-      <button type="button" data-regen="${frame.number}">单镜重生成</button>
+      <button type="button" data-regen="${frame.number}">重建锚点</button>
     </article>
   `;
 }

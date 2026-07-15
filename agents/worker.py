@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from agents.base import run_task
+from libshared.local_env import load_local_env
 from orchestrator import queue
 
 
@@ -17,6 +18,7 @@ STOP_REQUESTED = threading.Event()
 
 
 def main(argv: list[str] | None = None) -> None:
+    load_local_env()
     args = _parse_args(argv)
     db_path = Path(args.db_path) if args.db_path else None
     queue.init_db(db_path=db_path)

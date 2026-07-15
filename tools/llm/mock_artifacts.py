@@ -66,11 +66,19 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
     for section in script_copy["sections"]:
         number = int(section["number"])
         role = section["role"]
+        visual = f"{role} shot with product-safe composition."
+        visual_prompt = f"{role} scene, product remains anchored to approved material."
+        if number == 4:
+            visual = (
+                "Close-up: tilt the warming cup and pour through the round spout "
+                "into the separate clean baby bottle; show 98 F only if legible."
+            )
+            visual_prompt = visual
         shots.append(
             {
                 "number": number,
-                "visual": f"{role} shot with product-safe composition.",
-                "visual_prompt": f"{role} scene, product remains anchored to approved material.",
+                "visual": visual,
+                "visual_prompt": visual_prompt,
                 "seedance_prompt": (
                     "Continuity lock: same location, lighting, caregiver, wardrobe, hands, and props across all five shots. "
                     "Product appearance must match the white-background hero reference. "
