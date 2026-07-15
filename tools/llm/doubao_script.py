@@ -41,7 +41,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "system",
                 "content": (
-                    "You write brand-safe English TikTok scripts for baby product overseas localization. "
+                    "You write brand-safe TikTok scripts for baby product overseas localization. "
                     "Return strict JSON only. Avoid medical, guarantee, best, pain-free, and competitor claims."
                 ),
             },
@@ -50,7 +50,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "content": (
                     "Create script_copy JSON for product_id "
                     f"{product_id}. Use exactly 5 sections with roles 钩子, 痛点, 方案, 证明, 行动号召 and continuous timings "
-                    "0-6s, 6-12s, 12-18s, 18-24s, 24-30s. Product fact: portable warming cup is separate from baby bottle; "
+                    "0-6s, 6-12s, 12-18s, 18-24s, 24-30s. For every section return both voiceover_en for generation and voiceover_zh for the Chinese operator workbench. Product fact: portable warming cup is separate from baby bottle; "
                     "milk is poured into the cup, warmed/kept warm, then poured through the spout into a clean bottle. "
                     f"Approved product facts and hard constraints: {product_facts or 'not provided'}. "
                     f"Previous review feedback that must be fixed: {rewrite_reason or 'none'}. "
@@ -95,12 +95,14 @@ def _normalize_sections(value: Any) -> list[dict[str, Any]]:
     for index, (role, timing, voiceover) in enumerate(defaults, start=1):
         item = raw[index - 1] if index - 1 < len(raw) and isinstance(raw[index - 1], dict) else {}
         line = _clean_voiceover(str(item.get("voiceover_en") or item.get("subtitle_en") or voiceover))
+        chinese_line = str(item.get("voiceover_zh") or "").strip()
         sections.append(
             {
                 "number": index,
                 "role": role,
                 "timing": timing,
                 "voiceover_en": line,
+                "voiceover_zh": chinese_line or _default_chinese_voiceover(index),
                 "subtitle_en": line,
                 "selling_points": _string_list(item.get("selling_points"), []),
             }
@@ -133,6 +135,16 @@ def _clean_voiceover(value: str) -> str:
     if text:
         text = text[:1].upper() + text[1:]
     return text[:220] or "Save this for calmer feeds at home or on the go."
+
+
+def _default_chinese_voiceover(index: int) -> str:
+    return {
+        1: "夜间喂养准备，不必占满你的时间。",
+        2: "奶液变冷和漫长等待，会让睡前准备更困难。",
+        3: "将奶液倒入恒温杯，准备好后再倒入干净奶瓶。",
+        4: "小巧机身，适合放在床头或随身包中。",
+        5: "为下一次夜间喂养先收藏这条。",
+    }.get(index, "为下一次夜间喂养先收藏这条。")
 
 
 def _string_list(value: Any, fallback: list[str]) -> list[str]:

@@ -49,7 +49,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "content": (
                     "Create shot_plan JSON with one shot per script section, vertical 9:16. "
                     "Return shots plus scene_continuity and character_continuity. For every shot include visual, visual_prompt, "
-                    "seedance_prompt, and camera_motion.type. Keep the same location, lighting, wardrobe, hands, props, "
+                    "seedance_prompt, visual_zh, and seedance_prompt_zh, plus camera_motion.type. Chinese fields are for the operator workbench; English fields are sent to the generation model. Keep the same location, lighting, wardrobe, hands, props, "
                     "product color, lid, spout, display, button, proportions, and logo placement. Build a visible action sequence: "
                     "establish the feeding-prep scene, show the pain, introduce the separate warming cup, demonstrate the approved "
                     "pouring flow, then finish with a product CTA. Never place a whole baby bottle inside the cup. "
@@ -112,6 +112,8 @@ def _normalize_shots(
                 "visual": visual,
                 "visual_prompt": visual_prompt,
                 "seedance_prompt": prompt,
+                "visual_zh": str(item.get("visual_zh") or _fallback_visual_zh(index)),
+                "seedance_prompt_zh": str(item.get("seedance_prompt_zh") or _fallback_prompt_zh(index)),
                 "footage_type": "AI_VIDEO",
                 "camera_motion": {
                     "type": _motion_type(str(motion_value or motions[min(index - 1, len(motions) - 1)])),
@@ -155,6 +157,24 @@ def _fallback_visual(index: int, role: str) -> str:
         5: "Return to the same scene for a stable product-and-caregiver CTA composition with the approved cup identity clear.",
     }
     return f"{role}: {visuals.get(index, visuals[5])}"
+
+
+def _fallback_visual_zh(index: int) -> str:
+    return {
+        1: "夜间喂养准备场景，恒温杯放在床头柜上。",
+        2: "同一位照护者准备允许的奶液来源，干净奶瓶在旁等待。",
+        3: "特写：打开恒温杯，将奶液倒入杯体内部，不放入整只奶瓶。",
+        4: "特写：倾斜恒温杯，经圆形杯嘴倒入独立干净奶瓶；如显示温度，仅为 98 华氏度。",
+        5: "回到同一夜间场景，清晰展示产品并完成行动号召。",
+    }.get(index, "保持同一场景和产品外观。")
+
+
+def _fallback_prompt_zh(index: int) -> str:
+    return (
+        "连续性锁定：同一卧室、暖光、照护者、服装、手部和道具。产品外观严格匹配已批准白底主图；"
+        "恒温杯与奶瓶为独立产品，禁止将奶瓶插入杯内；出现温度时只能显示 98 华氏度，禁止摄氏度。"
+        f"镜头 {index}：{_fallback_visual_zh(index)}"
+    )
 
 
 def _shot_action(index: int) -> str:

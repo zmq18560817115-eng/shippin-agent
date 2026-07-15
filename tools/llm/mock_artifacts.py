@@ -21,6 +21,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
                 "role": "钩子",
                 "timing": "0-6s",
                 "voiceover_en": "Night feeds should feel easier.",
+                "voiceover_zh": "夜间喂养准备，可以更轻松。",
                 "subtitle_en": "Night feeds should feel easier.",
                 "selling_points": [],
             },
@@ -29,6 +30,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
                 "role": "痛点",
                 "timing": "6-12s",
                 "voiceover_en": "Cold milk and long waits make bedtime harder.",
+                "voiceover_zh": "奶液变冷和漫长等待，会让睡前准备更困难。",
                 "subtitle_en": "Cold milk and long waits make bedtime harder.",
                 "selling_points": [],
             },
@@ -37,6 +39,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
                 "role": "方案",
                 "timing": "12-18s",
                 "voiceover_en": "Pour milk into the cup and warm it for bottle prep.",
+                "voiceover_zh": "将奶液倒入恒温杯，准备好后再倒入干净奶瓶。",
                 "subtitle_en": "Pour milk into the cup and warm it for bottle prep.",
                 "selling_points": ["USB-C rechargeable"],
             },
@@ -45,6 +48,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
                 "role": "证明",
                 "timing": "18-24s",
                 "voiceover_en": "The compact cup fits your nightstand or bag.",
+                "voiceover_zh": "小巧机身，适合放在床头或随身包中。",
                 "subtitle_en": "The compact cup fits your nightstand or bag.",
                 "selling_points": ["portable"],
             },
@@ -53,6 +57,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
                 "role": "行动号召",
                 "timing": "24-30s",
                 "voiceover_en": "Save this for your next night feed.",
+                "voiceover_zh": "为下一次夜间喂养先收藏这条。",
                 "subtitle_en": "Save this for your next night feed.",
                 "selling_points": [],
             },
@@ -87,6 +92,8 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
                     "Use scenario and detail references only as prompt guidance. "
                     f"Shot role: {role}. Voiceover: {section['voiceover_en']}"
                 ),
+                "visual_zh": "请在真实生成时查看场景、动作和产品外观。",
+                "seedance_prompt_zh": "连续性锁定：同一场景、人物、产品外观与道具；仅作为中文审核提示。",
                 "footage_type": "AI_VIDEO" if role in {"方案", "证明", "行动号召"} else "AI_BROLL",
                 "camera_motion": {
                     "type": "dolly_in" if number == 1 else "static",

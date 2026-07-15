@@ -94,3 +94,21 @@ def test_manual_production_stops_before_compose(tmp_path: Path, monkeypatch) -> 
         task.stage == "compose" and task.payload_json.get("revision") != "stale"
         for task in tasks
     )
+
+
+def test_finished_project_can_be_deleted_without_deleting_shared_materials(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "agentflow.db"
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    queue.init_db(db_path)
+    queue.ensure_project("delete-me", product_id="恒温杯", db_path=db_path)
+    (runs_root / "delete-me").mkdir(parents=True)
+
+    with TestClient(app) as client:
+        response = client.delete("/api/v2/pipeline/delete-me")
+        missing = client.get("/api/v2/pipeline/delete-me")
+
+    assert response.status_code == 200
+    assert missing.status_code == 404
+    assert not (runs_root / "delete-me").exists()

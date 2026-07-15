@@ -42,3 +42,8 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert "function continueCurrentProject()" in script
     assert 'id="crawlTargetText"' in html
     assert "function updateCrawlTargetUI()" in script
+    assert "data-delete-project" in script
+    assert "contextmenu" in script
+    assert "voiceover_zh" in script
+    assert "seedance_prompt_zh" in script
+    assert 'id="saveShotsAndContinue"' in script

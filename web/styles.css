@@ -546,6 +546,18 @@ th {
   min-width: 920px;
 }
 
+.projectActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dangerButton {
+  color: var(--red);
+  border-color: #dfbbb8;
+  background: #fff9f8;
+}
+
 .projectTable tr.selected td {
   background: #eef5f2;
 }
@@ -663,6 +675,18 @@ pre {
 
 .scriptTable {
   min-width: 760px;
+}
+
+.scriptTable textarea.copyField,
+.scriptTable textarea.promptField {
+  width: 100%;
+  min-height: 116px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.scriptTable textarea.promptField {
+  min-height: 180px;
 }
 
 .scriptTable th:first-child,

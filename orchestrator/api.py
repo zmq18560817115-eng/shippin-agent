@@ -592,6 +592,23 @@ def get_pipeline(project_id: str) -> dict[str, Any]:
     return _project_summary(_validate_project_id(project_id))
 
 
+@app.delete("/api/v2/pipeline/{project_id}")
+def delete_pipeline(project_id: str) -> dict[str, Any]:
+    project_id = _validate_project_id(project_id)
+    row = _project_row_or_none(project_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="project not found")
+    run_root = _run_root(project_id).resolve()
+    runs_root = _runs_root().resolve()
+    try:
+        queue.delete_project(project_id, db_path=_db_path())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="项目仍在运行，无法删除") from exc
+    if run_root.is_relative_to(runs_root) and run_root.exists():
+        shutil.rmtree(run_root)
+    return {"ok": True, "project_id": project_id}
+
+
 @app.get("/api/v2/reports/{project_id}")
 def get_run_report(project_id: str) -> dict[str, Any]:
     return _run_report(_validate_project_id(project_id))

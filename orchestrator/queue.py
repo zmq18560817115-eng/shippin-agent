@@ -138,6 +138,21 @@ def ensure_project(
         )
 
 
+def delete_project(project_id: str, *, db_path: str | os.PathLike[str] | None = None) -> None:
+    """Delete one finished or stopped project and its database records."""
+
+    with get_conn(db_path) as conn:
+        running = conn.execute(
+            "SELECT COUNT(*) AS count FROM tasks WHERE project_id = ? AND status IN ('queued', 'running')",
+            (project_id,),
+        ).fetchone()
+        if int(running["count"]):
+            raise ValueError("project has queued or running tasks")
+        deleted = conn.execute("DELETE FROM projects WHERE id = ?", (project_id,)).rowcount
+    if not deleted:
+        raise KeyError(project_id)
+
+
 def enqueue_task(
     *,
     project_id: str,

@@ -39,6 +39,29 @@ const statusGlyph = {
   needs_review: "?",
 };
 
+const stageLabels = {
+  analysis: "素材分析", research: "研究洞察", strategy: "内容策略", script: "脚本文案",
+  script_breakdown: "脚本拆解", script_review: "脚本审核", script_gate: "脚本确认",
+  storyboard: "分镜生成", asset: "产品素材", hero_gate: "分镜确认", production: "视频生成",
+  compose: "视频合成", final_qa: "成片质检", archive: "交付归档", succeeded: "已交付",
+  failed: "运行失败", awaiting_human: "等待人工确认", running: "运行中", queued: "排队中",
+  idle: "未开始", blocked: "已阻塞", needs_review: "需要复核",
+};
+
+const agentLabels = {
+  collector: "素材采集", analysis: "研究分析", script: "脚本文案", storyboard: "分镜策划",
+  asset: "产品素材", media: "视频制作", review: "质量审核",
+};
+
+const motionLabels = {
+  dolly_in: "推进", dolly_out: "拉远", pan_left: "左移", pan_right: "右移",
+  static: "固定", arc: "环绕", crash_zoom: "快速推进",
+};
+
+function stageLabel(value) {
+  return stageLabels[String(value || "")] || String(value || "未开始");
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -561,6 +584,8 @@ function renderProjectRows() {
   visibleProjects.forEach((project) => {
     const row = document.createElement("tr");
     row.className = project.project_id === state.selectedId ? "selected" : "";
+    row.dataset.projectRow = project.project_id;
+    row.title = "右键可删除已停止或已完成的项目";
     row.innerHTML = `
       <td>
         <button type="button" class="linkButton" data-open="${escapeAttr(project.project_id)}">
@@ -570,7 +595,7 @@ function renderProjectRows() {
       </td>
       <td>${renderNodes(project.nodes)}</td>
       <td>
-        <span class="stageTag ${statusClass(project.status)}">${escapeHtml(project.current_stage || project.status)}</span>
+        <span class="stageTag ${statusClass(project.status)}">${escapeHtml(stageLabel(project.current_stage || project.status))}</span>
       </td>
       <td>¥${Number(project.cost.total_cost_cny || 0).toFixed(2)}</td>
       <td>${renderProjectActions(project)}</td>
@@ -605,11 +630,20 @@ function renderProjectRows() {
       retryTask(Number(button.dataset.retryTask));
     });
   });
+  tbody.querySelectorAll("[data-delete-project]").forEach((button) => {
+    button.addEventListener("click", () => deleteProject(button.dataset.deleteProject));
+  });
+  tbody.querySelectorAll("[data-project-row]").forEach((row) => {
+    row.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      deleteProject(row.dataset.projectRow);
+    });
+  });
 }
 
 function renderNodes(nodes) {
   return `<div class="nodes">${nodes
-    .map((node) => `<span class="node ${statusClass(node.status)}" title="${node.agent}: ${node.status}">${statusGlyph[node.status] || "·"} ${node.agent}</span>`)
+    .map((node) => `<span class="node ${statusClass(node.status)}" title="${escapeAttr(agentLabels[node.agent] || node.agent)}：${escapeAttr(stageLabel(node.status))}">${statusGlyph[node.status] || "·"} ${escapeHtml(agentLabels[node.agent] || node.agent)}</span>`)
     .join("")}</div>`;
 }
 
@@ -621,7 +655,20 @@ function renderProjectActions(project) {
     const shot = failedShot.payload_json.shot_index;
     return `<button type="button" data-project="${escapeAttr(project.project_id)}" data-retry-shot="${shot}">重试镜头 ${shot}</button>`;
   }
-  return `<button type="button" data-open="${escapeAttr(project.project_id)}">打开</button>`;
+  return `<div class="projectActions"><button type="button" data-open="${escapeAttr(project.project_id)}">打开</button><button type="button" class="dangerButton" data-delete-project="${escapeAttr(project.project_id)}">删除</button></div>`;
+}
+
+async function deleteProject(projectId) {
+  const project = state.projects.find((item) => item.project_id === projectId);
+  if (!project || !window.confirm(`删除项目“${projectId}”？\n这会删除该项目的运行记录和成片，不会删除共享素材库。`)) return;
+  try {
+    await api(`/api/v2/pipeline/${encodeURIComponent(projectId)}`, { method: "DELETE" });
+    if (state.selectedId === projectId) state.selectedId = null;
+    toast("项目已删除，共享素材库未受影响");
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 function isUnresolvedTask(project, task) {
@@ -719,7 +766,7 @@ function renderScriptRow(section) {
       <td>${section.number}</td>
       <td>${escapeHtml(section.role || "")}</td>
       <td><input data-section="${section.number}" data-field="timing" value="${escapeAttr(section.timing || "")}" /></td>
-      <td><textarea data-section="${section.number}" data-field="voiceover_en">${escapeHtml(section.voiceover_en || "")}</textarea></td>
+      <td><textarea class="copyField" data-section="${section.number}" data-field="voiceover_zh">${escapeHtml(section.voiceover_zh || section.subtitle_zh || section.voiceover_en || "")}</textarea></td>
     </tr>
   `;
 }
@@ -728,10 +775,10 @@ function collectScriptDraft() {
   const draft = structuredClone(state.scriptCopy);
   draft.sections.forEach((section) => {
     const timing = $(`[data-section="${section.number}"][data-field="timing"]`);
-    const voiceover = $(`[data-section="${section.number}"][data-field="voiceover_en"]`);
+    const voiceover = $(`[data-section="${section.number}"][data-field="voiceover_zh"]`);
     section.timing = timing.value.trim();
-    section.voiceover_en = voiceover.value.trim();
-    section.subtitle_en = section.voiceover_en;
+    section.voiceover_zh = voiceover.value.trim();
+    section.subtitle_zh = section.voiceover_zh;
   });
   return draft;
 }
@@ -757,6 +804,7 @@ async function approveScriptGate() {
     });
     toast(`已进入 ${payload.engine.stage}`);
     await refreshProjects();
+    showView("storyboard");
   } catch (error) {
     toast(error.message, "error");
   }
@@ -799,10 +847,14 @@ function renderStoryboardNode() {
     </div>
     <div class="actionBar">
       <button type="button" id="saveShots">保存分镜</button>
+      <button type="button" id="saveShotsAndContinue" class="primary">保存并进入视频制作</button>
       <button type="button" id="regenerateStoryboard">根据当前脚本重新生成分镜</button>
     </div>
   `;
   $("#saveShots").addEventListener("click", () => saveShotPlan().catch((error) => toast(error.message, "error")));
+  $("#saveShotsAndContinue").addEventListener("click", async () => {
+    try { await saveShotPlan(); showView("production"); } catch (error) { toast(error.message, "error"); }
+  });
   $("#regenerateStoryboard").addEventListener("click", () => runManualStage("storyboard"));
 }
 
@@ -811,8 +863,8 @@ function renderShotRow(shot) {
   return `
     <tr>
       <td>${Number(shot.number)}</td>
-      <td><textarea data-shot="${shot.number}" data-shot-field="visual">${escapeHtml(shot.visual || "")}</textarea></td>
-      <td><textarea data-shot="${shot.number}" data-shot-field="seedance_prompt">${escapeHtml(shot.seedance_prompt || shot.visual_prompt || "")}</textarea></td>
+      <td><textarea class="copyField" data-shot="${shot.number}" data-shot-field="visual_zh">${escapeHtml(shot.visual_zh || shot.visual || "")}</textarea></td>
+      <td><textarea class="promptField" data-shot="${shot.number}" data-shot-field="seedance_prompt_zh">${escapeHtml(shot.seedance_prompt_zh || shot.seedance_prompt || shot.visual_prompt || "")}</textarea></td>
       <td><input type="number" min="3" max="10" data-shot="${shot.number}" data-shot-field="duration" value="${Number(duration)}" /></td>
     </tr>
   `;
@@ -883,9 +935,8 @@ function plannedDuration() {
 async function saveShotPlan() {
   const draft = structuredClone(state.shotPlan);
   draft.shots.forEach((shot) => {
-    shot.visual = $(`[data-shot="${shot.number}"][data-shot-field="visual"]`).value.trim();
-    shot.seedance_prompt = $(`[data-shot="${shot.number}"][data-shot-field="seedance_prompt"]`).value.trim();
-    shot.visual_prompt = shot.seedance_prompt;
+    shot.visual_zh = $(`[data-shot="${shot.number}"][data-shot-field="visual_zh"]`).value.trim();
+    shot.seedance_prompt_zh = $(`[data-shot="${shot.number}"][data-shot-field="seedance_prompt_zh"]`).value.trim();
     shot.camera_motion = shot.camera_motion || {};
     shot.camera_motion.duration_sec = Number($(`[data-shot="${shot.number}"][data-shot-field="duration"]`).value || 6);
   });
@@ -960,7 +1011,7 @@ function renderHeroGate() {
 
 function renderHeroFrame(frame, shot) {
   const camera = shot?.camera_motion
-    ? `${shot.camera_motion.type || ""} · ${shot.camera_motion.duration_sec || 3}s`
+    ? `${motionLabels[shot.camera_motion.type] || shot.camera_motion.type || ""} · ${shot.camera_motion.duration_sec || 3}s`
     : "";
   return `
     <article class="contactShot">
