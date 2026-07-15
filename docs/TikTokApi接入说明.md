@@ -20,10 +20,12 @@ python -m playwright install chromium
 ```dotenv
 TIKTOK_MS_TOKEN=你的msToken
 TIKTOK_BROWSER=chromium
+TIKTOK_HEADLESS=true
 TIKTOK_TIMEOUT_MS=45000
 ```
 
 `msToken` 属于敏感会话信息，不要提交 Git、不要粘贴到前端。若当前网络被 TikTok 限流，可选配置 `TIKTOK_PROXY=http://host:port`。
+若返回机器人识别错误，可设置 `TIKTOK_HEADLESS=false`，让采集任务使用短暂出现的可见浏览器窗口。
 
 ## 3. 支持范围
 

@@ -46,10 +46,12 @@ async def _discover(
     proxy = str(env.get("TIKTOK_PROXY") or "").strip()
     proxies = [{"server": proxy}] if proxy else None
     timeout_ms = max(10_000, int(env.get("TIKTOK_TIMEOUT_MS") or 45_000))
+    headless = str(env.get("TIKTOK_HEADLESS") or "true").strip().casefold() not in {"0", "false", "no", "off"}
 
     async with TikTokApi() as api:
         await api.create_sessions(
             num_sessions=1,
+            headless=headless,
             ms_tokens=[token],
             proxies=proxies,
             sleep_after=2,
