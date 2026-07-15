@@ -88,6 +88,9 @@ def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
             str(shot.get("seedance_prompt") or shot.get("visual_prompt") or shot.get("visual") or ""),
             f"Seedance source: {asset_manifest.get('seedance_source')}",
             f"Approved product facts and hard constraints: {product_facts}" if product_facts else "",
+            "Use only the approved product identity from the reference image. Do not add any invented brand name, logo, watermark, label, or readable text. Do not replace the product with a generic bottle or another brand.",
+            "For a warming-cup pouring shot: pour liquid from the warming cup spout into a separate clean baby bottle; never place the baby bottle inside the warming cup and never pour in the reverse direction.",
+            "If the display is visible, show exactly 98°F with the Fahrenheit symbol; never show Celsius or 98°C.",
         )
         if part
     )

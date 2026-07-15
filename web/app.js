@@ -924,7 +924,7 @@ function renderStoryboardNode() {
   host.innerHTML = `
     <div class="tableWrap">
       <table class="scriptTable storyboardTable">
-        <thead><tr><th>#</th><th>画面</th><th>生成提示词</th><th>时长</th></tr></thead>
+        <thead><tr><th>#</th><th>画面</th><th>生成提示词</th><th>镜头时长（3-10 秒）</th></tr></thead>
         <tbody>${state.shotPlan.shots.map(renderShotRow).join("")}</tbody>
       </table>
     </div>
@@ -965,7 +965,12 @@ function renderProductionNode() {
   const takeByShot = new Map((state.takeManifest?.shots || []).map((item) => [Number(item.number), item]));
   host.innerHTML = `<div class="takeList">${state.shotPlan.shots.map((shot) => {
     const entry = takeByShot.get(Number(shot.number));
-    const candidates = (entry?.takes || []).map((take) => `
+    const takes = entry?.takes || [];
+    const existingTakeIds = new Set(takes.map((take) => String(take.take_id)));
+    let nextTakeIndex = 0;
+    while (existingTakeIds.has(String.fromCharCode(65 + nextTakeIndex))) nextTakeIndex += 1;
+    const nextTakeId = String.fromCharCode(65 + nextTakeIndex);
+    const candidates = takes.map((take) => `
       <div class="takeCandidate">
         ${take.playable
           ? `<video controls preload="metadata" data-video-state src="${escapeAttr(take.media_url || runFileUrl(state.selectedId, take.path))}"></video><span class="mediaState" data-media-state>正在读取镜头预览...</span>`
@@ -979,6 +984,7 @@ function renderProductionNode() {
       <div class="actionBar">
         <button type="button" data-run-shot="${shot.number}" data-take-id="A">生成 Take A</button>
         <button type="button" data-run-shot="${shot.number}" data-take-id="B">生成 Take B</button>
+        <button type="button" data-run-shot="${shot.number}" data-take-id="${escapeAttr(nextTakeId)}">增加候选 Take ${escapeHtml(nextTakeId)}</button>
       </div>
       <div class="takeCandidates">${candidates || "尚未生成候选"}</div>
     </section>`;

@@ -21,7 +21,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     target_type = str(payload.get("target_type") or "keyword").strip().casefold()
     requested_provider = str(payload.get("provider") or "auto").strip().casefold()
     target = str(payload.get("target") or "").strip()
-    limit = max(1, min(int(payload.get("limit") or 3), 10))
+    limit = max(1, min(int(payload.get("limit") or 6), 20))
     if target_type not in {"keyword", "account", "hashtag", "trending"}:
         return ToolResult.failure("validation", "发现方式必须是关键词、账号、话题或热门视频")
     if requested_provider not in {"auto", "tiktok_api", "apify", "yt_dlp"}:

@@ -102,7 +102,7 @@ class TikTokCrawlRequest(BaseModel):
     target_type: str = "keyword"
     provider: str = "auto"
     target: str
-    limit: int = 3
+    limit: int = 6
     product_id: str = "便携恒温杯"
     mock: bool = True
 
@@ -492,7 +492,7 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
 
 @app.post("/api/v2/collect/tiktok/crawl")
 def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
-    limit = max(1, min(request.limit, 5))
+    limit = max(1, min(request.limit, 20))
     discovered = tool_registry.execute_tool(
         "tiktok_crawler",
         {
