@@ -67,14 +67,27 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 env=context.env,
             )
         except (RuntimeError, ValueError) as exc:
-            category = "not_configured" if "未配置" in str(exc) or "未安装" in str(exc) else "provider"
-            return ToolResult.failure(category, f"TikTokApi 采集失败：{exc}")
+            fallback = _fallback_account_discovery(requested_provider, target_type, target, limit)
+            if fallback is not None:
+                items, provider = fallback
+            else:
+                category = "not_configured" if "未配置" in str(exc) or "未安装" in str(exc) else "provider"
+                return ToolResult.failure(category, f"TikTokApi 采集失败：{exc}")
         except Exception as exc:
-            return ToolResult.failure(
-                "provider",
-                f"TikTokApi 采集失败：{exc.__class__.__name__}: {exc}. 请检查 msToken、网络或代理配置",
-            )
-        provider = "tiktok_api"
+            fallback = _fallback_account_discovery(requested_provider, target_type, target, limit)
+            if fallback is not None:
+                items, provider = fallback
+            else:
+                return ToolResult.failure(
+                    "provider",
+                    f"TikTokApi 采集失败：{exc.__class__.__name__}: {exc}. 请检查 msToken、网络或代理配置",
+                )
+        else:
+            provider = "tiktok_api"
+        if not items:
+            fallback = _fallback_account_discovery(requested_provider, target_type, target, limit)
+            if fallback is not None:
+                items, provider = fallback
     if not items:
         return ToolResult.failure("provider", "TikTok crawler returned no videos")
     return ToolResult.success(
@@ -97,6 +110,22 @@ def _select_provider(requested: str, target_type: str, context: ToolContext) -> 
             "关键词采集尚未配置：可设置 APIFY_API_TOKEN，或安装 TikTokApi 并设置 TIKTOK_MS_TOKEN（按话题采集）"
         )
     raise RuntimeError("自建采集尚未配置：请安装 TikTokApi 并设置 TIKTOK_MS_TOKEN")
+
+
+def _fallback_account_discovery(
+    requested_provider: str,
+    target_type: str,
+    target: str,
+    limit: int,
+) -> tuple[list[dict[str, Any]], str] | None:
+    if requested_provider != "auto" or target_type != "account" or not _is_account_url(target):
+        return None
+    if not shutil.which("yt-dlp"):
+        return None
+    try:
+        return _discover_account(target, limit), "yt-dlp-fallback"
+    except (RuntimeError, subprocess.TimeoutExpired):
+        return None
 
 
 def _discover_keyword(keyword: str, limit: int, token: str) -> list[dict[str, Any]]:

@@ -59,6 +59,23 @@ def test_tiktok_api_video_normalization() -> None:
     assert item["play_count"] == 20
 
 
+def test_auto_account_falls_back_to_ytdlp_when_tiktok_api_fails(monkeypatch) -> None:
+    monkeypatch.setattr(tiktok_api_adapter, "configured", lambda env: True)
+    monkeypatch.setattr(tiktok_api_adapter, "discover", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("blocked")))
+    monkeypatch.setattr(tiktok_crawler.shutil, "which", lambda name: "yt-dlp.exe")
+    monkeypatch.setattr(
+        tiktok_crawler,
+        "_discover_account",
+        lambda url, limit: [{"url": "https://www.tiktok.com/@brand/video/99"}],
+    )
+    result = tiktok_crawler.execute(
+        {"target_type": "account", "provider": "auto", "target": "https://www.tiktok.com/@brand", "limit": 1},
+        ToolContext(mock=False, env={"TIKTOK_MS_TOKEN": "secret"}),
+    )
+    assert result.ok is True
+    assert result.data["provider"] == "yt-dlp-fallback"
+
+
 def test_mock_crawler_discovers_requested_number() -> None:
     result = tiktok_crawler.execute(
         {"target_type": "keyword", "target": "heated cup", "limit": 3},
