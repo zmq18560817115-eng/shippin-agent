@@ -197,7 +197,10 @@ def _seedance_prompt(prompt: str, duration_sec: int) -> str:
         "Do not invent product shape, logo, display, lid, spout, or accessories. "
         "Do not add any invented brand name, watermark, label, or readable text; preserve only approved markings visible in the reference. "
         f"Duration {duration_sec} seconds, vertical 9:16, final delivery target 720x1280, product-safe commercial short video shot. "
-        f"--ratio 9:16 --resolution 720x1280 --dur {duration_sec}"
+        # Seedance model variants do not share the same resolution enum. Keep
+        # the provider request portable and normalize the returned media to
+        # the delivery standard in ffmpeg_compose.
+        f"--ratio 9:16 --dur {duration_sec}"
     )
 
 
