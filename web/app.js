@@ -840,7 +840,7 @@ function renderStoryboardNode() {
   host.className = "editor";
   host.innerHTML = `
     <div class="tableWrap">
-      <table class="scriptTable">
+      <table class="scriptTable storyboardTable">
         <thead><tr><th>#</th><th>画面</th><th>生成提示词</th><th>时长</th></tr></thead>
         <tbody>${state.shotPlan.shots.map(renderShotRow).join("")}</tbody>
       </table>

@@ -704,6 +704,36 @@ pre {
   width: 130px;
 }
 
+/* The storyboard is prompt-first: keep duration compact and reserve the editing space. */
+.storyboardTable {
+  min-width: 1080px;
+  table-layout: fixed;
+}
+
+.storyboardTable th:nth-child(1),
+.storyboardTable td:nth-child(1) {
+  width: 48px;
+}
+
+.storyboardTable th:nth-child(2),
+.storyboardTable td:nth-child(2) {
+  width: 28%;
+}
+
+.storyboardTable th:nth-child(3),
+.storyboardTable td:nth-child(3) {
+  width: 58%;
+}
+
+.storyboardTable th:nth-child(4),
+.storyboardTable td:nth-child(4) {
+  width: 76px;
+}
+
+.storyboardTable input[type="number"] {
+  width: 64px;
+}
+
 .actionBar {
   display: flex;
   flex-wrap: wrap;
