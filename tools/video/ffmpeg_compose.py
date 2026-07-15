@@ -28,7 +28,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         output.write_bytes(b"mock composed mp4\n")
         ffprobe = {
             "duration": _duration_from_shots(shot_report),
-            "resolution": "1080x1920",
+            "resolution": "720x1280",
             "fps": 30,
             "audio_streams": 1,
         }
@@ -116,8 +116,8 @@ def _normalize_shot(source: Path, output: Path, ffmpeg: str, duration_sec: float
     if not source.is_file():
         raise FileNotFoundError(f"shot video not found: {source}")
     video_filter = (
-        "scale=1080:1920:force_original_aspect_ratio=decrease,"
-        "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p"
+        "scale=720:1280:force_original_aspect_ratio=decrease,"
+        "pad=720:1280:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p"
     )
     command = [ffmpeg, "-y", "-i", source.as_posix(), "-t", str(max(1, duration_sec))]
     if _media_has_audio(source, ffmpeg):

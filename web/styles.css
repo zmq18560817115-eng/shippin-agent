@@ -377,6 +377,23 @@ textarea {
   padding-top: 14px;
 }
 
+.agentWorkbenchGrid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(320px, 1.6fr) minmax(240px, 1fr);
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.agentWorkbenchGrid textarea {
+  min-height: 92px;
+}
+
+@media (max-width: 900px) {
+  .agentWorkbenchGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .crawlForm .nodeToolHead {
   grid-column: 1 / -1;
 }

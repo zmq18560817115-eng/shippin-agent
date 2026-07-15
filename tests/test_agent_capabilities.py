@@ -57,7 +57,7 @@ def test_agent_map_and_independent_research_strategy_breakdown(tmp_path: Path, m
         item["independent_action"]
         for item in capability_map.json()["agents"]
         if item["independent_action"]
-    ] == ["research", "strategy", "script_breakdown"]
+    ] == ["research", "strategy", "script,script_breakdown", "storyboard", "production"]
     assert research.status_code == 200
     assert research.json()["artifact_name"] == "research_brief"
     assert strategy.status_code == 200

@@ -196,8 +196,8 @@ def _seedance_prompt(prompt: str, duration_sec: int) -> str:
         "Use the provided product image as the strict product identity reference. "
         "Do not invent product shape, logo, display, lid, spout, or accessories. "
         "Do not add any invented brand name, watermark, label, or readable text; preserve only approved markings visible in the reference. "
-        f"Duration {duration_sec} seconds, vertical 9:16, product-safe commercial short video shot. "
-        f"--ratio 9:16 --dur {duration_sec}"
+        f"Duration {duration_sec} seconds, vertical 9:16, final delivery target 720x1280, product-safe commercial short video shot. "
+        f"--ratio 9:16 --resolution 720x1280 --dur {duration_sec}"
     )
 
 

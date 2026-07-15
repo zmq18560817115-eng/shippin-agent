@@ -175,6 +175,8 @@ function bindEvents() {
   $("#runResearch").addEventListener("click", (event) => runFlowCapability("research", event.currentTarget, "#researchResult"));
   $("#runStrategy").addEventListener("click", (event) => runFlowCapability("strategy", event.currentTarget, "#strategyResult"));
   $("#runScriptBreakdown").addEventListener("click", (event) => runFlowCapability("script_breakdown", event.currentTarget, "#scriptBreakdownResult"));
+  $("#runIndependentAgent").addEventListener("click", runIndependentAgent);
+  $("#independentAgentAction").addEventListener("change", updateIndependentAgentUI);
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
@@ -184,7 +186,61 @@ function bindEvents() {
     if (views[view]) showView(view, { updateUrl: false });
   });
   updateCrawlTargetUI();
+  updateIndependentAgentUI();
   updateRuntimeModeHint();
+}
+
+function updateIndependentAgentUI() {
+  const action = $("#independentAgentAction").value;
+  const targetLabel = $("#independentTargetLabel");
+  targetLabel.hidden = action !== "collector";
+  $("#independentAgentPrompt").placeholder = action === "collector"
+    ? "可填写采集备注；目标请填在下方"
+    : action === "storyboard"
+      ? "输入想要的场景、人物、动作、镜头运动和风格，系统会生成可编辑分镜"
+      : action === "production"
+        ? "输入单镜画面 Prompt，系统会使用产品素材库生成 720P 竖屏视频"
+        : "输入产品、受众、平台和内容需求，系统会生成完整中文脚本";
+}
+
+async function runIndependentAgent() {
+  const action = $("#independentAgentAction").value;
+  const resultHost = $("#independentAgentResult");
+  const target = $("#independentAgentTarget").value.trim();
+  if (action === "collector" && !target) {
+    toast("请输入关键词或账号主页 URL", "error");
+    $("#independentAgentTarget").focus();
+    return;
+  }
+  const button = $("#runIndependentAgent");
+  button.disabled = true;
+  beginOperation(`正在独立运行${stageLabel(action)}`, action === "production" ? 90 : 35);
+  try {
+    const payload = await api("/api/v2/agents/run", {
+      method: "POST",
+      body: JSON.stringify({
+        action,
+        product_id: $("#productSelect").value || "便携恒温杯",
+        prompt: $("#independentAgentPrompt").value.trim() || null,
+        source_text: $("#independentAgentPrompt").value.trim() || null,
+        target,
+        target_type: "keyword",
+        provider: "auto",
+        mock: $("#runtimeMode").value !== "real",
+      }),
+    });
+    resultHost.className = "nodeResult complete";
+    resultHost.innerHTML = `<strong>${escapeHtml(payload.artifact_name)}</strong><pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>`;
+    toast(`${action} 已独立运行完成`);
+    await loadMaterials();
+  } catch (error) {
+    resultHost.className = "nodeResult error";
+    resultHost.textContent = error.message;
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    endOperation();
+  }
 }
 
 function updateRuntimeModeHint() {

@@ -651,7 +651,7 @@ def _build_final_qa_report(
         "target_duration_30s": abs(duration - 30.0) <= 2.0,
         "duration_matches_plan": planned_duration > 0 and abs(duration - planned_duration) <= 2.0,
         "has_audio_stream": int(probe.get("audio_streams") or 0) >= 1,
-        "resolution_matches_aspect": resolution == "1080x1920",
+        "resolution_matches_aspect": resolution == "720x1280",
         "fps_supported": 24 <= float(probe.get("fps") or 0) <= 60,
         "shot_count_matches_plan": len(rendered_shots) == len(planned_shots) and len(planned_shots) > 0,
         "all_shots_succeeded": bool(rendered_shots)

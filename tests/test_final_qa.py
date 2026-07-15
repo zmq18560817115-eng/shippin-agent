@@ -5,14 +5,14 @@ from pathlib import Path
 from orchestrator.engine import _build_final_qa_report
 
 
-def _inputs(tmp_path: Path, resolution: str = "1080x1920") -> tuple[dict, dict, dict]:
+def _inputs(tmp_path: Path, resolution: str = "720x1280") -> tuple[dict, dict, dict]:
     output = tmp_path / "final-video.mp4"
     output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 1024))
     render = {
         "output_path": output.as_posix(),
         "ffprobe": {"duration": 30.0, "resolution": resolution, "fps": 30, "audio_streams": 1},
         "input_probes": [
-            {"duration": 6.0, "resolution": "1080x1920", "fps": 30, "audio_streams": 1}
+            {"duration": 6.0, "resolution": "720x1280", "fps": 30, "audio_streams": 1}
             for _ in range(5)
         ],
         "review_frame_paths": ["frame-01.jpg", "frame-02.jpg", "frame-03.jpg"],
@@ -61,8 +61,8 @@ def test_final_qa_accepts_existing_workspace_relative_output(tmp_path: Path, mon
     output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 1024))
     render = {
         "output_path": output.as_posix(),
-        "ffprobe": {"duration": 30, "resolution": "1080x1920", "fps": 30, "audio_streams": 1},
-        "input_probes": [{"duration": 30, "resolution": "1080x1920", "fps": 30, "audio_streams": 1}],
+        "ffprobe": {"duration": 30, "resolution": "720x1280", "fps": 30, "audio_streams": 1},
+        "input_probes": [{"duration": 30, "resolution": "720x1280", "fps": 30, "audio_streams": 1}],
         "review_frame_paths": ["frame-01.jpg", "frame-02.jpg", "frame-03.jpg"],
     }
     plan = {"shots": [{"number": 1, "camera_motion": {"duration_sec": 30}}]}

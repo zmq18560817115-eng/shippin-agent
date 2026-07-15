@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260715-5" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260715-6" />
   </head>
   <body>
     <header class="topbar">
@@ -148,8 +148,32 @@
             视频转写（可选）
             <textarea id="researchSourceText" placeholder="留空则读取当前项目的来源与分析产物"></textarea>
           </label>
-          <div id="researchResult" class="nodeResult">从素材卡发起项目后，可在此独立重跑研究分析</div>
+        <div id="researchResult" class="nodeResult">从素材卡发起项目后，可在此独立重跑研究分析</div>
+      </div>
+      <div class="nodeTools" id="independentAgentWorkbench">
+        <div class="nodeToolHead">
+          <div><strong>Agent 独立工作台</strong><span>不创建项目也可以单独运行采集、脚本、分镜或单镜生产</span></div>
+          <span id="independentAgentState"></span>
         </div>
+        <div class="agentWorkbenchGrid">
+          <label>功能
+            <select id="independentAgentAction">
+              <option value="collector">关键词/账号抓取</option>
+              <option value="script">独立脚本生成</option>
+              <option value="storyboard">独立分镜生成</option>
+              <option value="production">独立单镜视频生成</option>
+            </select>
+          </label>
+          <label>输入 Prompt / 关键词
+            <textarea id="independentAgentPrompt" placeholder="例如：为便携恒温杯写一条 30 秒夜间喂养短视频，或输入要生成的镜头画面"></textarea>
+          </label>
+          <label id="independentTargetLabel">抓取目标
+            <input id="independentAgentTarget" placeholder="关键词或 TikTok 账号主页 URL" />
+          </label>
+        </div>
+        <button type="button" id="runIndependentAgent" class="primary">运行独立 Agent</button>
+        <div id="independentAgentResult" class="nodeResult">结果会在这里展示，可继续保存到项目。</div>
+      </div>
       </section>
 
       <section class="band" id="projectQueue" data-view-section="projects">
@@ -243,6 +267,6 @@
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js?v=20260715-5"></script>
+    <script src="/static/app.js?v=20260715-6"></script>
   </body>
 </html>

@@ -170,10 +170,17 @@ class FinalVisualReviewRequest(BaseModel):
 
 
 class AgentRunRequest(BaseModel):
-    project_id: str
+    project_id: str | None = None
     action: str
     source_text: str | None = None
     source_refs: list[str] | None = None
+    product_id: str = "便携恒温杯"
+    prompt: str | None = None
+    input_json: dict[str, Any] | None = None
+    target_type: str = "keyword"
+    target: str | None = None
+    provider: str = "auto"
+    limit: int = 6
     mock: bool = True
 
 
@@ -237,12 +244,26 @@ def agent_capabilities() -> dict[str, Any]:
 
 @app.post("/api/v2/agents/run")
 def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
-    project_id = _validate_project_id(request.project_id)
+    standalone = not request.project_id
+    project_id = _validate_project_id(request.project_id or _new_project_id())
+    if standalone:
+        queue.ensure_project(project_id, product_id=request.product_id, db_path=_db_path())
     project = _project_summary(project_id)
     action = request.action.strip().casefold()
     root = _run_root(project_id)
     payload: dict[str, Any] = {"project_id": project_id}
 
+    if action == "collector":
+        if not request.target:
+            raise HTTPException(status_code=400, detail="collector requires target")
+        result = tool_registry.execute_tool(
+            "tiktok_crawler",
+            {"target_type": request.target_type, "target": request.target, "provider": request.provider, "limit": max(1, min(request.limit, 20))},
+            context={"mock": request.mock, "env": os.environ},
+        )
+        if not result.ok:
+            raise HTTPException(status_code=422, detail=(result.error or {}).get("message") or result.error)
+        return {"ok": True, "project_id": project_id if not standalone else None, "action": action, "artifact_name": "tiktok_discovery", "artifact": result.data, "meta": result.meta}
     if action == "research":
         analysis = _load_artifact_or_none(project_id, "analysis_report") or {}
         payload.update(
@@ -264,11 +285,40 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             }
         )
         tool_name, artifact_name = "content_strategy", "strategy_brief"
+    elif action == "script":
+        source = (request.source_text or request.prompt or "").strip()
+        payload.update({
+            "product_id": request.product_id,
+            "analysis_report": {"project_id": project_id, "voiceover_text": source, "hook_3s": source[:120], "structure": []},
+            "strategy_brief": {"content_direction": source, "product_guardrails": product_library.product_guardrail_text(request.product_id)},
+        })
+        tool_name, artifact_name = "doubao_script", "script_copy"
+    elif action == "storyboard":
+        base_prompt = request.prompt or request.source_text or "Product scene"
+        script = request.input_json or {
+            "version": "2.0", "project_id": project_id, "product_id": request.product_id, "total_duration_s": 30,
+            "sections": [
+                {"number": index, "role": "镜头", "timing": f"{(index - 1) * 6}-{index * 6}s", "voiceover_en": base_prompt, "voiceover_zh": "", "scene_zh": base_prompt, "action_zh": base_prompt, "story_beat_zh": ""}
+                for index in range(1, 6)
+            ],
+        }
+        payload["script_copy"] = script
+        tool_name, artifact_name = "doubao_shotplan", "shot_plan"
+    elif action == "production":
+        prompt = (request.prompt or request.source_text or "Create a product-safe vertical shot").strip()
+        source = product_library.resolve_seedance_source(request.product_id)
+        payload.update({
+            "shot": {"number": 1, "visual": prompt, "seedance_prompt": prompt, "camera_motion": {"duration_sec": 6}},
+            "shot_index": 1,
+            "take_id": "A",
+            "asset_manifest": {"version": "2.0", "project_id": project_id, "product_id": request.product_id, "seedance_source": source, "hero_frames": [{"number": 1, "path": source, "source_refs": [source], "status": "approved"}]},
+        })
+        tool_name, artifact_name = "seedance_shot", "shot_report"
     elif action == "script_breakdown":
         payload["script_copy"] = _load_artifact(project_id, "script_copy")
         tool_name, artifact_name = "script_breakdown", "script_breakdown"
     else:
-        raise HTTPException(status_code=400, detail="action must be research, strategy, or script_breakdown")
+        raise HTTPException(status_code=400, detail="action must be collector, research, strategy, script, script_breakdown, storyboard, or production")
 
     result = tool_registry.execute_tool(
         tool_name,

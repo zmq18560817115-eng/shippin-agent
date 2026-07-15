@@ -27,6 +27,7 @@ AGENT_CAPABILITIES: tuple[dict[str, Any], ...] = (
         "tools": ["tiktok_oembed", "doubao", "manual transcript"],
         "human_gate": "确认研究范围与竞品样本",
         "independent_action": "research",
+        "independent_inputs": ["关键词/账号/链接", "可选转写"],
     },
     {
         "id": "strategy",
@@ -39,6 +40,7 @@ AGENT_CAPABILITIES: tuple[dict[str, Any], ...] = (
         "tools": ["doubao", "product guardrails"],
         "human_gate": "策略方向与卖点选择",
         "independent_action": "strategy",
+        "independent_inputs": ["研究文本", "产品事实"],
     },
     {
         "id": "script",
@@ -50,7 +52,8 @@ AGENT_CAPABILITIES: tuple[dict[str, Any], ...] = (
         "outputs": ["script_copy", "script_breakdown"],
         "tools": ["doubao", "compliance guardrails"],
         "human_gate": "逐段修改脚本与拆解",
-        "independent_action": "script_breakdown",
+        "independent_action": "script,script_breakdown",
+        "independent_inputs": ["用户需求/产品/参考文本"],
     },
     {
         "id": "storyboard",
@@ -62,7 +65,8 @@ AGENT_CAPABILITIES: tuple[dict[str, Any], ...] = (
         "outputs": ["shot_plan"],
         "tools": ["doubao_shotplan"],
         "human_gate": "逐镜确认与镜头调整",
-        "independent_action": None,
+        "independent_action": "storyboard",
+        "independent_inputs": ["脚本或自定义 Prompt"],
     },
     {
         "id": "asset",
@@ -74,7 +78,8 @@ AGENT_CAPABILITIES: tuple[dict[str, Any], ...] = (
         "outputs": ["asset_manifest", "hero_frames"],
         "tools": ["product library", "hero_frame"],
         "human_gate": "产品身份锚点与关键帧确认",
-        "independent_action": None,
+        "independent_action": "production",
+        "independent_inputs": ["单镜 Prompt/产品素材"],
         "gap": "缺少场景式 contact sheet 与素材去重评分",
     },
     {
