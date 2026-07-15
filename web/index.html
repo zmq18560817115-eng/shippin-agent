@@ -101,6 +101,17 @@
             <select id="crawlTargetType">
               <option value="keyword">关键词</option>
               <option value="account">账号主页</option>
+              <option value="hashtag">话题标签</option>
+              <option value="trending">热门视频</option>
+            </select>
+          </label>
+          <label>
+            采集后端
+            <select id="crawlProvider">
+              <option value="auto">自动选择</option>
+              <option value="tiktok_api">自建 TikTokApi</option>
+              <option value="apify">Apify 关键词</option>
+              <option value="yt_dlp">yt-dlp 账号</option>
             </select>
           </label>
           <label class="collectLinks">

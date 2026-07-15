@@ -18,4 +18,6 @@ def test_runtime_status_never_exposes_secret_values(monkeypatch) -> None:
     assert "tiktok_video" in payload["providers"]
     assert payload["providers"]["speech_to_text"]["configured"] is False
     assert "tiktok_keyword_crawler" in payload["providers"]
+    assert "tiktok_api" in payload["providers"]
+    assert "installed" in payload["providers"]["tiktok_api"]
     assert "private-doubao-value" not in response.text

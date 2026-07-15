@@ -333,6 +333,7 @@ async function crawlTikTok(event) {
       method: "POST",
       body: JSON.stringify({
         target_type: $("#crawlTargetType").value,
+        provider: $("#crawlProvider").value,
         target: $("#crawlTarget").value.trim(),
         limit: Number($("#crawlLimit").value || 3),
         product_id: $("#productSelect").value,

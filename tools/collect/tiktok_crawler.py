@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import httpx
 
 from tools.base_tool import ToolContext, ToolResult
+from tools.collect import tiktok_api_adapter
 from tools.tool_registry import register_tool
 
 
@@ -18,27 +19,38 @@ APIFY_ENDPOINT = "https://api.apify.com/v2/acts/clockworks~tiktok-scraper/run-sy
 @register_tool("tiktok_crawler")
 def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     target_type = str(payload.get("target_type") or "keyword").strip().casefold()
+    requested_provider = str(payload.get("provider") or "auto").strip().casefold()
     target = str(payload.get("target") or "").strip()
     limit = max(1, min(int(payload.get("limit") or 3), 10))
-    if target_type not in {"keyword", "account"}:
-        return ToolResult.failure("validation", "target_type must be keyword or account")
-    if not target:
+    if target_type not in {"keyword", "account", "hashtag", "trending"}:
+        return ToolResult.failure("validation", "target_type must be keyword, account, hashtag or trending")
+    if requested_provider not in {"auto", "tiktok_api", "apify", "yt_dlp"}:
+        return ToolResult.failure("validation", "provider must be auto, tiktok_api, apify or yt_dlp")
+    if not target and target_type != "trending":
         return ToolResult.failure("validation", "a keyword or TikTok account URL is required")
     if context.mock:
         return ToolResult.success(
-            {"provider": "mock", "target_type": target_type, "target": target, "items": _mock_items(target, limit)},
+            {"provider": "mock", "target_type": target_type, "target": target, "items": _mock_items(target or "trending", limit)},
             meta={"tool": "tiktok_crawler", "mock": True},
         )
-    if target_type == "keyword":
+    try:
+        provider = _select_provider(requested_provider, target_type, context)
+    except RuntimeError as exc:
+        return ToolResult.failure("not_configured", str(exc))
+    if provider == "apify":
+        if target_type != "keyword":
+            return ToolResult.failure("validation", "Apify provider currently supports keyword targets only")
         token = str(context.env.get("APIFY_API_TOKEN") or "").strip()
         if not token:
-            return ToolResult.failure("not_configured", "关键词爬取需要在 .env.local 配置 APIFY_API_TOKEN")
+            return ToolResult.failure("not_configured", "Apify 关键词采集需要在 .env.local 配置 APIFY_API_TOKEN")
         try:
             items = _discover_keyword(target, limit, token)
         except (httpx.HTTPError, ValueError) as exc:
             return ToolResult.failure("provider", f"TikTok keyword discovery failed: {exc}")
         provider = "apify"
-    else:
+    elif provider == "yt-dlp":
+        if target_type != "account":
+            return ToolResult.failure("validation", "yt-dlp provider currently supports account targets only")
         if not _is_account_url(target):
             return ToolResult.failure("validation", "account target must be a TikTok profile URL")
         try:
@@ -46,12 +58,45 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         except (RuntimeError, subprocess.TimeoutExpired) as exc:
             return ToolResult.failure("provider", f"TikTok account discovery failed: {exc}")
         provider = "yt-dlp"
+    else:
+        try:
+            items = tiktok_api_adapter.discover(
+                target_type=target_type,
+                target=target,
+                limit=limit,
+                env=context.env,
+            )
+        except (RuntimeError, ValueError) as exc:
+            category = "not_configured" if "未配置" in str(exc) or "未安装" in str(exc) else "provider"
+            return ToolResult.failure(category, f"TikTokApi 采集失败：{exc}")
+        except Exception as exc:
+            return ToolResult.failure(
+                "provider",
+                f"TikTokApi 采集失败：{exc.__class__.__name__}: {exc}. 请检查 msToken、网络或代理配置",
+            )
+        provider = "tiktok_api"
     if not items:
         return ToolResult.failure("provider", "TikTok crawler returned no videos")
     return ToolResult.success(
         {"provider": provider, "target_type": target_type, "target": target, "items": items[:limit]},
         meta={"tool": "tiktok_crawler", "mock": False, "count": len(items[:limit])},
     )
+
+
+def _select_provider(requested: str, target_type: str, context: ToolContext) -> str:
+    if requested != "auto":
+        return requested
+    if target_type == "keyword" and str(context.env.get("APIFY_API_TOKEN") or "").strip():
+        return "apify"
+    if tiktok_api_adapter.configured(context.env):
+        return "tiktok_api"
+    if target_type == "account" and shutil.which("yt-dlp"):
+        return "yt-dlp"
+    if target_type == "keyword":
+        raise RuntimeError(
+            "关键词采集尚未配置：可设置 APIFY_API_TOKEN，或安装 TikTokApi 并设置 TIKTOK_MS_TOKEN（按话题采集）"
+        )
+    raise RuntimeError("自建采集尚未配置：请安装 TikTokApi 并设置 TIKTOK_MS_TOKEN")
 
 
 def _discover_keyword(keyword: str, limit: int, token: str) -> list[dict[str, Any]]:

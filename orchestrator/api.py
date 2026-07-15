@@ -95,6 +95,7 @@ class TikTokIntakeRunRequest(BaseModel):
 
 class TikTokCrawlRequest(BaseModel):
     target_type: str = "keyword"
+    provider: str = "auto"
     target: str
     limit: int = 3
     product_id: str = "便携恒温杯"
@@ -185,6 +186,10 @@ def healthz() -> dict[str, str]:
 
 @app.get("/api/v2/runtime")
 def runtime_status() -> dict[str, Any]:
+    from tools.collect import tiktok_api_adapter
+
+    tiktok_api_installed = tiktok_api_adapter.package_available()
+    tiktok_api_ready = tiktok_api_adapter.configured(os.environ)
     return {
         "status": "ok",
         "real_ready": bool(os.environ.get("DOUBAO_API_KEY") and os.environ.get("SEEDANCE_API_KEY")),
@@ -193,7 +198,15 @@ def runtime_status() -> dict[str, Any]:
             "seedance": {"configured": bool(os.environ.get("SEEDANCE_API_KEY"))},
             "tiktok_oembed": {"configured": True},
             "tiktok_video": {"configured": bool(shutil.which("yt-dlp"))},
-            "tiktok_keyword_crawler": {"configured": bool(os.environ.get("APIFY_API_TOKEN"))},
+            "tiktok_keyword_crawler": {
+                "configured": bool(os.environ.get("APIFY_API_TOKEN")) or tiktok_api_ready,
+                "mode": "apify_keyword_or_tiktok_hashtag",
+            },
+            "tiktok_api": {
+                "configured": tiktok_api_ready,
+                "installed": tiktok_api_installed,
+                "mode": "account_hashtag_trending",
+            },
             "speech_to_text": {"configured": False, "mode": "subtitle_or_operator_text"},
         },
         "budget_mode": "observe",
@@ -441,7 +454,12 @@ def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
     limit = max(1, min(request.limit, 5))
     discovered = tool_registry.execute_tool(
         "tiktok_crawler",
-        {"target_type": request.target_type, "target": request.target, "limit": limit},
+        {
+            "target_type": request.target_type,
+            "provider": request.provider,
+            "target": request.target,
+            "limit": limit,
+        },
         context={"mock": request.mock, "env": os.environ},
     )
     if not discovered.ok:
