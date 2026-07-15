@@ -10,6 +10,7 @@ const state = {
   reviewReport: null,
   shotPlan: null,
   assetManifest: null,
+  takeManifest: null,
   renderReport: null,
   runReport: null,
   refreshing: false,
@@ -425,6 +426,7 @@ async function loadSelectedProject(projectId) {
   state.reviewReport = null;
   state.shotPlan = null;
   state.assetManifest = null;
+  state.takeManifest = null;
   state.renderReport = null;
   state.runReport = null;
 
@@ -432,6 +434,7 @@ async function loadSelectedProject(projectId) {
   state.reviewReport = await safeArtifact(projectId, "review_report");
   state.shotPlan = await safeArtifact(projectId, "shot_plan");
   state.assetManifest = await safeArtifact(projectId, "asset_manifest");
+  state.takeManifest = await safeArtifact(projectId, "take_manifest");
   if (state.selected.status === "succeeded") {
     state.renderReport = await safeArtifact(projectId, "render_report");
     state.runReport = await safeRunReport(projectId);
@@ -502,6 +505,12 @@ function renderProjectRows() {
       retryShot(Number(button.dataset.retryShot));
     });
   });
+  tbody.querySelectorAll("[data-retry-task]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedId = button.dataset.project;
+      retryTask(Number(button.dataset.retryTask));
+    });
+  });
 }
 
 function renderNodes(nodes) {
@@ -540,7 +549,7 @@ function renderErrors(projectId, errors) {
       const shot = task.shot_index || task.payload_json?.shot_index || "";
       const retry = task.stage === "production" && shot
         ? `<button type="button" data-project="${escapeAttr(projectId)}" data-retry-shot="${shot}">重试镜头 ${shot}</button>`
-        : "";
+        : `<button type="button" data-project="${escapeAttr(projectId)}" data-retry-task="${task.id}">重试此节点</button>`;
       return `
         <details>
           <summary>${escapeHtml(task.stage)} ${shot ? `shot ${shot}` : ""} failed</summary>
@@ -719,14 +728,33 @@ function renderProductionNode() {
     return;
   }
   host.className = "editor";
-  host.innerHTML = `<div class="actionBar">${state.shotPlan.shots.map((shot) => `
-    <button type="button" data-run-shot="${shot.number}">运行镜头 ${shot.number} · ${shot.camera_motion?.duration_sec || 6}s</button>
-  `).join("")}</div>`;
+  const takeByShot = new Map((state.takeManifest?.shots || []).map((item) => [Number(item.number), item]));
+  host.innerHTML = `<div class="takeList">${state.shotPlan.shots.map((shot) => {
+    const entry = takeByShot.get(Number(shot.number));
+    const candidates = (entry?.takes || []).map((take) => `
+      <div class="takeCandidate">
+        <video controls preload="metadata" src="${runFileUrl(state.selectedId, take.path)}"></video>
+        <span>Take ${escapeHtml(take.take_id)} · ${escapeHtml(take.status)}</span>
+        <button type="button" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}" ${take.status === "selected" ? "disabled" : ""}>${take.status === "selected" ? "已选用" : "选用此 Take"}</button>
+      </div>
+    `).join("");
+    return `<section class="takeShot">
+      <strong>镜头 ${shot.number} · ${shot.camera_motion?.duration_sec || 6}s</strong>
+      <div class="actionBar">
+        <button type="button" data-run-shot="${shot.number}" data-take-id="A">生成 Take A</button>
+        <button type="button" data-run-shot="${shot.number}" data-take-id="B">生成 Take B</button>
+      </div>
+      <div class="takeCandidates">${candidates || "尚未生成候选"}</div>
+    </section>`;
+  }).join("")}</div>`;
   host.querySelectorAll("[data-run-shot]").forEach((button) => {
     button.addEventListener("click", async () => {
       await saveShotPlan();
-      await runManualStage("production", Number(button.dataset.runShot));
+      await runManualStage("production", Number(button.dataset.runShot), button.dataset.takeId);
     });
+  });
+  host.querySelectorAll("[data-select-take]").forEach((button) => {
+    button.addEventListener("click", () => selectTake(Number(button.dataset.selectShot), button.dataset.selectTake));
   });
 }
 
@@ -771,7 +799,7 @@ async function saveShotPlan() {
   return saved;
 }
 
-async function runManualStage(stage, shotIndex = null) {
+async function runManualStage(stage, shotIndex = null, takeId = null) {
   try {
     const payload = await api("/api/v2/manual/run", {
       method: "POST",
@@ -779,10 +807,24 @@ async function runManualStage(stage, shotIndex = null) {
         project_id: state.selectedId,
         stage,
         shot_index: shotIndex,
+        take_id: takeId,
         mock: $("#runtimeMode").value !== "real",
       }),
     });
     toast(`${stage}${shotIndex ? ` 镜头 ${shotIndex}` : ""} 已运行到 ${payload.engine.stage}`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function selectTake(shotIndex, takeId) {
+  try {
+    await api("/api/v2/takes/select", {
+      method: "POST",
+      body: JSON.stringify({ project_id: state.selectedId, shot_index: shotIndex, take_id: takeId }),
+    });
+    toast(`镜头 ${shotIndex} 已选用 Take ${takeId}`);
     await refreshProjects();
   } catch (error) {
     toast(error.message, "error");
@@ -861,6 +903,19 @@ async function retryShot(shotIndex) {
       body: JSON.stringify({ project_id: state.selectedId, shot_index: shotIndex }),
     });
     toast(`镜头 ${shotIndex} 已重试：${payload.engine.status}`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function retryTask(taskId) {
+  try {
+    const payload = await api("/api/v2/tasks/retry", {
+      method: "POST",
+      body: JSON.stringify({ project_id: state.selectedId, task_id: taskId, mock: $("#runtimeMode").value !== "real" }),
+    });
+    toast(`节点已重试：${payload.engine.stage} · ${payload.engine.status}`);
     await refreshProjects();
   } catch (error) {
     toast(error.message, "error");

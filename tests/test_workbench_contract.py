@@ -25,3 +25,5 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert 'api("/api/v2/collect/tiktok/run"' in script
     assert "主动爬取任务" in html
     assert 'api("/api/v2/collect/tiktok/crawl"' in script
+    assert "生成 Take A" in script
+    assert 'api("/api/v2/takes/select"' in script

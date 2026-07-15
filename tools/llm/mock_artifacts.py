@@ -72,7 +72,10 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
                 "visual": f"{role} shot with product-safe composition.",
                 "visual_prompt": f"{role} scene, product remains anchored to approved material.",
                 "seedance_prompt": (
+                    "Continuity lock: same location, lighting, caregiver, wardrobe, hands, and props across all five shots. "
                     "Product appearance must match the white-background hero reference. "
+                    "The warming cup and baby bottle are separate products; never insert or attach the bottle to the cup. "
+                    "If visible, the display reads 98 degrees Fahrenheit (98 F), never Celsius. "
                     "Use scenario and detail references only as prompt guidance. "
                     f"Shot role: {role}. Voiceover: {section['voiceover_en']}"
                 ),

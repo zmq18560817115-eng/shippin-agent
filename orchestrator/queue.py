@@ -489,6 +489,74 @@ def recover_expired_leases(
         return recovered
 
 
+def recover_running_tasks_on_startup(
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> int:
+    """Requeue tasks orphaned when the single local orchestrator stopped."""
+    recovery_time = utc_now()
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            "SELECT id, project_id, attempt, max_retries FROM tasks WHERE status = 'running'"
+        ).fetchall()
+        for row in rows:
+            next_status = "queued" if int(row["attempt"]) < int(row["max_retries"]) else "failed"
+            error = {
+                "category": "service_restarted",
+                "message": "task was recovered after the local orchestrator restarted",
+                "attempt": int(row["attempt"]),
+                "max_retries": int(row["max_retries"]),
+            }
+            conn.execute(
+                """
+                UPDATE tasks
+                SET status = ?, error_json = ?, lease_owner = NULL,
+                    lease_expires_at = NULL, heartbeat_at = NULL, updated_at = ?,
+                    finished_at = CASE WHEN ? = 'failed' THEN ? ELSE NULL END
+                WHERE id = ?
+                """,
+                (next_status, _dumps(error), recovery_time, next_status, recovery_time, row["id"]),
+            )
+            record_event(
+                project_id=row["project_id"],
+                task_id=int(row["id"]),
+                event_type="task.startup_recovered",
+                meta={"next_status": next_status, "attempt": int(row["attempt"])},
+                db_path=db_path,
+            )
+        return len(rows)
+
+
+def requeue_task(
+    task_id: int,
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> Task:
+    task = get_task(task_id, db_path=db_path)
+    if task.status not in {"failed", "blocked", "cancelled"}:
+        raise ValueError(f"task {task_id} is not retryable from status {task.status}")
+    now = utc_now()
+    with get_conn(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'queued', attempt = 0, error_json = NULL,
+                lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+                updated_at = ?, started_at = NULL, finished_at = NULL
+            WHERE id = ?
+            """,
+            (now, task_id),
+        )
+    record_event(
+        project_id=task.project_id,
+        task_id=task_id,
+        event_type="task.manual_retry",
+        message=task.stage,
+        db_path=db_path,
+    )
+    return get_task(task_id, db_path=db_path)
+
+
 def get_task(task_id: int, *, db_path: str | os.PathLike[str] | None = None) -> Task:
     with get_conn(db_path) as conn:
         row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()

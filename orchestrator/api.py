@@ -39,6 +39,7 @@ ARTIFACT_NAMES = {
     "research_brief",
     "strategy_brief",
     "script_breakdown",
+    "take_manifest",
 }
 GATE_STAGES = ("script_gate", "hero_gate")
 NODE_STAGES = {
@@ -126,7 +127,8 @@ class HeroRegenRequest(BaseModel):
 
 class TaskRetryRequest(BaseModel):
     project_id: str
-    shot_index: int
+    task_id: int | None = None
+    shot_index: int | None = None
     mock: bool = True
 
 
@@ -134,7 +136,14 @@ class ManualStageRunRequest(BaseModel):
     project_id: str
     stage: str
     shot_index: int | None = None
+    take_id: str | None = None
     mock: bool = True
+
+
+class TakeSelectRequest(BaseModel):
+    project_id: str
+    shot_index: int
+    take_id: str
 
 
 class FeedbackRequest(BaseModel):
@@ -154,6 +163,7 @@ class AgentRunRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     queue.init_db(db_path=_db_path())
+    queue.recover_running_tasks_on_startup(db_path=_db_path())
     yield
 
 
@@ -669,6 +679,7 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
             "shot": shot,
             "revision": revision,
             "manual_only": True,
+            "take_id": request.take_id,
         }
     elif stage == "compose":
         _load_artifact(project_id, "shot_report")
@@ -714,11 +725,51 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
     }
 
 
+@app.post("/api/v2/takes/select")
+def select_take(request: TakeSelectRequest) -> dict[str, Any]:
+    project_id = _validate_project_id(request.project_id)
+    root = _run_root(project_id)
+    manifest = _load_artifact(project_id, "take_manifest")
+    shot_entry = next((item for item in manifest.get("shots", []) if int(item.get("number") or 0) == request.shot_index), None)
+    if shot_entry is None:
+        raise HTTPException(status_code=404, detail=f"shot {request.shot_index} has no generated takes")
+    selected = next((item for item in shot_entry.get("takes", []) if item.get("take_id") == request.take_id), None)
+    if selected is None:
+        raise HTTPException(status_code=404, detail=f"take {request.take_id} not found")
+    shot_entry["selected_take_id"] = request.take_id
+    for item in shot_entry.get("takes", []):
+        item["status"] = "selected" if item.get("take_id") == request.take_id else "needs_review"
+    artifacts.save_artifact(project_id, "take_manifest", manifest, run_root=root)
+
+    report = _load_artifact_or_none(project_id, "shot_report") or {"version": "2.0", "project_id": project_id, "shots": []}
+    by_number = {int(item["number"]): item for item in report.get("shots", [])}
+    by_number[request.shot_index] = {
+        "number": request.shot_index,
+        "status": "succeeded",
+        "path": selected["path"],
+        "cost_cny": float(selected.get("cost_cny") or 0),
+        "attempt": int(selected.get("attempt") or 1),
+        "duration_sec": float(selected.get("duration_sec") or 6),
+        "take_id": request.take_id,
+    }
+    report["shots"] = [by_number[number] for number in sorted(by_number)]
+    artifacts.save_artifact(project_id, "shot_report", report, run_root=root)
+    queue.record_event(project_id=project_id, event_type="take.selected", message=f"shot{request.shot_index}:{request.take_id}", db_path=_db_path())
+    return {"ok": True, "take_manifest": manifest, "shot_report": report}
+
+
 @app.post("/api/v2/gates/approve")
 def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
     project_id = _validate_project_id(request.project_id)
     if request.stage not in GATE_STAGES:
         raise HTTPException(status_code=400, detail=f"unknown gate stage: {request.stage}")
+    if request.stage == "hero_gate":
+        preflight_errors = _storyboard_preflight_errors(project_id)
+        if preflight_errors:
+            raise HTTPException(
+                status_code=409,
+                detail={"message": "分镜安全预检未通过", "errors": preflight_errors},
+            )
     try:
         approved = engine.approve_gate(
             project_id,
@@ -820,13 +871,27 @@ def regen_hero(request: HeroRegenRequest) -> dict[str, Any]:
 def retry_task(request: TaskRetryRequest) -> dict[str, Any]:
     project_id = _validate_project_id(request.project_id)
     try:
-        status = engine.retry_failed_shot(
-            project_id,
-            request.shot_index,
-            db_path=_db_path(),
-            run_root=_run_root(project_id),
-            mock=request.mock,
-        )
+        if request.task_id is not None:
+            task = queue.get_task(request.task_id, db_path=_db_path())
+            if task.project_id != project_id:
+                raise ValueError("task does not belong to project")
+            queue.requeue_task(request.task_id, db_path=_db_path())
+            status = engine.run_until_blocked(
+                project_id,
+                db_path=_db_path(),
+                run_root=_run_root(project_id),
+                mock=request.mock,
+            )
+        elif request.shot_index is not None:
+            status = engine.retry_failed_shot(
+                project_id,
+                request.shot_index,
+                db_path=_db_path(),
+                run_root=_run_root(project_id),
+                mock=request.mock,
+            )
+        else:
+            raise ValueError("task_id or shot_index is required")
         if status.status not in {"awaiting_human", "failed", "blocked", "needs_review", "succeeded"}:
             status = engine.run_until_blocked(
                 project_id,
@@ -834,7 +899,7 @@ def retry_task(request: TaskRetryRequest) -> dict[str, Any]:
                 run_root=_run_root(project_id),
                 mock=request.mock,
             )
-    except ValueError as exc:
+    except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"engine": _engine_status(status), "project": _project_summary(project_id)}
 
@@ -927,6 +992,30 @@ def _tool_context(*, mock: bool = True) -> manual_import.ToolContext:
             "env": os.environ,
         }
     )
+
+
+def _storyboard_preflight_errors(project_id: str) -> list[dict[str, Any]]:
+    project = _project_summary(project_id)
+    shot_plan = _load_artifact(project_id, "shot_plan")
+    warming_cup = "\u6052\u6e29\u676f" in str(project.get("product_id") or "")
+    errors: list[dict[str, Any]] = []
+    for shot in shot_plan.get("shots", []):
+        number = int(shot.get("number") or 0)
+        prompt = str(shot.get("seedance_prompt") or "")
+        lowered = prompt.casefold()
+        missing: list[str] = []
+        if "white-background hero" not in lowered and "product appearance must match" not in lowered:
+            missing.append("产品身份参考")
+        if "continuity lock" not in lowered and "same location" not in lowered:
+            missing.append("场景与人物连续性")
+        if warming_cup:
+            if "separate products" not in lowered or "never insert" not in lowered:
+                missing.append("恒温杯与奶瓶分离规则")
+            if "fahrenheit" not in lowered or "never celsius" not in lowered:
+                missing.append("98°F 华氏温标规则")
+        if missing:
+            errors.append({"shot_index": number, "missing": missing})
+    return errors
 
 
 def _run_root(project_id: str) -> Path:

@@ -42,3 +42,32 @@ def test_agent_enum_rejects_unknown_agent(tmp_path: Path) -> None:
             agent="dummy",
             db_path=db_path,
         )
+
+
+def test_manual_requeue_resets_failed_task(tmp_path: Path) -> None:
+    db_path = tmp_path / "agentflow.db"
+    queue.init_db(db_path=db_path)
+    task_id = queue.enqueue_task(project_id="retry-demo", stage="analysis", agent="analysis", db_path=db_path)
+    claimed = queue.claim_task_by_id(task_id, "worker", db_path=db_path)
+    assert claimed is not None
+    queue.fail_task(task_id, "worker", {"category": "provider", "message": "failed"}, retryable=False, db_path=db_path)
+
+    retried = queue.requeue_task(task_id, db_path=db_path)
+
+    assert retried.status == "queued"
+    assert retried.attempt == 0
+    assert retried.error_json is None
+
+
+def test_startup_recovery_requeues_orphaned_running_task(tmp_path: Path) -> None:
+    db_path = tmp_path / "agentflow.db"
+    queue.init_db(db_path=db_path)
+    task_id = queue.enqueue_task(project_id="restart-demo", stage="analysis", agent="analysis", db_path=db_path)
+    assert queue.claim_task_by_id(task_id, "old-process", lease_seconds=1200, db_path=db_path)
+
+    recovered = queue.recover_running_tasks_on_startup(db_path=db_path)
+
+    assert recovered == 1
+    task = queue.get_task(task_id, db_path=db_path)
+    assert task.status == "queued"
+    assert task.error_json["category"] == "service_restarted"

@@ -266,6 +266,35 @@ textarea {
   margin-top: 12px;
 }
 
+.takeList,
+.takeCandidates {
+  display: grid;
+  gap: 10px;
+}
+
+.takeShot {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0 14px;
+}
+
+.takeCandidates {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.takeCandidate {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.takeCandidate video {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  max-height: 320px;
+  background: #111;
+  object-fit: contain;
+}
+
 .materialItem {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

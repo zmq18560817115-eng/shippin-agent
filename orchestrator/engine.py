@@ -468,6 +468,7 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
             "shot_index": task.payload_json.get("shot_index"),
             "asset_manifest": _load_artifact(root, "asset_manifest"),
             "attempt": task.attempt,
+            "take_id": task.payload_json.get("take_id"),
         },
         root,
         mock=mock,
@@ -486,7 +487,10 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
             return EngineRunStatus(task.project_id, "production", "running", "shot failed; continuing sibling shots")
         return EngineRunStatus(task.project_id, "production", "failed", "shot generation failed")
 
-    _merge_shot_report(root, task.project_id, result.data["shot_report"])
+    if task.payload_json.get("take_id"):
+        _merge_take_manifest(root, task.project_id, result.data["shot_report"])
+    else:
+        _merge_shot_report(root, task.project_id, result.data["shot_report"])
     queue.complete_task(task.id, "engine", result.data, db_path=db_path)
     cost_tracker.reconcile(
         project_id=task.project_id,
@@ -805,6 +809,32 @@ def _merge_shot_report(root: Path, project_id: str, new_report: dict[str, Any]) 
         "shots": [by_number[number] for number in sorted(by_number)],
     }
     artifacts.save_artifact(project_id, "shot_report", merged, run_root=root)
+
+
+def _merge_take_manifest(root: Path, project_id: str, new_report: dict[str, Any]) -> None:
+    path = root / "artifacts" / "take_manifest.json"
+    existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
+        "version": "2.0",
+        "project_id": project_id,
+        "shots": [],
+    }
+    by_number = {int(item["number"]): item for item in existing.get("shots", [])}
+    for shot in new_report.get("shots", []):
+        number = int(shot["number"])
+        take_id = str(shot.get("take_id") or "")
+        entry = by_number.setdefault(number, {"number": number, "selected_take_id": None, "takes": []})
+        takes = {str(item["take_id"]): item for item in entry.get("takes", [])}
+        takes[take_id] = {
+            "take_id": take_id,
+            "status": "needs_review",
+            "path": shot["path"],
+            "duration_sec": shot.get("duration_sec", 6),
+            "attempt": shot.get("attempt", 1),
+            "cost_cny": shot.get("cost_cny", 0),
+        }
+        entry["takes"] = [takes[key] for key in sorted(takes)]
+    existing["shots"] = [by_number[number] for number in sorted(by_number)]
+    artifacts.save_artifact(project_id, "take_manifest", existing, run_root=root)
 
 
 def _all_production_succeeded(

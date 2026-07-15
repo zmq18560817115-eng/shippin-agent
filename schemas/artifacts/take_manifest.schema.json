@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "take_manifest",
+  "type": "object",
+  "required": ["version", "project_id", "shots"],
+  "properties": {
+    "version": {"const": "2.0"},
+    "project_id": {"type": "string"},
+    "shots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "takes"],
+        "properties": {
+          "number": {"type": "integer", "minimum": 1},
+          "selected_take_id": {"type": ["string", "null"]},
+          "takes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["take_id", "status", "path", "duration_sec"],
+              "properties": {
+                "take_id": {"type": "string", "minLength": 1},
+                "status": {"enum": ["succeeded", "failed", "needs_review", "selected"]},
+                "path": {"type": "string", "minLength": 1},
+                "duration_sec": {"type": "number", "minimum": 1, "maximum": 15},
+                "attempt": {"type": "integer", "minimum": 0},
+                "cost_cny": {"type": "number", "minimum": 0}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

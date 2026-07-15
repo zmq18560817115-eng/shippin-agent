@@ -21,6 +21,7 @@ def test_artifact_schema_set_has_twelve_files() -> None:
         "shot_plan.schema.json",
         "shot_report.schema.json",
         "strategy_brief.schema.json",
+        "take_manifest.schema.json",
     ]
     for path in schema_files:
         Draft7Validator.check_schema(artifacts.load_schema(path.stem.removesuffix(".schema")))

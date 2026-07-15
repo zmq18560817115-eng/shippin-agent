@@ -21,6 +21,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     asset_manifest = payload.get("asset_manifest") or {}
     artifacts.validate_artifact("asset_manifest", asset_manifest)
     number = int(shot.get("number") or payload.get("shot_index") or 1)
+    take_id = str(payload.get("take_id") or "").strip()
 
     fail_selector = str(context.env.get("SEEDANCE_MOCK_FAIL", ""))
     if context.mock and fail_selector in {str(number), f"shot{number}", f"shot-{number}"}:
@@ -33,7 +34,8 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     run_root = context.run_root or (ROOT / "data" / "runs" / project_id)
     shots_dir = run_root / "shots"
     shots_dir.mkdir(parents=True, exist_ok=True)
-    output = shots_dir / f"shot-{number:03d}.mp4"
+    suffix = f"-take-{take_id.casefold()}" if take_id else ""
+    output = shots_dir / f"shot-{number:03d}{suffix}.mp4"
     if context.mock:
         output.write_bytes(b"mock seedance mp4\n")
         provider_meta = {"provider": "mock"}
@@ -58,6 +60,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "cost_cny": context.pricing_for("seedance_shot") if not context.mock else 0.0,
                 "attempt": int(payload.get("attempt") or 1),
                 "duration_sec": _duration_sec(shot),
+                **({"take_id": take_id} if take_id else {}),
             }
         ],
     }
@@ -69,6 +72,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "tool": "seedance_shot",
             "mock": context.mock,
             "shot_index": number,
+            "take_id": take_id or None,
             "seedance_source": asset_manifest.get("seedance_source"),
             "reference_paths": shot.get("reference_paths") or [],
             **provider_meta,
