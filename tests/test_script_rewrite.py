@@ -19,3 +19,6 @@ def test_real_script_contract_targets_30_seconds() -> None:
         "18-24s",
         "24-30s",
     ]
+    assert all(section["scene_zh"] for section in sections)
+    assert all(section["action_zh"] for section in sections)
+    assert all(section["story_beat_zh"] for section in sections)

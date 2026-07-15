@@ -93,6 +93,7 @@ class TikTokIntakeRunRequest(BaseModel):
     url: str
     product_id: str = "便携恒温杯"
     transcript_text: str | None = None
+    source_item: dict[str, Any] | None = None
     project_id: str | None = None
     mock: bool = True
 
@@ -416,6 +417,7 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
                 ensure_ascii=False,
             ),
             "asset_intake": intake,
+            **_discovery_meta_updates(request.source_item),
         },
         root,
     )
@@ -434,6 +436,29 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
         mock=request.mock,
     )
     status = engine.run_until_blocked(project_id, db_path=_db_path(), run_root=run_root, mock=request.mock)
+    analysis = _load_artifact_or_none(project_id, "analysis_report") or {}
+    if analysis:
+        meta = manual_import.update_material_meta(
+            material_id,
+            {
+                "processing_status": "analyzed",
+                "ai_analysis_json": json.dumps(
+                    {
+                        "capture_status": capture.get("status"),
+                        "transcript_source": capture.get("transcript_source"),
+                        "frame_paths": capture.get("frame_paths") or [],
+                        "analysis": {
+                            "hook_3s": analysis.get("hook_3s"),
+                            "structure": analysis.get("structure") or [],
+                            "pacing": analysis.get("pacing") or [],
+                            "keyframes": analysis.get("keyframes") or [],
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            root,
+        )
     queue.record_event(
         project_id=project_id,
         event_type="collector.tiktok_active_capture",
@@ -481,6 +506,7 @@ def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
                     url=url,
                     product_id=request.product_id,
                     transcript_text=str(item.get("caption") or "") or None,
+                    source_item=item,
                     mock=request.mock,
                 )
             )
@@ -512,6 +538,27 @@ def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
         "results": results,
         "failures": failures,
     }
+
+
+def _discovery_meta_updates(item: dict[str, Any] | None) -> dict[str, Any]:
+    item = item or {}
+    return {
+        "video_title": str(item.get("title") or item.get("caption") or "")[:300],
+        "caption": str(item.get("caption") or "")[:2000],
+        "author_name": str(item.get("author_name") or item.get("author") or "")[:200],
+        "author_url": str(item.get("author_url") or "")[:1000],
+        "cover_url": str(item.get("cover_url") or item.get("thumbnail_url") or "")[:2000],
+        "like_count": _nonnegative_int(item.get("like_count")),
+        "comment_count": _nonnegative_int(item.get("comment_count")),
+        "share_count": _nonnegative_int(item.get("share_count")),
+    }
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 @app.get("/api/v2/collect/library")

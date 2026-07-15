@@ -8,6 +8,7 @@
     "source_url": {"type": "string", "minLength": 1},
     "video_url": {"type": "string"},
     "video_id": {"type": "string", "minLength": 1},
+    "video_title": {"type": "string"},
     "caption": {"type": "string"},
     "author_name": {"type": "string"},
     "author_url": {"type": "string"},

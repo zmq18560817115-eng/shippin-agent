@@ -7,6 +7,7 @@ const state = {
   selectedId: null,
   selected: null,
   scriptCopy: null,
+  scriptBreakdown: null,
   reviewReport: null,
   shotPlan: null,
   assetManifest: null,
@@ -519,22 +520,44 @@ function renderMaterialLibrary() {
 
 function renderMaterialItem(item) {
   const meta = item.material_meta || {};
-  const caption = meta.caption || meta.source_url || "";
+  const title = meta.video_title || meta.caption || meta.source_url || "未命名 TikTok 素材";
+  const caption = meta.caption || "未取得视频简介";
+  const analysis = materialAnalysisSummary(meta);
+  const sourceUrl = meta.source_url || meta.video_url || "";
+  const cover = meta.cover_url
+    ? `<img class="materialCover" src="${escapeAttr(meta.cover_url)}" alt="${escapeAttr(title)} 封面" loading="lazy" />`
+    : `<div class="materialCover placeholder">无封面</div>`;
   return `
     <article class="materialItem">
-      <div>
-        <strong>${escapeHtml(item.material_id)}</strong>
-        <span>${escapeHtml(meta.source_keyword || "manual_tiktok")} · ${escapeHtml(item.status || "raw")}</span>
+      ${cover}
+      <div class="materialBody">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(meta.author_name || "未知创作者")} · ${escapeHtml(meta.source_keyword || "manual_tiktok")} · ${escapeHtml(meta.processing_status || item.status || "待处理")}</span>
         <p>${escapeHtml(caption)}</p>
+        <p class="materialAnalysis">${escapeHtml(analysis)}</p>
+        ${sourceUrl ? `<a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener">打开 TikTok 来源</a>` : ""}
       </div>
       <button type="button" data-start-material="${escapeAttr(item.material_id)}">发起项目</button>
     </article>
   `;
 }
 
+function materialAnalysisSummary(meta) {
+  try {
+    const analysis = JSON.parse(meta.ai_analysis_json || "{}").analysis || {};
+    const structure = Array.isArray(analysis.structure) ? analysis.structure.join(" - ") : "";
+    return analysis.hook_3s
+      ? `已分析：3 秒钩子“${analysis.hook_3s}”；结构：${structure || "待补充"}`
+      : "已采集，等待分析拆解";
+  } catch {
+    return "已采集，等待分析拆解";
+  }
+}
+
 async function loadSelectedProject(projectId) {
   state.selected = await api(`/api/v2/pipeline/${encodeURIComponent(projectId)}`);
   state.scriptCopy = null;
+  state.scriptBreakdown = null;
   state.reviewReport = null;
   state.shotPlan = null;
   state.assetManifest = null;
@@ -543,6 +566,7 @@ async function loadSelectedProject(projectId) {
   state.runReport = null;
 
   state.scriptCopy = await safeArtifact(projectId, "script_copy");
+  state.scriptBreakdown = await safeArtifact(projectId, "script_breakdown");
   state.reviewReport = await safeArtifact(projectId, "review_report");
   state.shotPlan = await safeArtifact(projectId, "shot_plan");
   state.assetManifest = await safeArtifact(projectId, "asset_manifest");
@@ -737,9 +761,10 @@ function renderScriptGate() {
       <span>${Object.entries(scores).map(([key, value]) => `${escapeHtml(key)} ${escapeHtml(String(value))}`).join(" · ")}</span>
       <span>${comments.map(escapeHtml).join(" · ")}</span>
     </div>
+    ${state.scriptBreakdown ? `<div class="scriptBreakdown"><strong>脚本拆解</strong><span>${escapeHtml((state.scriptBreakdown.beats || []).map((beat) => `${beat.timing} ${beat.role}：${beat.intent}`).join("；"))}</span></div>` : ""}
     <div class="tableWrap">
-      <table class="scriptTable">
-        <thead><tr><th>#</th><th>角色</th><th>时长</th><th>英文台词</th></tr></thead>
+      <table class="scriptTable narrativeTable">
+        <thead><tr><th>#</th><th>角色</th><th>时长</th><th>场景与环境</th><th>动作与剧情推进</th><th>中文旁白</th></tr></thead>
         <tbody>
           ${state.scriptCopy.sections.map(renderScriptRow).join("")}
         </tbody>
@@ -761,14 +786,28 @@ function renderScriptGate() {
 }
 
 function renderScriptRow(section) {
+  const fallback = scriptNarrativeFallback(section.number);
   return `
     <tr>
       <td>${section.number}</td>
       <td>${escapeHtml(section.role || "")}</td>
       <td><input data-section="${section.number}" data-field="timing" value="${escapeAttr(section.timing || "")}" /></td>
+      <td><textarea class="sceneField" data-section="${section.number}" data-field="scene_zh">${escapeHtml(section.scene_zh || fallback.scene)}</textarea></td>
+      <td><textarea class="actionField" data-section="${section.number}" data-field="action_zh">${escapeHtml(section.action_zh || fallback.action)}</textarea><textarea class="storyField" data-section="${section.number}" data-field="story_beat_zh">${escapeHtml(section.story_beat_zh || fallback.beat)}</textarea></td>
       <td><textarea class="copyField" data-section="${section.number}" data-field="voiceover_zh">${escapeHtml(section.voiceover_zh || section.subtitle_zh || section.voiceover_en || "")}</textarea></td>
     </tr>
   `;
+}
+
+function scriptNarrativeFallback(number) {
+  const defaults = {
+    1: { scene: "夜间卧室、暖光、床头柜与同一位照护者。", action: "建立喂养准备场景。", beat: "让观众识别熟悉时刻。" },
+    2: { scene: "保持同一场景与人物状态，奶瓶在旁等待。", action: "用停顿和准备动作体现等待。", beat: "具体化痛点，为方案出现建立动机。" },
+    3: { scene: "恒温杯与独立干净奶瓶并排，产品外观匹配身份图。", action: "奶液入杯，准备后经出液口倒入独立奶瓶。", beat: "以正确使用流程完成解决方案转折。" },
+    4: { scene: "床头柜细节或同一人物的随身包，光线与服装一致。", action: "展示收纳和允许的产品细节。", beat: "用细节证明适配情境。" },
+    5: { scene: "回到整洁床头柜全景，产品与准备完成的奶瓶同框。", action: "照护者收好物品并停留在产品上。", beat: "从混乱回到有序，自然收束。" },
+  };
+  return defaults[number] || defaults[1];
 }
 
 function collectScriptDraft() {
@@ -776,9 +815,15 @@ function collectScriptDraft() {
   draft.sections.forEach((section) => {
     const timing = $(`[data-section="${section.number}"][data-field="timing"]`);
     const voiceover = $(`[data-section="${section.number}"][data-field="voiceover_zh"]`);
+    const scene = $(`[data-section="${section.number}"][data-field="scene_zh"]`);
+    const action = $(`[data-section="${section.number}"][data-field="action_zh"]`);
+    const storyBeat = $(`[data-section="${section.number}"][data-field="story_beat_zh"]`);
     section.timing = timing.value.trim();
     section.voiceover_zh = voiceover.value.trim();
     section.subtitle_zh = section.voiceover_zh;
+    section.scene_zh = scene.value.trim();
+    section.action_zh = action.value.trim();
+    section.story_beat_zh = storyBeat.value.trim();
   });
   return draft;
 }

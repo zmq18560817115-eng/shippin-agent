@@ -189,8 +189,11 @@ def _normalize_items(raw_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         items.append(
             {
                 "url": url,
+                "title": str(raw.get("title") or raw.get("text") or raw.get("description") or ""),
                 "caption": str(raw.get("text") or raw.get("description") or raw.get("title") or ""),
                 "author_name": str(raw.get("uploader") or raw.get("channel") or ""),
+                "author_url": str(raw.get("uploader_url") or raw.get("channel_url") or ""),
+                "cover_url": str(raw.get("thumbnail") or raw.get("thumbnail_url") or raw.get("cover") or ""),
                 "like_count": raw.get("diggCount") or raw.get("like_count") or 0,
                 "comment_count": raw.get("commentCount") or raw.get("comment_count") or 0,
                 "share_count": raw.get("shareCount") or raw.get("repost_count") or 0,
@@ -209,6 +212,7 @@ def _mock_items(target: str, limit: int) -> list[dict[str, Any]]:
     return [
         {
             "url": f"https://www.tiktok.com/@crawler-demo/video/{base + index + 1}",
+            "title": f"Mock crawler result {index + 1}",
             "caption": f"Controlled crawler result {index + 1} for {target}",
             "author_name": "crawler-demo",
         }

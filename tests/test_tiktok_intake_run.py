@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -31,8 +32,9 @@ def test_tiktok_intake_runs_to_script_gate_in_mock_mode(tmp_path: Path, monkeypa
     assert payload["capture"]["transcript_source"] == "operator"
     assert payload["warnings"] == []
     meta = manual_import.load_material_meta(payload["material"]["material_id"], library_root)
-    assert meta["processing_status"] == "metadata_only"
+    assert meta["processing_status"] == "analyzed"
     assert meta["transcript_text"].startswith("A 30 second")
+    assert json.loads(meta["ai_analysis_json"])["analysis"]["hook_3s"]
     project_root = runs_root / payload["project_id"]
     assert (project_root / "artifacts" / "research_brief.json").exists()
     assert (project_root / "artifacts" / "strategy_brief.json").exists()

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -140,6 +141,10 @@ def test_crawl_endpoint_creates_projects_for_discovered_videos(tmp_path: Path, m
     assert payload["completed_count"] == 2
     assert payload["failed_count"] == 0
     assert all(item["stage"] == "script_gate" for item in payload["results"])
+    material = client.get(f"/api/v2/collect/materials/{payload['results'][0]['material_id']}").json()
+    analysis = json.loads(material["ai_analysis_json"])["analysis"]
+    assert material["video_title"].startswith("Mock crawler result")
+    assert analysis["hook_3s"]
     project = client.get(f"/api/v2/pipeline/{payload['results'][0]['project_id']}").json()
     collector = next(node for node in project["nodes"] if node["agent"] == "collector")
     assert collector["status"] == "succeeded"

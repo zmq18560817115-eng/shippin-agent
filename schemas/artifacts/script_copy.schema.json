@@ -29,6 +29,10 @@
           "role": {"enum": ["钩子", "痛点", "方案", "证明", "行动号召"]},
           "timing": {"type": "string", "pattern": "^\\d+-\\d+s$"},
           "voiceover_en": {"type": "string", "minLength": 2, "maxLength": 220},
+          "voiceover_zh": {"type": "string"},
+          "scene_zh": {"type": "string"},
+          "action_zh": {"type": "string"},
+          "story_beat_zh": {"type": "string"},
           "subtitle_en": {"type": "string"},
           "selling_points": {"type": "array", "items": {"type": "string"}}
         }

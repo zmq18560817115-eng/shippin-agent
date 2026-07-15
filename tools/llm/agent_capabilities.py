@@ -96,7 +96,14 @@ def script_breakdown(payload: dict[str, Any], context: ToolContext) -> ToolResul
                 "role": str(section.get("role") or ""),
                 "voiceover": str(section.get("voiceover_en") or ""),
                 "intent": _intent(str(section.get("role") or "")),
-                "visual_requirement": "Use approved product assets and preserve product, scene, and character continuity.",
+                "visual_requirement": " ".join(
+                    value for value in (
+                        str(section.get("scene_zh") or ""),
+                        str(section.get("action_zh") or ""),
+                        str(section.get("story_beat_zh") or ""),
+                        "使用已批准产品素材，并保持人物、场景与产品连续性。",
+                    ) if value
+                ),
                 "human_editable": True,
             }
         )

@@ -125,7 +125,11 @@ def update_material_meta(
 ) -> dict[str, Any]:
     root = Path(library_root) if library_root is not None else default_library_root()
     payload = load_material_meta(material_id, root)
-    allowed = {"processing_status", "transcript_text", "ai_analysis_json", "local_video_path", "asset_intake"}
+    allowed = {
+        "processing_status", "transcript_text", "ai_analysis_json", "local_video_path", "asset_intake",
+        "video_title", "caption", "author_name", "author_url", "cover_url",
+        "like_count", "comment_count", "share_count",
+    }
     unknown = set(updates) - allowed
     if unknown:
         raise ValueError(f"unsupported material metadata fields: {', '.join(sorted(unknown))}")
@@ -229,6 +233,7 @@ def _material_meta(
         "source_url": url,
         "video_url": str(item.get("video_url") or url),
         "video_id": video_id,
+        "video_title": str(item.get("video_title") or item.get("title") or item.get("caption") or ""),
         "caption": str(item.get("caption") or ""),
         "author_name": str(item.get("author_name") or item.get("author") or ""),
         "author_url": str(item.get("author_url") or ""),

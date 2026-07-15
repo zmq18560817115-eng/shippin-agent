@@ -445,13 +445,33 @@ textarea {
 
 .materialItem {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
   background: #fbfcfb;
+}
+
+.materialCover {
+  width: 112px;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #edf1f4;
+}
+
+.materialCover.placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.materialBody {
+  min-width: 0;
 }
 
 .materialItem strong,
@@ -476,6 +496,17 @@ textarea {
   font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.materialItem a {
+  display: inline-block;
+  margin-top: 7px;
+  color: var(--teal);
+  font-size: 13px;
+}
+
+.materialAnalysis {
+  color: var(--muted) !important;
 }
 
 .productLibrary {
@@ -702,6 +733,39 @@ pre {
 
 .scriptTable textarea.promptField {
   min-height: 180px;
+}
+
+.scriptTable textarea.sceneField,
+.scriptTable textarea.actionField,
+.scriptTable textarea.storyField {
+  width: 100%;
+  min-height: 86px;
+}
+
+.scriptTable textarea.storyField {
+  min-height: 54px;
+  margin-top: 7px;
+}
+
+.narrativeTable {
+  min-width: 1260px;
+  table-layout: fixed;
+}
+
+.narrativeTable th:nth-child(4),
+.narrativeTable td:nth-child(4),
+.narrativeTable th:nth-child(5),
+.narrativeTable td:nth-child(5) {
+  width: 29%;
+}
+
+.scriptBreakdown {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .scriptTable th:first-child,

@@ -97,6 +97,7 @@ def _to_import_item(url: str, metadata: dict[str, Any]) -> dict[str, Any]:
     caption = str(metadata.get("title") or "")
     return {
         "url": url,
+        "video_title": caption,
         "caption": caption,
         "author_name": str(metadata.get("author_name") or ""),
         "author_url": str(metadata.get("author_url") or ""),
