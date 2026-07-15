@@ -31,6 +31,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {"start_s": 24, "end_s": 30, "role": "行动号召"},
         ],
         "keyframes": [],
+        "shot_breakdown": _fallback_shot_breakdown(),
         "fingerprint": "mock-analysis",
     }
     artifacts.validate_artifact("analysis_report", report)
@@ -58,8 +59,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "user",
                 "content": (
-                    "Create an analysis_report JSON object with fields: hook_3s, structure, "
-                    "voiceover_text, pacing, keyframes, fingerprint for a 30-second video. Product: portable warming cup. "
+                    "Create an analysis_report JSON object with fields: hook_3s, structure, voiceover_text, pacing, keyframes, shot_breakdown, fingerprint for a 30-second video. "
+                    "shot_breakdown must contain 5 objects with number, timing, visual, action, purpose, transition. Product: portable warming cup. "
                     "Use only generic structure insights from the source. Source text/link: "
                     f"{transcript[:1500]}"
                 ),
@@ -76,6 +77,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "voiceover_text": _string(response.get("voiceover_text"), transcript),
         "pacing": _normalize_pacing(response.get("pacing")),
         "keyframes": _string_list(response.get("keyframes"), []),
+        "shot_breakdown": _normalize_shot_breakdown(response.get("shot_breakdown")),
         "fingerprint": _string(response.get("fingerprint"), f"ark-{meta.get('response_id') or 'analysis'}"),
     }
     artifacts.validate_artifact("analysis_report", report)
@@ -113,6 +115,36 @@ def _normalize_pacing(value: Any) -> list[dict[str, Any]]:
         {"start_s": 12, "end_s": 18, "role": "方案"},
         {"start_s": 18, "end_s": 24, "role": "证明"},
         {"start_s": 24, "end_s": 30, "role": "行动号召"},
+    ]
+
+
+def _normalize_shot_breakdown(value: Any) -> list[dict[str, Any]]:
+    fallback = _fallback_shot_breakdown()
+    if not isinstance(value, list):
+        return fallback
+    result: list[dict[str, Any]] = []
+    for index, item in enumerate(value[:5]):
+        if not isinstance(item, dict):
+            continue
+        base = fallback[index]
+        result.append({
+            "number": index + 1,
+            "timing": _string(item.get("timing"), base["timing"]),
+            "visual": _string(item.get("visual"), base["visual"]),
+            "action": _string(item.get("action"), base["action"]),
+            "purpose": _string(item.get("purpose"), base["purpose"]),
+            "transition": _string(item.get("transition"), base["transition"]),
+        })
+    return result if len(result) == 5 else fallback
+
+
+def _fallback_shot_breakdown() -> list[dict[str, str]]:
+    return [
+        {"number": 1, "timing": "0-6s", "visual": "夜间喂养准备环境与产品位置", "action": "照护者把恒温杯放在床头柜", "purpose": "建立场景和问题", "transition": "从环境切入产品"},
+        {"number": 2, "timing": "6-12s", "visual": "同一照护者面对等待中的奶液和奶瓶", "action": "查看等待状态并准备奶瓶", "purpose": "呈现等待痛点", "transition": "承接上一镜头的准备动作"},
+        {"number": 3, "timing": "12-18s", "visual": "恒温杯与独立奶瓶并排特写", "action": "将奶液倒入恒温杯，不放入整只奶瓶", "purpose": "引入正确方案", "transition": "从痛点切到产品"},
+        {"number": 4, "timing": "18-24s", "visual": "恒温杯杯嘴朝向独立干净奶瓶", "action": "从圆形出液口倒入奶瓶，温度只能显示98°F", "purpose": "完成使用证明", "transition": "延续同一双手和同一台面"},
+        {"number": 5, "timing": "24-30s", "visual": "回到同一卧室和床头柜的稳定产品画面", "action": "照护者收好用品并停留在产品上", "purpose": "形成结果和行动号召", "transition": "回到开场构图收束"},
     ]
 
 

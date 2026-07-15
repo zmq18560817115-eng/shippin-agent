@@ -127,7 +127,7 @@ def update_material_meta(
     payload = load_material_meta(material_id, root)
     allowed = {
         "processing_status", "transcript_text", "ai_analysis_json", "local_video_path", "asset_intake",
-        "source_mode",
+        "source_mode", "local_cover_path",
         "video_title", "caption", "author_name", "author_url", "cover_url",
         "like_count", "comment_count", "share_count",
     }
@@ -253,6 +253,7 @@ def _material_meta(
         "transcript_text": str(item.get("transcript_text") or ""),
         "ai_analysis_json": str(item.get("ai_analysis_json") or ""),
         "local_video_path": str(item.get("local_video_path") or ""),
+        "local_cover_path": str(item.get("local_cover_path") or ""),
         "asset_intake": {
             "asset_type": "reference_only",
             "approval_status": "needs_review",

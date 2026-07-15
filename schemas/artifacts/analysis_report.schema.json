@@ -25,6 +25,21 @@
       }
     },
     "keyframes": {"type": "array", "items": {"type": "string"}},
+    "shot_breakdown": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "timing", "visual", "action", "purpose"],
+        "properties": {
+          "number": {"type": "integer", "minimum": 1},
+          "timing": {"type": "string"},
+          "visual": {"type": "string"},
+          "action": {"type": "string"},
+          "purpose": {"type": "string"},
+          "transition": {"type": "string"}
+        }
+      }
+    },
     "fingerprint": {"type": "string"}
   }
 }

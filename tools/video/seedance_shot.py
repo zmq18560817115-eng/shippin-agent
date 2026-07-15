@@ -36,7 +36,11 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     shots_dir.mkdir(parents=True, exist_ok=True)
     suffix = f"-take-{take_id.casefold()}" if take_id else ""
     output = shots_dir / f"shot-{number:03d}{suffix}.mp4"
-    if context.mock:
+    reference_path = Path(str(shot.get("reference_path") or ""))
+    if reference_path.is_file():
+        output = reference_path
+        provider_meta = {"provider": "reference_video", "reference_path": reference_path.as_posix()}
+    elif context.mock:
         output.write_bytes(b"mock seedance mp4\n")
         provider_meta = {"provider": "mock"}
     else:

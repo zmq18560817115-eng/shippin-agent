@@ -419,6 +419,7 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
             "processing_status": "captured" if capture.get("local_video_path") else "metadata_only",
             "transcript_text": str(capture.get("transcript_text") or "")[:12000],
             "local_video_path": str(capture.get("local_video_path") or ""),
+            "local_cover_path": str(capture.get("local_cover_path") or ""),
             "ai_analysis_json": json.dumps(
                 {
                     "capture_status": capture.get("status"),
@@ -464,6 +465,7 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
                             "structure": analysis.get("structure") or [],
                             "pacing": analysis.get("pacing") or [],
                             "keyframes": analysis.get("keyframes") or [],
+                            "shot_breakdown": analysis.get("shot_breakdown") or [],
                         },
                     },
                     ensure_ascii=False,
@@ -598,6 +600,21 @@ def collect_material(material_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/v2/collect/materials/{material_id}/file/{relative_path:path}")
+def collect_material_file(material_id: str, relative_path: str) -> FileResponse:
+    """Serve only files stored inside one material directory."""
+    root = _material_library_root()
+    material_dir = (root / material_id).resolve()
+    target = (material_dir / relative_path).resolve()
+    try:
+        target.relative_to(material_dir)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid material file path") from exc
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="material file not found")
+    return FileResponse(target)
 
 
 @app.post("/api/v2/pipeline/run")

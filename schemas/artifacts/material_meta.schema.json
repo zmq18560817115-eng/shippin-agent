@@ -27,5 +27,6 @@
     "transcript_text": {"type": "string"},
     "ai_analysis_json": {"type": "string"},
     "local_video_path": {"type": "string"}
+    ,"local_cover_path": {"type": "string"}
   }
 }

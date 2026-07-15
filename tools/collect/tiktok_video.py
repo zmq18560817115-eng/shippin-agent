@@ -30,6 +30,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "status": "mock",
                 "local_video_path": "",
+                "local_cover_path": "",
                 "transcript_text": supplied_transcript,
                 "transcript_source": "operator" if supplied_transcript else "metadata_only",
                 "frame_paths": [],
@@ -46,6 +47,9 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "--no-playlist",
         "--restrict-filenames",
         "--write-info-json",
+        "--write-thumbnail",
+        "--convert-thumbnails",
+        "jpg",
         "--write-subs",
         "--write-auto-subs",
         "--sub-langs",
@@ -71,11 +75,13 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     if video_path is None:
         return ToolResult.failure("provider", "yt-dlp completed without a video file")
     subtitle_text = supplied_transcript or _read_subtitles(material_dir)
+    cover_path = _find_cover(material_dir)
     frame_paths = _extract_frames(video_path, material_dir / "frames")
     return ToolResult.success(
         {
             "status": "downloaded",
             "local_video_path": video_path.as_posix(),
+            "local_cover_path": cover_path.as_posix() if cover_path else "",
             "transcript_text": subtitle_text,
             "transcript_source": "operator" if supplied_transcript else ("subtitle" if subtitle_text else "missing"),
             "frame_paths": [path.as_posix() for path in frame_paths],
@@ -88,6 +94,11 @@ def _find_video(material_dir: Path) -> Path | None:
     excluded = {".json", ".vtt", ".srt", ".part", ".ytdl"}
     files = [path for path in material_dir.glob("source.*") if path.suffix.casefold() not in excluded]
     return max(files, key=lambda path: path.stat().st_size) if files else None
+
+
+def _find_cover(material_dir: Path) -> Path | None:
+    covers = [path for path in material_dir.glob("source.*") if path.suffix.casefold() in {".jpg", ".jpeg", ".png", ".webp"}]
+    return max(covers, key=lambda path: path.stat().st_size) if covers else None
 
 
 def _read_subtitles(material_dir: Path) -> str:

@@ -564,8 +564,11 @@ function renderMaterialItem(item) {
   const caption = meta.caption || "未取得视频简介";
   const analysis = materialAnalysisSummary(meta);
   const sourceUrl = meta.source_url || meta.video_url || "";
-  const cover = meta.cover_url
-    ? `<img class="materialCover" src="${escapeAttr(meta.cover_url)}" alt="${escapeAttr(title)} 封面" loading="lazy" />`
+  const localCover = meta.local_cover_path
+    ? `/api/v2/collect/materials/${encodeURIComponent(item.material_id)}/file/${encodeURIComponent(String(meta.local_cover_path).split(/[\\/]/).pop())}`
+    : "";
+  const cover = localCover || meta.cover_url
+    ? `<img class="materialCover" src="${escapeAttr(localCover || meta.cover_url)}" alt="${escapeAttr(title)} 封面" loading="lazy" />`
     : `<div class="materialCover placeholder">无封面</div>`;
   return `
     <article class="materialItem">

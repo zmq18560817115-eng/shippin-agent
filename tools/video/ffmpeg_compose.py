@@ -46,12 +46,16 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         _compose_real(shot_paths, output, ffmpeg)
         ffprobe = _probe_media(output, ffmpeg)
 
+    review_frame_dir = output_dir / "review_frames"
+    review_frames = _extract_review_frames(output, review_frame_dir, _find_ffmpeg()) if output.is_file() else []
+
     render_report = {
         "version": "2.0",
         "project_id": project_id,
         "output_path": output.as_posix(),
         "ffprobe": ffprobe,
         "input_probes": input_probes,
+        "review_frame_paths": [path.as_posix() for path in review_frames],
     }
     artifacts.validate_artifact("render_report", render_report)
     return ToolResult.success(
@@ -82,7 +86,7 @@ def _compose_real(paths: list[Path], output: Path, ffmpeg: str | None) -> None:
     normalized_dir = output.parent / "normalized-shots"
     normalized_dir.mkdir(parents=True, exist_ok=True)
     normalized = [
-        _normalize_shot(path, normalized_dir / f"shot-{index:03d}.mp4", ffmpeg)
+        _normalize_shot(path, normalized_dir / f"shot-{index:03d}.mp4", ffmpeg, float((shot_report.get("shots") or [])[index - 1].get("duration_sec") or 6))
         for index, path in enumerate(paths, start=1)
     ]
     concat_file = output.parent / "concat-list.txt"
@@ -108,14 +112,14 @@ def _compose_real(paths: list[Path], output: Path, ffmpeg: str | None) -> None:
         raise RuntimeError(f"ffmpeg compose failed: {completed.stderr[-1200:]}")
 
 
-def _normalize_shot(source: Path, output: Path, ffmpeg: str) -> Path:
+def _normalize_shot(source: Path, output: Path, ffmpeg: str, duration_sec: float = 6) -> Path:
     if not source.is_file():
         raise FileNotFoundError(f"shot video not found: {source}")
     video_filter = (
         "scale=1080:1920:force_original_aspect_ratio=decrease,"
         "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p"
     )
-    command = [ffmpeg, "-y", "-i", source.as_posix()]
+    command = [ffmpeg, "-y", "-i", source.as_posix(), "-t", str(max(1, duration_sec))]
     if _media_has_audio(source, ffmpeg):
         command += [
             "-vf", video_filter, "-c:v", "libx264", "-preset", "medium", "-crf", "20",
@@ -200,3 +204,15 @@ def _parse_fps(text: str) -> float:
 def _duration_from_shots(shot_report: dict[str, Any]) -> float:
     shots = shot_report.get("shots") or []
     return float(sum(float(shot.get("duration_sec") or 6) for shot in shots) or 6)
+
+
+def _extract_review_frames(output: Path, frame_dir: Path, ffmpeg: str | None) -> list[Path]:
+    if not ffmpeg:
+        return []
+    frame_dir.mkdir(parents=True, exist_ok=True)
+    target = frame_dir / "frame-%02d.jpg"
+    completed = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-i", output.as_posix(), "-vf", "fps=1/6,scale=360:-2", "-frames:v", "6", "-y", target.as_posix()],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+    )
+    return sorted(frame_dir.glob("frame-*.jpg")) if completed.returncode == 0 else []

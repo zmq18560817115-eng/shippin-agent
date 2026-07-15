@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from libshared import artifacts, checkpoint
-from libshared.paths import ROOT, RUNS_ROOT
+from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, queue
 from tools import tool_registry
+from tools.collect import manual_import
 from tools.collect import product_library
 
 
@@ -410,15 +411,51 @@ def _run_storyboard(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         root,
         mock=mock,
     )
+    shot_plan = _attach_reference_footage(task.project_id, result.data["shot_plan"], db_path=db_path)
     return _complete_with_artifact(
         task,
         root,
         "shot_plan",
-        result.data["shot_plan"],
+        shot_plan,
         next_stage="asset",
         db_path=db_path,
         script_copy=script_copy,
     )
+
+
+def _attach_reference_footage(project_id: str, shot_plan: dict[str, Any], *, db_path: str | Path | None) -> dict[str, Any]:
+    """Use one downloaded source clip as a traceable mixed-timeline candidate."""
+    video_path = _source_material_video(project_id, db_path=db_path)
+    if not video_path:
+        return shot_plan
+    shots = shot_plan.get("shots") or []
+    if len(shots) >= 2:
+        shots[1]["footage_type"] = "REFERENCE_VIDEO"
+        shots[1]["reference_path"] = video_path
+        shots[1]["reference_reason"] = "Downloaded TikTok source used for pacing/context; verify rights and product safety before delivery."
+    return shot_plan
+
+
+def _source_material_video(project_id: str, *, db_path: str | Path | None) -> str:
+    with queue.get_conn(db_path) as conn:
+        row = conn.execute("SELECT payload_json FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if row is None:
+        return ""
+    try:
+        payload = json.loads(str(row["payload_json"] or "{}"))
+    except json.JSONDecodeError:
+        return ""
+    material_id = str(payload.get("source_material_id") or "")
+    if not material_id:
+        return ""
+    configured = os.environ.get("VAF_MATERIAL_LIBRARY_ROOT")
+    library_root = Path(configured) if configured else DATA_ROOT / "01_素材库" / "对标视频" / "manual_import"
+    try:
+        meta = manual_import.load_material_meta(material_id, library_root)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError):
+        return ""
+    path = Path(str(meta.get("local_video_path") or ""))
+    return path.as_posix() if path.is_file() else ""
 
 
 def _run_asset(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:
@@ -622,6 +659,7 @@ def _build_final_qa_report(
         "output_file_present": output_path.is_file() and output_path.stat().st_size > 0,
         "output_file_playable": _is_playable_mp4(output_path),
         "source_clips_vertical": _source_clips_vertical(render_report),
+        "review_frames_sampled": len(render_report.get("review_frame_paths") or []) >= 3,
         "human_visual_review": _approved_visual_review(visual_review),
     }
     failed = [name for name, passed in checks.items() if not passed]

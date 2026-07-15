@@ -15,6 +15,7 @@ def _inputs(tmp_path: Path, resolution: str = "1080x1920") -> tuple[dict, dict, 
             {"duration": 6.0, "resolution": "1080x1920", "fps": 30, "audio_streams": 1}
             for _ in range(5)
         ],
+        "review_frame_paths": ["frame-01.jpg", "frame-02.jpg", "frame-03.jpg"],
     }
     plan = {
         "shots": [
@@ -62,6 +63,7 @@ def test_final_qa_accepts_existing_workspace_relative_output(tmp_path: Path, mon
         "output_path": output.as_posix(),
         "ffprobe": {"duration": 30, "resolution": "1080x1920", "fps": 30, "audio_streams": 1},
         "input_probes": [{"duration": 30, "resolution": "1080x1920", "fps": 30, "audio_streams": 1}],
+        "review_frame_paths": ["frame-01.jpg", "frame-02.jpg", "frame-03.jpg"],
     }
     plan = {"shots": [{"number": 1, "camera_motion": {"duration_sec": 30}}]}
     shots = {"shots": [{"number": 1, "status": "succeeded"}]}
