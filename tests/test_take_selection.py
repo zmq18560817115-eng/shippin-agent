@@ -31,13 +31,17 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
             "/api/v2/takes/select",
             json={"project_id": "take-demo", "shot_index": 1, "take_id": "B"},
         )
+        displayed = client.get("/api/v2/artifacts/take-demo/take_manifest")
 
     assert take_a.status_code == 200, take_a.text
     assert take_b.status_code == 200, take_b.text
     assert selected.status_code == 200, selected.text
+    assert displayed.status_code == 200, displayed.text
     manifest = selected.json()["take_manifest"]
     assert manifest["shots"][0]["selected_take_id"] == "B"
     assert len(manifest["shots"][0]["takes"]) == 2
     report_shot = selected.json()["shot_report"]["shots"][0]
     assert report_shot["take_id"] == "B"
     assert report_shot["path"].endswith("shot-001-take-b.mp4")
+    assert displayed.json()["shots"][0]["takes"][0]["playable"] is False
+    assert displayed.json()["shots"][0]["takes"][0]["media_url"] == ""

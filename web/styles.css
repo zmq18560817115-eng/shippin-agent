@@ -443,6 +443,28 @@ textarea {
   color: #a12626;
 }
 
+.mediaUnavailable {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  padding: 18px;
+  border: 1px dashed #c78585;
+  border-radius: 6px;
+  background: #fff8f8;
+  color: #a12626;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.operationStatus {
+  max-width: 310px;
+  color: var(--teal);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: right;
+}
+
 .materialItem {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr) auto;

@@ -180,7 +180,7 @@ if WEB_ROOT.exists():
 
 @app.get("/", include_in_schema=False)
 def workbench() -> FileResponse:
-    return FileResponse(WEB_ROOT / "index.html")
+    return FileResponse(WEB_ROOT / "index.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/healthz")
@@ -668,6 +668,8 @@ def get_artifact(project_id: str, artifact_name: str) -> dict[str, Any]:
     payload = _load_artifact(project_id, artifact_name)
     if artifact_name == "asset_manifest":
         _attach_preview_urls(project_id, payload)
+    if artifact_name == "take_manifest":
+        _attach_take_media_status(project_id, payload)
     return payload
 
 
@@ -1530,6 +1532,23 @@ def _attach_preview_urls(project_id: str, manifest: dict[str, Any]) -> None:
         except ValueError:
             relative = f"shots/{path.name}"
         frame["preview_url"] = f"/api/v2/runs/{project_id}/{relative}"
+
+
+def _attach_take_media_status(project_id: str, manifest: dict[str, Any]) -> None:
+    root = _run_root(project_id).resolve()
+    for shot in manifest.get("shots", []):
+        for take in shot.get("takes", []):
+            path_text = str(take.get("path") or "").replace("\\", "/")
+            try:
+                candidate = Path(path_text).resolve()
+                relative = candidate.relative_to(root).as_posix()
+            except ValueError:
+                relative = f"shots/{Path(path_text).name}"
+                candidate = root / relative
+            playable = _is_playable_delivery_file(candidate)
+            take["playable"] = playable
+            take["media_url"] = f"/api/v2/runs/{project_id}/{relative}" if playable else ""
+            take["media_message"] = "媒体已就绪" if playable else "无可播放视频：请以真实运行模式重新生成此 Take。"
 
 
 def _safe_run_file(run_root: Path, relative_path: str) -> Path:

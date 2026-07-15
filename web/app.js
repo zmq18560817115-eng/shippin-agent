@@ -15,6 +15,7 @@ const state = {
   renderReport: null,
   runReport: null,
   refreshing: false,
+  operation: null,
   currentView: "projects",
   showAllProjects: false,
 };
@@ -93,6 +94,27 @@ function toast(message, kind = "ok") {
   }, 2800);
 }
 
+function beginOperation(label, estimateSeconds) {
+  endOperation();
+  const startedAt = Date.now();
+  const host = $("#operationStatus");
+  const render = () => {
+    const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    const remaining = Math.max(0, estimateSeconds - elapsed);
+    host.hidden = false;
+    host.textContent = `${label}：已运行 ${elapsed}s，预计剩余约 ${remaining}s`;
+  };
+  render();
+  state.operation = { timer: window.setInterval(render, 1000), host };
+}
+
+function endOperation() {
+  if (!state.operation) return;
+  window.clearInterval(state.operation.timer);
+  state.operation.host.hidden = true;
+  state.operation = null;
+}
+
 async function boot() {
   bindEvents();
   const initialView = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
@@ -110,6 +132,7 @@ async function runFlowCapability(action, button, resultSelector) {
     return;
   }
   button.disabled = true;
+  beginOperation("正在运行智能体", 35);
   const resultHost = $(resultSelector);
   resultHost.className = "nodeResult";
   resultHost.textContent = `${action} 运行中`;
@@ -133,6 +156,7 @@ async function runFlowCapability(action, button, resultSelector) {
     toast(error.message, "error");
   } finally {
     button.disabled = false;
+    endOperation();
   }
 }
 
@@ -140,6 +164,7 @@ function bindEvents() {
   $("#startForm").addEventListener("submit", startProject);
   $("#collectForm").addEventListener("submit", collectLinks);
   $("#crawlForm").addEventListener("submit", crawlTikTok);
+  $("#runtimeMode").addEventListener("change", updateRuntimeModeHint);
   $("#crawlTargetType").addEventListener("change", updateCrawlTargetUI);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
   $("#toggleProjects").addEventListener("click", () => {
@@ -159,6 +184,14 @@ function bindEvents() {
     if (views[view]) showView(view, { updateUrl: false });
   });
   updateCrawlTargetUI();
+  updateRuntimeModeHint();
+}
+
+function updateRuntimeModeHint() {
+  const real = $("#runtimeMode").value === "real";
+  $("#runtimeModeHint").textContent = real
+    ? "真实调用采集、分析和视频模型，耗时与费用以实际任务为准。"
+    : "仅用于界面与流程演练：不抓取真实 TikTok 视频，也不会产生可交付成片。";
 }
 
 function updateCrawlTargetUI() {
@@ -355,6 +388,7 @@ async function startProject(event) {
   event.preventDefault();
   const button = event.submitter;
   button.disabled = true;
+  beginOperation("正在创建并分析项目", 50);
   $("#startState").textContent = "提交中";
   try {
     const body = {
@@ -375,6 +409,7 @@ async function startProject(event) {
   } finally {
     button.disabled = false;
     $("#startState").textContent = "";
+    endOperation();
   }
 }
 
@@ -383,6 +418,7 @@ async function collectLinks(event) {
   const button = event.submitter;
   button.disabled = true;
   const action = button.value || "import";
+  beginOperation(action === "analyze" ? "正在采集并分析参考视频" : "正在导入参考素材", action === "analyze" ? 75 : 20);
   $("#collectState").textContent = action === "analyze" ? "采集并分析中" : "导入中";
   try {
     if (action === "analyze") {
@@ -422,6 +458,7 @@ async function collectLinks(event) {
   } finally {
     button.disabled = false;
     $("#collectState").textContent = "";
+    endOperation();
   }
 }
 
@@ -437,6 +474,7 @@ async function crawlTikTok(event) {
     return;
   }
   button.disabled = true;
+  beginOperation("正在发现、下载并分析 TikTok 素材", 150);
   $("#crawlState").textContent = "发现与下载中";
   try {
     const payload = await api("/api/v2/collect/tiktok/crawl", {
@@ -459,6 +497,7 @@ async function crawlTikTok(event) {
   } finally {
     button.disabled = false;
     $("#crawlState").textContent = "";
+    endOperation();
   }
 }
 
@@ -491,12 +530,13 @@ async function refreshProjects({ silent = false } = {}) {
       state.selectedId = state.projects[0].project_id;
     }
     renderProjectRows();
-    if (state.selectedId) {
+    const activeEditor = document.activeElement?.matches("input, textarea, select");
+    if (state.selectedId && !(silent && activeEditor)) {
       await loadSelectedProject(state.selectedId);
-    } else {
+    } else if (!state.selectedId) {
       renderPanels();
     }
-    await loadMaterials();
+    if (!(silent && activeEditor)) await loadMaterials();
   } catch (error) {
     if (!silent) toast(error.message, "error");
   } finally {
@@ -929,10 +969,11 @@ function renderProductionNode() {
     const entry = takeByShot.get(Number(shot.number));
     const candidates = (entry?.takes || []).map((take) => `
       <div class="takeCandidate">
-        <video controls preload="metadata" data-video-state src="${runFileUrl(state.selectedId, take.path)}"></video>
-        <span class="mediaState" data-media-state>正在读取镜头预览...</span>
+        ${take.playable
+          ? `<video controls preload="metadata" data-video-state src="${escapeAttr(take.media_url || runFileUrl(state.selectedId, take.path))}"></video><span class="mediaState" data-media-state>正在读取镜头预览...</span>`
+          : `<div class="mediaUnavailable">${escapeHtml(take.media_message || "无可播放视频：请以真实运行模式重新生成此 Take。")}</div>`}
         <span>Take ${escapeHtml(take.take_id)} · ${escapeHtml(take.status)}</span>
-        <button type="button" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}" ${take.status === "selected" ? "disabled" : ""}>${take.status === "selected" ? "已选用" : "选用此 Take"}</button>
+        <button type="button" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}" ${take.status === "selected" || !take.playable ? "disabled" : ""}>${take.status === "selected" ? "已选用" : take.playable ? "选用此 Take" : "请重新生成"}</button>
       </div>
     `).join("");
     return `<section class="takeShot">
@@ -998,6 +1039,8 @@ async function saveShotPlan() {
 
 async function runManualStage(stage, shotIndex = null, takeId = null) {
   try {
+    const estimates = { analysis: 30, research: 30, strategy: 25, script: 35, storyboard: 45, production: 100, compose: 35 };
+    beginOperation(shotIndex ? `正在生成镜头 ${shotIndex} Take ${takeId || "A"}` : `正在运行${stageLabel(stage)}`, estimates[stage] || 40);
     const payload = await api("/api/v2/manual/run", {
       method: "POST",
       body: JSON.stringify({
@@ -1012,6 +1055,8 @@ async function runManualStage(stage, shotIndex = null, takeId = null) {
     await refreshProjects();
   } catch (error) {
     toast(error.message, "error");
+  } finally {
+    endOperation();
   }
 }
 

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260715-3" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260715-4" />
   </head>
   <body>
     <header class="topbar">
@@ -17,6 +17,7 @@
       </div>
       <div class="topActions">
         <button type="button" id="continueProject" class="continueButton" disabled>继续当前节点</button>
+        <div class="operationStatus" id="operationStatus" hidden></div>
         <div class="health" id="health">连接中</div>
       </div>
     </header>
@@ -55,12 +56,13 @@
             运行模式
             <select id="runtimeMode">
               <option value="real">真实运行</option>
-              <option value="mock">Mock（仅流程演练）</option>
+              <option value="mock">演练模式（不调用模型）</option>
             </select>
+            <small id="runtimeModeHint">真实调用采集、分析和视频模型，耗时与费用以实际任务为准。</small>
           </label>
           <label>
-            link_id
-            <input id="linkInput" name="link_id" inputmode="numeric" placeholder="101" />
+            参考素材编号（可选）
+            <input id="linkInput" name="link_id" inputmode="numeric" placeholder="例如 101" />
           </label>
           <button type="submit">开始生产</button>
         </form>
@@ -163,7 +165,7 @@
           <table class="projectTable">
             <thead>
               <tr>
-                <th>项目号</th>
+                <th>项目编号</th>
                 <th>节点</th>
                 <th>当前</th>
                 <th>成本</th>
@@ -241,6 +243,6 @@
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js?v=20260715-3"></script>
+    <script src="/static/app.js?v=20260715-4"></script>
   </body>
 </html>
