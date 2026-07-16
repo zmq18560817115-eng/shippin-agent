@@ -30,6 +30,22 @@ def test_manual_production_requires_hero_gate(tmp_path: Path, monkeypatch) -> No
     assert "关键帧确认" in response.json()["detail"]
 
 
+def test_pipeline_rejects_unknown_product_before_creating_project(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "agentflow.db"
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/pipeline/run",
+            json={"project_id": "unknown-product", "product_id": "根本不存在XYZ", "mock": True},
+        )
+    assert response.status_code == 422
+    assert "不存在于产品素材库" in response.json()["detail"]
+    with queue.get_conn(db_path) as conn:
+        assert conn.execute("SELECT id FROM projects WHERE id = ?", ("unknown-product",)).fetchone() is None
+
+
 def test_manual_real_storyboard_requires_doubao_key_before_creating_a_task(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "agentflow.db"
     runs_root = tmp_path / "runs"

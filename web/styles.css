@@ -1492,6 +1492,75 @@ pre {
   font-size: 12px;
 }
 
+.agentFriendlyResult {
+  margin-top: 8px;
+}
+
+.agentResultCards {
+  display: grid;
+  gap: 8px;
+}
+
+.agentResultCard,
+.agentReview {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.agentResultCard p,
+.agentReview p,
+.agentResultCard small {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.agentResultCard small {
+  color: var(--muted);
+}
+
+.reviewStatus {
+  font-size: 14px;
+}
+
+.reviewStatus.pass {
+  color: var(--green);
+}
+
+.reviewStatus.warning {
+  color: #a96b00;
+}
+
+.reviewStatus.blocked {
+  color: var(--red);
+}
+
+.scoreChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scoreChips span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #edf4f4;
+  color: var(--teal);
+  font-size: 12px;
+}
+
+.rawArtifact {
+  margin-top: 10px;
+}
+
+.rawArtifact summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
 @media (max-width: 900px) {
   .topbar {
     align-items: center;

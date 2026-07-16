@@ -104,11 +104,12 @@ document.querySelector("#openUserDialog").addEventListener("click", () => userDi
 ["#closeUserDialog", "#cancelUserDialog"].forEach((selector) => document.querySelector(selector).addEventListener("click", () => userDialog.close()));
 document.querySelector("#userForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const errorHost = document.querySelector("#userFormError");
   errorHost.textContent = "";
   try {
     await api("/api/v2/admin/users", { method: "POST", body: JSON.stringify({ username: document.querySelector("#newUsername").value.trim(), display_name: document.querySelector("#newDisplayName").value.trim(), role: document.querySelector("#newUserRole").value, password: document.querySelector("#newUserPassword").value }) });
-    event.currentTarget.reset();
+    form.reset();
     userDialog.close();
     await loadAdmin();
   } catch (error) {

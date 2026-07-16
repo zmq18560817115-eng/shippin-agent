@@ -130,12 +130,70 @@ function renderAgentResult(host, payload) {
   const promote = promotable
     ? `<button type="button" class="promoteStandalone" data-project-id="${escapeAttr(payload.project_id)}" data-artifact-name="${escapeAttr(payload.artifact_name)}">用此产物创建生产项目</button>`
     : "";
+  const artifact = payload.artifact || {};
   host.className = "nodeResult complete";
   host.innerHTML = `
-    <div class="resultHead"><strong>${escapeHtml(payload.artifact_name)}</strong>${download}${promote}</div>
+    <div class="resultHead"><strong>${escapeHtml(artifactLabel(payload.artifact_name))}</strong>${download}${promote}</div>
     ${payload.project_id && payload.project_id.startsWith("scratch-") ? "<p>独立工作区产物已保存，不会出现在生产项目列表中。</p>" : ""}
-    <pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>
+    <div class="agentFriendlyResult">${renderFriendlyArtifact(payload.artifact_name, artifact)}</div>
+    <details class="rawArtifact"><summary>查看 JSON</summary><pre>${escapeHtml(JSON.stringify(artifact, null, 2))}</pre></details>
   `;
+}
+
+function artifactLabel(name) {
+  return {
+    tiktok_capture: "TikTok 采集结果",
+    tiktok_discovery: "TikTok 发现结果",
+    analysis_report: "素材分析",
+    research_brief: "研究洞察",
+    strategy_brief: "内容策略",
+    script_copy: "脚本文案",
+    script_breakdown: "脚本拆解",
+    shot_plan: "分镜计划",
+    shot_report: "单镜制作结果",
+    review_report: "内容审核",
+    feedback_record: "反馈记录",
+  }[name] || name;
+}
+
+function renderFriendlyArtifact(name, artifact) {
+  if (name === "script_copy") {
+    const sections = Array.isArray(artifact.sections) ? artifact.sections : [];
+    return `<div class="agentResultCards">${sections.map((section) => `
+      <article class="agentResultCard"><strong>${escapeHtml(section.role || "脚本段落")} · ${escapeHtml(section.timing || "")}</strong>
+      <p>${escapeHtml(section.voiceover_zh || section.subtitle_zh || section.voiceover_en || "")}</p>
+      <small>场景：${escapeHtml(section.scene_zh || "未填写")}</small><small>动作：${escapeHtml(section.action_zh || "未填写")}</small></article>`).join("") || "<p>未生成脚本段落。</p>"}</div>`;
+  }
+  if (name === "shot_plan") {
+    const shots = Array.isArray(artifact.shots) ? artifact.shots : [];
+    return `<div class="agentResultCards">${shots.map((shot) => `
+      <article class="agentResultCard"><strong>镜头 ${escapeHtml(shot.number)} · ${escapeHtml(shot.camera_motion?.duration_sec || 6)} 秒</strong>
+      <p>${escapeHtml(shot.visual_zh || shot.visual || "")}</p><small>生成提示：${escapeHtml(shot.seedance_prompt_zh || shot.seedance_prompt || "")}</small></article>`).join("") || "<p>未生成镜头。</p>"}</div>`;
+  }
+  if (name === "review_report") {
+    const scores = Object.entries(artifact.scores || {});
+    return `<div class="agentReview"><strong class="reviewStatus ${escapeAttr(String(artifact.status || "WARNING").toLowerCase())}">${escapeHtml(reviewStatusLabel(artifact.status))}</strong>
+      <div class="scoreChips">${scores.map(([key, value]) => `<span>${escapeHtml(reviewScoreLabel(key))} ${escapeHtml(value)}</span>`).join("")}</div>
+      <p>${escapeHtml((artifact.comments || []).join("；") || "暂无审核说明")}</p></div>`;
+  }
+  if (name === "analysis_report") {
+    const structure = Array.isArray(artifact.structure) ? artifact.structure.join(" → ") : "";
+    return `<div class="agentResultCard"><strong>3 秒钩子</strong><p>${escapeHtml(artifact.hook_3s || "未生成")}</p><small>内容结构：${escapeHtml(structure || "未生成")}</small></div>`;
+  }
+  if (name === "tiktok_discovery" || name === "tiktok_capture") {
+    const items = Array.isArray(artifact.items) ? artifact.items : artifact.results || [];
+    return `<div class="agentResultCards">${items.slice(0, 10).map((item) => `<article class="agentResultCard"><strong>${escapeHtml(item.title || item.video_title || item.url || "TikTok 素材")}</strong><p>${escapeHtml(item.caption || item.description || "")}</p>${item.url ? `<a href="${escapeAttr(item.url)}" target="_blank" rel="noopener">打开来源</a>` : ""}</article>`).join("") || "<p>暂无可展示素材。</p>"}</div>`;
+  }
+  if (name === "feedback_record") return `<div class="agentResultCard"><p>${escapeHtml(artifact.text || "")}</p></div>`;
+  return `<div class="agentResultCard"><p>产物已生成，可下载 JSON 或用于创建生产项目。</p></div>`;
+}
+
+function reviewStatusLabel(status) {
+  return { PASS: "审核通过", WARNING: "需要关注", BLOCKED: "审核阻止" }[String(status || "").toUpperCase()] || "待审核";
+}
+
+function reviewScoreLabel(key) {
+  return { hook: "钩子", clarity: "清晰度", compliance: "合规", product_fit: "产品匹配", pacing: "节奏", cta: "行动号召", asset_traceability: "素材可追溯" }[key] || key;
 }
 
 async function loadIndependentAgentActions() {

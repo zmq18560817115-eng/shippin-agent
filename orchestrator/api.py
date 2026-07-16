@@ -1546,6 +1546,7 @@ def run_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
     if not request.mock and source_meta and str(source_meta.get("source_mode") or "") == "mock":
         raise HTTPException(status_code=409, detail="真实运行不能使用演练素材，请重新抓取真实 TikTok 来源")
     product_id = request.product_id or str((source_meta or {}).get("product_id") or "便携恒温杯")
+    _require_known_product(product_id)
     run_root = _run_root(project_id)
     task_id = engine.start_pipeline(
         project_id,
@@ -2879,6 +2880,16 @@ def _list_products(index: dict[str, Any] | None = None) -> list[dict[str, Any]]:
             }
         )
     return sorted(items, key=lambda item: (not item["ready"], item["label"]))
+
+
+def _require_known_product(product_id: str) -> dict[str, Any]:
+    normalized = str(product_id or "").strip()
+    if not normalized:
+        raise HTTPException(status_code=422, detail="请选择产品后再创建项目")
+    product = next((item for item in _list_products(_load_product_library()) if item["id"] == normalized), None)
+    if product is None:
+        raise HTTPException(status_code=422, detail=f"产品“{normalized}”不存在于产品素材库，请先在素材库中创建并完善产品资料")
+    return product
 
 
 def _product_option(product: dict[str, Any]) -> dict[str, Any]:

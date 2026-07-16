@@ -28,7 +28,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "cta": 8,
             "asset_traceability": 9,
         },
-        "comments": ["Mock review passed with product-safe wording."],
+        "comments": ["演练审核通过：文案符合当前产品安全表达规则。"],
     }
     artifacts.validate_artifact("review_report", report)
     return ToolResult.success(
@@ -90,4 +90,4 @@ def _comments(value: Any) -> list[str]:
             return comments
     if value:
         return [str(value).strip()]
-    return ["Real Doubao review completed."]
+    return ["豆包审核已完成。"]

@@ -20,9 +20,9 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "project_id": project_id,
         "source_link_id": payload.get("source_link_id"),
         "material_meta_ref": str(payload.get("source_material_id") or payload.get("source_url") or ""),
-        "hook_3s": "Night feeds should feel easier.",
+        "hook_3s": "夜间喂养准备，也可以更轻松。",
         "structure": ["钩子", "痛点", "方案", "证明", "行动号召"],
-        "voiceover_text": transcript or "Mock transcript for portable warming cup.",
+        "voiceover_text": transcript or "便携恒温杯夜间喂养准备的演练素材转写。",
         "pacing": [
             {"start_s": 0, "end_s": 6, "role": "钩子"},
             {"start_s": 6, "end_s": 12, "role": "痛点"},

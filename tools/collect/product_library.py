@@ -214,13 +214,13 @@ def _finalize_product(product: dict[str, Any], source_status: list[dict[str, Any
     if not product["docs"]:
         issues.append(_issue("BLOCKED", "missing_product_doc", "缺少产品文档，不能从竞品或 AI 推断产品事实。"))
     if not white_hero:
-        issues.append(_issue("BLOCKED", "missing_white_hero", "缺少白底主图，SeedDance 产品可见镜头不能放行。"))
+        issues.append(_issue("BLOCKED", "missing_white_hero", "缺少白底主图，产品可见的 Seedance 镜头已被阻止。"))
     if counts.get("scene", 0) == 0:
         issues.append(_issue("WARNING", "missing_scene_image", "缺少场景图，后续只能走产品/手部/静物保守画面。"))
     if counts.get("usage_step", 0) == 0:
         issues.append(_issue("WARNING", "missing_usage_step", "缺少使用步骤图，演示镜头需要人工复核。"))
     if not any(_is_ds223_path(source["path"]) for source in source_status if source["exists"]):
-        issues.append(_issue("WARNING", "ds223_not_available", "DS223 产品知识库未刷新，仅使用本地素材。"))
+        issues.append(_issue("WARNING", "ds223_not_available", "DS223 产品知识库尚未刷新，当前仅使用本地素材。"))
     product["issues"] = issues
     product["ready"] = not any(issue["severity"] == "BLOCKED" for issue in issues)
 
