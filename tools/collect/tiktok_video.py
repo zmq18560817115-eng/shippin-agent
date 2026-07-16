@@ -62,6 +62,12 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     proxy = str(context.env.get("TIKTOK_PROXY") or "").strip()
     if proxy:
         command.extend(["--proxy", proxy])
+    cookies_file = str(context.env.get("TIKTOK_COOKIES_FILE") or "").strip()
+    cookies_browser = str(context.env.get("TIKTOK_COOKIES_BROWSER") or "").strip()
+    if cookies_file:
+        command.extend(["--cookies", cookies_file])
+    elif cookies_browser:
+        command.extend(["--cookies-from-browser", cookies_browser])
     command.append(url)
     try:
         completed = subprocess.run(command, capture_output=True, text=True, timeout=300, check=False)

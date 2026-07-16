@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260715-7" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260716-1" />
   </head>
   <body>
     <header class="topbar">
@@ -84,6 +84,7 @@
           <h2>TikTok 参考素材采集</h2>
           <span id="collectState"></span>
         </div>
+        <div id="collectorBackendState" class="backendStrip">正在检测服务器采集后端...</div>
         <form class="collectForm" id="collectForm">
           <label>
             采集方式
@@ -152,16 +153,13 @@
       </div>
       <div class="nodeTools" id="independentAgentWorkbench">
         <div class="nodeToolHead">
-          <div><strong>Agent 独立工作台</strong><span>不创建项目也可以单独运行采集、脚本、分镜或单镜生产</span></div>
+          <div><strong>采集 Agent 独立工作台</strong><span>按关键词抓取、下载入库并自动进入参考视频拆解</span></div>
           <span id="independentAgentState"></span>
         </div>
         <div class="agentWorkbenchGrid">
           <label>功能
             <select id="independentAgentAction">
               <option value="collector">关键词/账号抓取</option>
-              <option value="script">独立脚本生成</option>
-              <option value="storyboard">独立分镜生成</option>
-              <option value="production">独立单镜视频生成</option>
             </select>
           </label>
           <label>输入 Prompt / 关键词
@@ -285,6 +283,6 @@
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js?v=20260715-7"></script>
+    <script src="/static/app.js?v=20260716-1"></script>
   </body>
 </html>

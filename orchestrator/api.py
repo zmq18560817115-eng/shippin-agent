@@ -181,6 +181,7 @@ class AgentRunRequest(BaseModel):
     target: str | None = None
     provider: str = "auto"
     limit: int = 6
+    persist: bool = True
     mock: bool = True
 
 
@@ -213,6 +214,9 @@ def runtime_status() -> dict[str, Any]:
 
     tiktok_api_installed = tiktok_api_adapter.package_available()
     tiktok_api_ready = tiktok_api_adapter.configured(os.environ)
+    apify_ready = bool(os.environ.get("APIFY_API_TOKEN"))
+    yt_dlp_ready = bool(shutil.which("yt-dlp"))
+    cookies_ready = bool(os.environ.get("TIKTOK_COOKIES_FILE"))
     return {
         "status": "ok",
         "real_ready": bool(os.environ.get("DOUBAO_API_KEY") and os.environ.get("SEEDANCE_API_KEY")),
@@ -222,8 +226,8 @@ def runtime_status() -> dict[str, Any]:
             "tiktok_oembed": {"configured": True},
             "tiktok_video": {"configured": bool(shutil.which("yt-dlp"))},
             "tiktok_keyword_crawler": {
-                "configured": bool(os.environ.get("APIFY_API_TOKEN")) or tiktok_api_ready,
-                "mode": "apify_keyword_or_tiktok_hashtag",
+                "configured": apify_ready or tiktok_api_ready,
+                "mode": "tiktok_api_or_apify",
             },
             "tiktok_api": {
                 "configured": tiktok_api_ready,
@@ -232,6 +236,12 @@ def runtime_status() -> dict[str, Any]:
             },
             "speech_to_text": {"configured": False, "mode": "subtitle_or_operator_text"},
         },
+        "collector_backends": [
+            {"id": "tiktok_api", "ready": tiktok_api_ready, "supports": ["account", "hashtag", "keyword", "trending"]},
+            {"id": "apify", "ready": apify_ready, "supports": ["keyword"]},
+            {"id": "yt_dlp", "ready": yt_dlp_ready, "supports": ["account", "direct_url"], "cookies_file": cookies_ready},
+            {"id": "manual_url", "ready": yt_dlp_ready, "supports": ["direct_url"]},
+        ],
         "budget_mode": "observe",
         "pricing_calibrated": False,
     }
@@ -245,17 +255,36 @@ def agent_capabilities() -> dict[str, Any]:
 @app.post("/api/v2/agents/run")
 def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     standalone = not request.project_id
-    project_id = _validate_project_id(request.project_id or _new_project_id())
-    if standalone:
-        queue.ensure_project(project_id, product_id=request.product_id, db_path=_db_path())
-    project = _project_summary(project_id)
     action = request.action.strip().casefold()
+    project_id = _validate_project_id(request.project_id or _new_project_id())
+    if standalone and action != "collector":
+        queue.ensure_project(project_id, product_id=request.product_id, db_path=_db_path())
+    project = _project_summary(project_id) if action != "collector" else {}
     root = _run_root(project_id)
     payload: dict[str, Any] = {"project_id": project_id}
 
     if action == "collector":
         if not request.target:
             raise HTTPException(status_code=400, detail="collector requires target")
+        if request.persist:
+            captured = crawl_tiktok_and_run(
+                TikTokCrawlRequest(
+                    target_type=request.target_type,
+                    provider=request.provider,
+                    target=request.target,
+                    limit=max(1, min(request.limit, 20)),
+                    product_id=request.product_id,
+                    mock=request.mock,
+                )
+            )
+            return {
+                "ok": captured["ok"],
+                "project_id": None,
+                "action": action,
+                "artifact_name": "tiktok_capture",
+                "artifact": captured,
+                "meta": {"persisted": True, "provider": captured.get("provider")},
+            }
         result = tool_registry.execute_tool(
             "tiktok_crawler",
             {"target_type": request.target_type, "target": request.target, "provider": request.provider, "limit": max(1, min(request.limit, 20))},
@@ -294,14 +323,33 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         })
         tool_name, artifact_name = "doubao_script", "script_copy"
     elif action == "storyboard":
-        base_prompt = request.prompt or request.source_text or "Product scene"
-        script = request.input_json or {
-            "version": "2.0", "project_id": project_id, "product_id": request.product_id, "total_duration_s": 30,
-            "sections": [
-                {"number": index, "role": "镜头", "timing": f"{(index - 1) * 6}-{index * 6}s", "voiceover_en": base_prompt, "voiceover_zh": "", "scene_zh": base_prompt, "action_zh": base_prompt, "story_beat_zh": ""}
-                for index in range(1, 6)
-            ],
-        }
+        base_prompt = (request.prompt or request.source_text or "Product scene").strip()
+        script = request.input_json
+        if script is None:
+            script_result = tool_registry.execute_tool(
+                "doubao_script",
+                {
+                    "project_id": project_id,
+                    "product_id": request.product_id,
+                    "analysis_report": {
+                        "project_id": project_id,
+                        "voiceover_text": base_prompt,
+                        "hook_3s": base_prompt[:120],
+                        "structure": [],
+                    },
+                    "strategy_brief": {
+                        "content_direction": base_prompt,
+                        "product_guardrails": product_library.product_guardrail_text(request.product_id),
+                        "required_story": "scene -> pain -> product solution -> safe demo -> CTA",
+                    },
+                },
+                context={"mock": request.mock, "run_root": root},
+            )
+            if not script_result.ok:
+                error = script_result.error or {"message": "script foundation failed"}
+                raise HTTPException(status_code=422, detail=error.get("message") or error)
+            script = script_result.data["script_copy"]
+            artifacts.save_artifact(project_id, "script_copy", script, run_root=root)
         payload["script_copy"] = script
         tool_name, artifact_name = "doubao_shotplan", "shot_plan"
     elif action == "production":
@@ -343,6 +391,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         "action": action,
         "artifact_name": artifact_name,
         "artifact": artifact,
+        "download_url": f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
         "meta": result.meta,
     }
 
@@ -752,6 +801,20 @@ def get_artifact(project_id: str, artifact_name: str) -> dict[str, Any]:
     if artifact_name == "take_manifest":
         _attach_take_media_status(project_id, payload)
     return payload
+
+
+@app.get("/api/v2/artifacts/{project_id}/{artifact_name}/download")
+def download_artifact(project_id: str, artifact_name: str) -> FileResponse:
+    project_id = _validate_project_id(project_id)
+    artifact_name = _validate_artifact_name(artifact_name)
+    path = _artifact_path(project_id, artifact_name)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"{artifact_name} not found")
+    return FileResponse(
+        path,
+        media_type="application/json",
+        filename=f"{project_id}-{artifact_name}.json",
+    )
 
 
 @app.put("/api/v2/artifacts/{project_id}/{artifact_name}")

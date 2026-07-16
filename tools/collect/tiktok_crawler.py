@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlparse
 
@@ -55,7 +56,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         if not _is_account_url(target):
             return ToolResult.failure("validation", "account target must be a TikTok profile URL")
         try:
-            items = _discover_account(target, limit)
+            items = _discover_account(target, limit, context.env)
         except (RuntimeError, subprocess.TimeoutExpired) as exc:
             return ToolResult.failure("provider", f"TikTok account discovery failed: {exc}")
         provider = "yt_dlp"
@@ -68,14 +69,14 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 env=context.env,
             )
         except (RuntimeError, ValueError) as exc:
-            fallback = _fallback_account_discovery(requested_provider, target_type, target, limit)
+            fallback = _fallback_account_discovery(requested_provider, target_type, target, limit, context.env)
             if fallback is not None:
                 items, provider = fallback
             else:
                 category = "not_configured" if "未配置" in str(exc) or "未安装" in str(exc) else "provider"
                 return ToolResult.failure(category, f"TikTokApi 采集失败：{exc}")
         except Exception as exc:
-            fallback = _fallback_account_discovery(requested_provider, target_type, target, limit)
+            fallback = _fallback_account_discovery(requested_provider, target_type, target, limit, context.env)
             if fallback is not None:
                 items, provider = fallback
             else:
@@ -86,7 +87,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         else:
             provider = "tiktok_api"
         if not items:
-            fallback = _fallback_account_discovery(requested_provider, target_type, target, limit)
+            fallback = _fallback_account_discovery(requested_provider, target_type, target, limit, context.env)
             if fallback is not None:
                 items, provider = fallback
     if not items:
@@ -118,13 +119,14 @@ def _fallback_account_discovery(
     target_type: str,
     target: str,
     limit: int,
+    env: Mapping[str, str],
 ) -> tuple[list[dict[str, Any]], str] | None:
     if requested_provider != "auto" or target_type != "account" or not _is_account_url(target):
         return None
     if not shutil.which("yt-dlp"):
         return None
     try:
-        return _discover_account(target, limit), "yt_dlp_fallback"
+        return _discover_account(target, limit, env), "yt_dlp_fallback"
     except (RuntimeError, subprocess.TimeoutExpired):
         return None
 
@@ -150,12 +152,15 @@ def _discover_keyword(keyword: str, limit: int, token: str) -> list[dict[str, An
     return _normalize_items(payload)
 
 
-def _discover_account(url: str, limit: int) -> list[dict[str, Any]]:
+def _discover_account(url: str, limit: int, env: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
     executable = shutil.which("yt-dlp")
     if not executable:
         raise RuntimeError("yt-dlp is not installed or not on PATH")
+    command = [executable, "--flat-playlist", "--playlist-end", str(limit), "--dump-json"]
+    command.extend(_yt_dlp_auth_args(env or {}))
+    command.append(url)
     completed = subprocess.run(
-        [executable, "--flat-playlist", "--playlist-end", str(limit), "--dump-json", url],
+        command,
         capture_output=True,
         text=True,
         timeout=180,
@@ -166,6 +171,16 @@ def _discover_account(url: str, limit: int) -> list[dict[str, Any]]:
         raise RuntimeError((detail[-1] if detail else "yt-dlp returned an error")[:500])
     raw = [json.loads(line) for line in completed.stdout.splitlines() if line.strip().startswith("{")]
     return _normalize_items(raw)
+
+
+def _yt_dlp_auth_args(env: Mapping[str, str]) -> list[str]:
+    cookies_file = str(env.get("TIKTOK_COOKIES_FILE") or "").strip()
+    if cookies_file:
+        return ["--cookies", cookies_file]
+    cookies_browser = str(env.get("TIKTOK_COOKIES_BROWSER") or "").strip()
+    if cookies_browser:
+        return ["--cookies-from-browser", cookies_browser]
+    return []
 
 
 def _normalize_items(raw_items: list[dict[str, Any]]) -> list[dict[str, Any]]:

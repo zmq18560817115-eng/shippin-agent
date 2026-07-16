@@ -67,7 +67,7 @@ def test_auto_account_falls_back_to_ytdlp_when_tiktok_api_fails(monkeypatch) -> 
     monkeypatch.setattr(
         tiktok_crawler,
         "_discover_account",
-        lambda url, limit: [{"url": "https://www.tiktok.com/@brand/video/99"}],
+        lambda url, limit, env=None: [{"url": "https://www.tiktok.com/@brand/video/99"}],
     )
     result = tiktok_crawler.execute(
         {"target_type": "account", "provider": "auto", "target": "https://www.tiktok.com/@brand", "limit": 1},
@@ -83,7 +83,7 @@ def test_explicit_ytdlp_provider_does_not_enter_tiktok_api(monkeypatch) -> None:
     monkeypatch.setattr(
         tiktok_crawler,
         "_discover_account",
-        lambda url, limit: [{"url": "https://www.tiktok.com/@brand/video/100"}],
+        lambda url, limit, env=None: [{"url": "https://www.tiktok.com/@brand/video/100"}],
     )
     result = tiktok_crawler.execute(
         {"target_type": "account", "provider": "yt_dlp", "target": "https://www.tiktok.com/@brand", "limit": 1},

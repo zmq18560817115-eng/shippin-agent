@@ -388,6 +388,32 @@ textarea {
   min-height: 92px;
 }
 
+.backendStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.backendStrip span {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.backendStrip span.ready {
+  border-color: #9bc8b2;
+  color: var(--green);
+}
+
+.backendStrip span.missing {
+  border-color: #dfbbb8;
+  color: var(--red);
+}
+
 @media (max-width: 900px) {
   .agentWorkbenchGrid {
     grid-template-columns: 1fr;
@@ -872,7 +898,7 @@ pre {
   margin: 18px 0;
   padding: 16px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  background: var(--surface);
 }
 
 .standaloneLauncher > div:first-child {
@@ -894,6 +920,13 @@ pre {
 .standaloneLauncher .nodeResult {
   grid-column: 1 / -1;
   margin: 0;
+}
+
+.resultHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 @media (max-width: 900px) {

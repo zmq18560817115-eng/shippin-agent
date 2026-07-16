@@ -94,6 +94,17 @@ function toast(message, kind = "ok") {
   }, 2800);
 }
 
+function renderAgentResult(host, payload) {
+  const download = payload.download_url
+    ? `<a class="buttonLink" href="${escapeAttr(payload.download_url)}">下载本节点 JSON</a>`
+    : "";
+  host.className = "nodeResult complete";
+  host.innerHTML = `
+    <div class="resultHead"><strong>${escapeHtml(payload.artifact_name)}</strong>${download}</div>
+    <pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>
+  `;
+}
+
 function beginOperation(label, estimateSeconds) {
   endOperation();
   const startedAt = Date.now();
@@ -146,8 +157,7 @@ async function runFlowCapability(action, button, resultSelector) {
         mock: $("#runtimeMode").value !== "real",
       }),
     });
-    resultHost.className = "nodeResult complete";
-    resultHost.innerHTML = `<strong>${escapeHtml(payload.artifact_name)}</strong><pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>`;
+    renderAgentResult(resultHost, payload);
     toast(`${payload.artifact_name} 已生成`);
     await refreshProjects({ silent: true });
   } catch (error) {
@@ -219,8 +229,7 @@ async function runStandaloneLauncher(button) {
         mock: $("#runtimeMode").value !== "real",
       }),
     });
-    resultHost.className = "nodeResult complete";
-    resultHost.innerHTML = `<strong>${escapeHtml(payload.artifact_name)}</strong><pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>`;
+    renderAgentResult(resultHost, payload);
     toast(`${stageLabel(action)}已独立运行完成`);
   } catch (error) {
     resultHost.className = "nodeResult error";
@@ -271,8 +280,7 @@ async function runIndependentAgent() {
         mock: $("#runtimeMode").value !== "real",
       }),
     });
-    resultHost.className = "nodeResult complete";
-    resultHost.innerHTML = `<strong>${escapeHtml(payload.artifact_name)}</strong><pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>`;
+    renderAgentResult(resultHost, payload);
     toast(`${action} 已独立运行完成`);
     await loadMaterials();
   } catch (error) {
@@ -346,6 +354,14 @@ async function checkHealth() {
     const health = await api("/healthz");
     $("#health").textContent = health.status === "ok" ? "在线" : "异常";
     $("#health").dataset.status = health.status;
+    const runtime = await api("/api/v2/runtime");
+    const backendHost = $("#collectorBackendState");
+    if (backendHost) {
+      const backends = runtime.collector_backends || [];
+      backendHost.innerHTML = backends.map((backend) => `
+        <span class="${backend.ready ? "ready" : "missing"}">${escapeHtml(backend.id)} · ${backend.ready ? "可用" : "未配置"}</span>
+      `).join("");
+    }
   } catch (error) {
     $("#health").textContent = "离线";
     $("#health").dataset.status = "offline";
@@ -913,6 +929,8 @@ function renderScriptGate() {
       <button type="button" id="saveScript">保存</button>
       ${state.selected.current_gate === "script_gate" ? '<button type="button" id="approveScript">保存并通过</button>' : ""}
       <button type="button" id="regenerateScript">单独重新生成脚本</button>
+      <a class="buttonLink" href="/api/v2/artifacts/${encodeURIComponent(state.selectedId)}/script_copy/download">下载脚本 JSON</a>
+      ${state.scriptBreakdown ? `<a class="buttonLink" href="/api/v2/artifacts/${encodeURIComponent(state.selectedId)}/script_breakdown/download">下载脚本拆解</a>` : ""}
       ${state.selected.current_gate === "script_gate" ? '<button type="button" id="rewriteScript">退回重写</button>' : ""}
     </div>
   `;
@@ -1033,6 +1051,7 @@ function renderStoryboardNode() {
       <button type="button" id="saveShots">保存分镜</button>
       <button type="button" id="saveShotsAndContinue" class="primary">保存并进入视频制作</button>
       <button type="button" id="regenerateStoryboard">根据当前脚本重新生成分镜</button>
+      <a class="buttonLink" href="/api/v2/artifacts/${encodeURIComponent(state.selectedId)}/shot_plan/download">下载分镜 JSON</a>
     </div>
   `;
   $("#saveShots").addEventListener("click", () => saveShotPlan().catch((error) => toast(error.message, "error")));
@@ -1074,7 +1093,7 @@ function renderProductionNode() {
     const candidates = takes.map((take) => `
       <div class="takeCandidate">
         ${take.playable
-          ? `<video controls preload="metadata" data-video-state src="${escapeAttr(take.media_url || runFileUrl(state.selectedId, take.path))}"></video><span class="mediaState" data-media-state>正在读取镜头预览...</span>`
+          ? `<video controls preload="metadata" data-video-state src="${escapeAttr(take.media_url || runFileUrl(state.selectedId, take.path))}"></video><span class="mediaState" data-media-state>正在读取镜头预览...</span><a class="buttonLink" download href="${escapeAttr(take.media_url || runFileUrl(state.selectedId, take.path))}">下载此 Take</a>`
           : `<div class="mediaUnavailable">${escapeHtml(take.media_message || "无可播放视频：请以真实运行模式重新生成此 Take。")}</div>`}
         <span>Take ${escapeHtml(take.take_id)} · ${escapeHtml(take.status)}</span>
         <button type="button" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}" ${take.status === "selected" || !take.playable ? "disabled" : ""}>${take.status === "selected" ? "已选用" : take.playable ? "选用此 Take" : "请重新生成"}</button>
@@ -1113,9 +1132,12 @@ function renderComposeNode() {
   const currentDuration = plannedDuration();
   const ready = Math.abs(currentDuration - 30) <= 2;
   const visualReview = state.renderReport?.output_path ? renderVisualReview() : "";
+  const finalVideoLink = state.renderReport?.output_path
+    ? `<a class="buttonLink" download href="${escapeAttr(runFileUrl(state.selectedId, state.renderReport.output_path))}">下载 720P 成片</a>`
+    : "";
   host.innerHTML = `<div class="actionBar"><button type="button" id="composeVideo" ${ready ? "" : "disabled"}>${
     ready ? "使用现有成功镜头合成 30 秒视频" : `当前仅 ${currentDuration} 秒，请先更新分镜并重跑镜头`
-  }</button></div>${visualReview}`;
+  }</button>${finalVideoLink}</div>${visualReview}`;
   $("#composeVideo").addEventListener("click", () => runManualStage("compose"));
   $("#submitVisualReview")?.addEventListener("click", submitVisualReview);
 }
