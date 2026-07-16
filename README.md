@@ -1,97 +1,115 @@
 # 视频内容工厂
 
-面向海外短视频团队的 Agent 视频生产系统。系统把产品素材、参考视频、研究分析、脚本、分镜、AI 镜头、人工审核和成片交付组织成一条可追踪的生产链路，同时允许各 Agent 在对应页面独立运行。
+面向海外产品短视频团队的中文 Agent 工作台。它把产品素材、TikTok 参考内容、研究分析、脚本、分镜、逐镜生成、人工验收和 720P 交付组织为可追踪的生产链路；素材、脚本、分镜和单镜生成也可以在各自页面独立使用。
 
-## 系统定位
+## 能做什么
 
-本仓库不是单一的视频生成脚本，而是一个可人工介入、可审计、可替换模型供应商的内容生产工作台：
+- **素材采集**：后台按关键词、账号或话题主动采集 TikTok 参考内容；下载入库时保留链接、封面、标题、简介、转写和分析结果。已知链接可手动补充导入。
+- **内容生产**：生成可编辑的中文策略、脚本、场景、动作、剧情推进、30 秒分镜和视频 Prompt。
+- **镜头制作**：每镜生成多个 Take，人工填写返工说明后生成新候选，再完成单镜质检与选用。
+- **质量交付**：FFmpeg 合成为固定 720×1280 成片，抽帧与人工目检共同决定是否允许归档交付。
+- **多用户治理**：登录分流到内容生产工作台和后台管理平台；后台可审核注册、管理成员、重置密码、查看项目、失败任务、成本和后端配置状态。
 
-- **素材采集**：产品素材库、TikTok 参考视频、关键词或账号采集、视频下载、封面、转写和镜头拆解。
-- **研究与策略**：提取参考内容的节奏、结构、受众洞察和品牌安全边界。
-- **脚本**：生成中文脚本、台词、场景、动作、剧情推进和脚本拆解，支持人工修改。
-- **分镜**：生成 30 秒镜头计划、画面 Prompt、动作、运镜、时长和连续性要求，支持人工调整。
-- **制作**：按镜头生成多个 Take，使用产品身份素材约束画面，并允许人工选择最佳 Take。
-- **审核与交付**：抽帧检查产品外观、温标、使用方向、人物场景连续性、音频、时长和文件可播放性。
-
-## 核心生产流程
+## 工作流
 
 ```mermaid
 flowchart LR
-  A[创建项目] --> B[素材采集]
-  B --> C[研究分析]
-  C --> D[策略与脚本]
-  D --> E{脚本人工确认}
-  E --> F[分镜生成]
-  F --> G{关键帧人工确认}
-  G --> H[逐镜生成多个 Take]
-  H --> I[人工选择镜头]
+  A[创建项目或选择素材] --> B[分析与研究]
+  B --> C[策略、脚本与拆解]
+  C --> D{脚本确认}
+  D --> E[分镜与产品素材]
+  E --> F{关键帧确认}
+  F --> G[逐镜生成 Take]
+  G --> H{单镜质检与 Take 选用}
+  H --> I{Take 确认闸门}
   I --> J[合成 30 秒成片]
-  J --> K[720P 质检与交付]
+  J --> K{成片人工视觉验收}
+  K --> L[归档与交付]
 ```
 
-脚本确认和关键帧确认是强制人工闸门。系统不会绕过产品身份、使用方向或成片质量检查自动交付。
+人工闸门依次为 `script_gate`、`hero_gate`、`take_gate` 和成片人工视觉验收。任何一项未完成，系统不会自动进入交付。
 
-## 720P 交付硬约束
+## 两种运行模式
 
-所有视频生产和交付统一为：
-
-- 分辨率：**720×1280**
-- 画幅：9:16 竖屏
-- 帧率：30fps
-- 目标时长：30 秒，允许最终质检误差 ±2 秒
-- 编码：H.264、AAC、`yuv420p`、`faststart`
-
-模型请求不强制传递供应商不支持的分辨率枚举；模型返回的视频会在 FFmpeg 合成阶段统一缩放、补边、补音频并校验为 720×1280。最终质检发现任何非 720×1280 文件都会阻断交付。
-
-## Agent 独立运行
-
-除总控流程外，以下能力可以脱离项目单独使用：
-
-| 页面 | 独立能力 | 输入 | 输出 |
+| 模式 | 用途 | 模型调用 | 结果 |
 | --- | --- | --- | --- |
-| 素材采集 | 关键词、账号或链接采集 | 检索目标 | 素材元数据、下载文件、封面、转写 |
-| 脚本 | 独立脚本生成、脚本拆解 | 中文需求或参考文本 | 中文脚本和结构化拆解 |
-| 分镜 | 独立分镜生成 | 场景、人物、动作、风格 Prompt | 可编辑 30 秒镜头计划 |
-| 制作 | 独立单镜生成 | 产品素材和镜头 Prompt | 720P 单镜 Take |
+| 演练模式（默认） | 新人培训、页面走查、流程回归 | 不调用外部模型 | 可完整走完 Take 选择、合成、质检与交付流程；产物仅用于演练，不可外发 |
+| 真实运行 | 真实生产 | 调用豆包与 Seedance，可能产生费用 | 创建前会检查 `DOUBAO_API_KEY` 与 `SEEDANCE_API_KEY`，缺失时直接拒绝创建 |
 
-网页入口位于工作流左侧对应阶段；后端统一接口为 `POST /api/v2/agents/run`。
+## 720P 交付约束
 
-## 运行环境
+交付视频固定为：`720×1280`、9:16、30fps、H.264/AAC、`yuv420p`、`faststart`。目标时长为 30 秒，最终质检允许 ±2 秒。模型原始输出会在 FFmpeg 合成阶段统一归一化；分辨率、音频、可播放性、抽帧数量或人工验收任一失败都会阻断归档。
 
-- Python 3.11+
-- FFmpeg
-- `yt-dlp`（真实 TikTok 视频下载）
-- 豆包分析、脚本、分镜和 Seedance 视频模型凭证
-- 可选 ASR 服务，用于无字幕视频自动转写
+## 快速开始
 
-安装依赖：
+### 1. 安装
 
 ```powershell
 python -m venv .venv
-\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 pip install -r requirements-tiktok.txt
 ```
 
-配置 `.env.local`：
+### 2. 配置
+
+复制 `.env.example` 为 `.env.local`。真实密钥、TikTok Cookies 和用户密码只放在服务器环境或 `.env.local`，绝不提交 Git。
 
 ```dotenv
-ARK_API_KEY=你的豆包密钥
-DOUBAO_API_KEY=你的豆包分析密钥
-SEEDANCE_API_KEY=你的视频生成密钥
+# 真实模型，仅真实运行需要
+DOUBAO_API_KEY=
+SEEDANCE_API_KEY=
+
+# 内网登录
 VAF_AUTH_ENABLED=true
+VAF_SESSION_SECRET=至少32位随机字符串
+VAF_OPERATOR_USER=operator
+VAF_OPERATOR_PASSWORD=强密码
+VAF_ADMIN_USER=admin
+VAF_ADMIN_PASSWORD=强密码
+# 允许新用户提交账号申请，由管理员在后台审核
 VAF_SELF_REGISTRATION_ENABLED=true
-VAF_SESSION_SECRET=使用随机长字符串
-VAF_OPERATOR_USER=首个生产操作员账号
-VAF_OPERATOR_PASSWORD=首个生产操作员强密码
-VAF_ADMIN_USER=首个后台管理员账号
-VAF_ADMIN_PASSWORD=首个后台管理员强密码
+
+# HTTPS 反向代理环境设为 true；直接 HTTP 内网调试必须显式保持 false
 VAF_COOKIE_SECURE=true
 ```
 
-密钥只放在本地环境或服务器环境变量中，不要提交到 Git。真实模式会产生模型费用；Mock 模式只用于接口和流程测试，不会生成可交付成片。
+### 3. 预检与启动
 
-素材采集默认以“自动发现与后台采集”为主。可在素材采集页设置关键词、账号或话题、采集后端、单轮数量和执行频率，然后启动后台任务；服务器会持续发现、下载、入库并进入分析。也可用下列变量在部署时预置首个任务，未设置目标时不会自动抓取：
+```powershell
+python scripts/deployment_preflight.py --env-file .env.local
+uvicorn orchestrator.api:app --host 0.0.0.0 --port 8790
+```
+
+预检会检查 FFmpeg、yt-dlp、Playwright Chromium、SQLite WAL、素材/运行持久卷、模型配置和安全配置。内网部署未开启 `VAF_AUTH_ENABLED` 或 session 密钥不足 32 位时预检会失败。`VAF_COOKIE_SECURE=true` 需要 HTTPS；若直接使用 HTTP 内网地址，设为 `true` 会导致浏览器不发送 Cookie。
+
+打开 `http://服务器地址:8790/`，选择“内容生产工作台”或“后台管理平台”。健康检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8790/healthz
+```
+
+## 使用指南
+
+### 内容生产工作台
+
+1. 默认选择**演练模式**，先熟悉完整工作流；真实模式仅在后台显示模型配置完成后使用。
+2. 在“素材采集”设置主动采集任务，或导入已知 TikTok 链接；采集素材保存在本地素材库，项目可从素材直接发起。
+3. 在“脚本”逐段编辑场景、动作、剧情推进和中文旁白，保存后通过脚本闸门。
+4. 在“分镜”调整镜头描述、Prompt 与时长，核对产品身份锚点后确认关键帧闸门。
+5. 在“制作”中为每镜生成候选 Take。预览后通过单镜质检；若不满意，在同镜的“返工说明”中写清产品、温标、倒液或连续性问题，再生成新 Take。
+6. 每镜选用一个通过质检的 Take，确认 Take 闸门后合成成片。
+7. 在成片人工视觉验收中确认产品外观、无虚构 Logo、`98°F`、正确倒液方向与人物/场景连续性，全部通过后下载 zip 与运行报告。
+
+### 后台管理平台
+
+- 查看项目数量、成本、存储、失败任务和采集/模型后端状态。
+- 审核账号申请，创建、启用/停用成员，或重置成员密码。
+- 真实运行前先确认豆包、Seedance、TikTok 下载与 Cookies 的配置状态。
+
+## TikTok 采集与服务器部署
+
+自动采集优先使用后台任务；手动链接仅用于补充。可在 `.env.local` 预置首个后台任务：
 
 ```dotenv
 VAF_AUTO_COLLECT_ENABLED=true
@@ -100,61 +118,48 @@ VAF_AUTO_COLLECT_TARGET=heated cup
 VAF_AUTO_COLLECT_PROVIDER=auto
 VAF_AUTO_COLLECT_LIMIT=3
 VAF_AUTO_COLLECT_INTERVAL_MINUTES=60
-VAF_AUTO_COLLECT_REAL=true
+# false 才会执行真实下载与分析；true 仅演练采集
+VAF_AUTO_COLLECT_REAL=false
 ```
 
-手动粘贴 TikTok 链接保留在“补充：直接导入视频链接”，适合已知链接或临时补充，不再是主流程。
+服务器上建议为 TikTok 服务账号导出持久化 Cookies，并设置：
 
-## 启动
-
-```powershell
-uvicorn orchestrator.api:app --host 127.0.0.1 --port 8790
+```dotenv
+TIKTOK_COOKIES_FILE=/data/secrets/tiktok-cookies.txt
 ```
 
-打开 `http://127.0.0.1:8790/`，先选择内容生产工作台或后台管理平台。开发环境可保持 `VAF_AUTH_ENABLED=false`；内网服务器必须启用认证，并配置首个操作员和管理员账号。服务首次启动时会把这两个账号加密写入 SQLite；后续多人账号可由后台的“成员账号”创建、启停和管理，也可以在登录页提交申请。管理员在“账号申请”中审核通过后，系统才会创建普通操作员账号。密码只保存 PBKDF2 加密摘要，管理员无法读取明文。停用账号会立即使其旧会话失效，系统不会允许停用最后一个启用中的管理员。通过反向代理和 HTTPS 保护服务。
+Cookies、`TIKTOK_MS_TOKEN` 和 API Key 不应进入仓库或镜像。TikTok 的可访问性会受地区、登录状态、Cookie 有效期和平台策略影响；系统会保留人工链接导入作为降级入口。
 
-部署到目标服务器后先执行环境预检：
-
-```powershell
-python scripts/deployment_preflight.py --env-file .env.local
-```
-
-预检会实际启动 Playwright Chromium，并验证应用 FFmpeg、yt-dlp、SQLite WAL、素材持久卷、运行持久卷、Cookies 路径和模型密钥。`TIKTOK_COOKIES_FILE` 必须指向服务器持久卷中的 Netscape 格式 Cookies 文件；不要把 Cookies 或密钥提交到仓库。
-
-健康检查：
+## 验收与开发
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8790/healthz
-```
-
-## 测试
-
-```powershell
-pytest -q tests
+python -m pytest tests scripts/accept -q
 node --check web/app.js
+node --check web/admin.js
+node --check web/login.js
+python scripts/accept/run_a8_10videos.py
 ```
 
-真实验收建议只使用恒温杯样本，并依次确认：
+GitHub Actions 会在 push 与 pull request 时执行同一套 Python 测试与前端语法检查。`scripts/accept/report_10videos.md` 是当前代码的 mock 十视频验收报告；其中 Real Readiness 会如实反映模型密钥和价格校准状态，不代表真实模型成片已验收。
 
-1. 分析、脚本和分镜内容符合产品事实。
-2. 产品显示只出现 `98°F`，不出现摄氏度或 `98°C`。
-3. 倒液方向正确，恒温杯和奶瓶保持为两个独立产品。
-4. 人物、场景、服装和产品外观在镜头间连续。
-5. 最终文件可播放、时长约 30 秒、分辨率严格为 720×1280。
+真实验收至少检查：
 
-## 目录说明
+1. 产品外观符合已批准素材，且没有模型虚构的品牌、Logo 或文字。
+2. 温度只出现 `98°F`，不出现 `98°C` 或摄氏表述。
+3. 恒温杯与奶瓶保持独立；液体从杯嘴倒入独立奶瓶，方向正确。
+4. 人物、服装、场景和产品外观在镜头间连续。
+5. 最终媒体可播放、有音频、约 30 秒且严格为 720×1280。
 
-- `orchestrator/`：FastAPI、任务队列、流程引擎、闸门和质检。
-- `agents/`：Agent worker 与处理器。
-- `tools/`：采集、LLM、Seedance、FFmpeg、ASR 和素材工具。
+## 目录
+
+- `orchestrator/`：FastAPI、队列、流程引擎、鉴权、闸门与质检。
+- `tools/`：采集、LLM、视频、FFmpeg、ASR 与产品素材工具。
+- `pipeline_defs/`：YAML 流程定义，包含全部人工闸门。
 - `schemas/artifacts/`：结构化产物 JSON Schema。
-- `pipeline_defs/`：流程定义。
-- `web/`：中文工作台前端。
-- `data/01_素材库/` 的示例产品素材与 `data/05_反馈库/` 的反馈样本随仓库提交；`data/runs/`、SQLite 数据库文件和交付产物不提交 Git。
-- `tests/`：当前有效的接口、流程和产物契约测试。
+- `web/`：中文工作台、登录和后台管理前端。
+- `scripts/accept/`：端到端验收与十视频报告。
+- `data/01_素材库/`：随仓库提交的示例产品素材；`data/05_反馈库/`：反馈样本。`data/runs/`、SQLite 文件和运行交付物不提交 Git。
 
-## 生产安全边界
+## 安全边界
 
-产品素材必须来自可追溯的批准素材库。参考视频只用于分析结构和节奏，不直接复制品牌表达。任何关键帧、产品身份、使用动作或成片质检未通过时，系统必须停在人工节点，禁止自动归档交付。
-
-内网部署必须设置 `VAF_AUTH_ENABLED=true`、至少 32 位的 `VAF_SESSION_SECRET`，并在 HTTPS 反向代理下设置 `VAF_COOKIE_SECURE=true`。仅本地 HTTP 调试可显式设置 `VAF_COOKIE_SECURE=false`。
+产品素材必须来自可追溯的批准素材库。参考视频只用于研究节奏和结构，不能直接复制品牌表达。系统不会因为媒体文件“可播放”就自动交付：产品身份、正确使用方式、Take 选用和成片人工目检都必须通过。内网服务应置于 HTTPS 反向代理之后，并启用登录、强 session 密钥和安全 Cookie。
