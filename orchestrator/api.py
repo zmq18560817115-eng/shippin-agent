@@ -567,9 +567,14 @@ def reject_registration_request(request_id: int, request: RegistrationReviewRequ
 def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     standalone = not request.project_id
     action = request.action.strip().casefold()
-    project_id = _validate_project_id(request.project_id or _new_project_id())
+    project_id = _validate_project_id(request.project_id or _new_standalone_id())
     if standalone and action != "collector":
-        queue.ensure_project(project_id, product_id=request.product_id, db_path=_db_path())
+        queue.ensure_project(
+            project_id,
+            product_id=request.product_id,
+            payload={"standalone": True, "standalone_action": action},
+            db_path=_db_path(),
+        )
     project = _project_summary(project_id) if action != "collector" else {}
     root = _run_root(project_id)
     payload: dict[str, Any] = {"project_id": project_id}
@@ -618,9 +623,24 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         )
         tool_name, artifact_name = "competitor_research", "research_brief"
     elif action == "strategy":
+        direct_research = (request.source_text or request.prompt or "").strip()
+        research_brief = request.input_json or (
+            {
+                "version": "1.0",
+                "project_id": project_id,
+                "source_refs": request.source_refs or [],
+                "viral_patterns": [],
+                "audience_insights": [],
+                "pacing_notes": [],
+                "content_risks": [],
+                "source_summary": direct_research,
+            }
+            if direct_research
+            else _load_artifact(project_id, "research_brief")
+        )
         payload.update(
             {
-                "research_brief": _load_artifact(project_id, "research_brief"),
+                "research_brief": research_brief,
                 "product_guardrails": product_library.product_guardrail_text(project["product_id"]),
             }
         )
@@ -675,7 +695,36 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         })
         tool_name, artifact_name = "seedance_shot", "shot_report"
     elif action == "script_breakdown":
-        payload["script_copy"] = _load_artifact(project_id, "script_copy")
+        script = request.input_json
+        if script is None:
+            source = (request.source_text or request.prompt or "").strip()
+            if source:
+                script_result = tool_registry.execute_tool(
+                    "doubao_script",
+                    {
+                        "project_id": project_id,
+                        "product_id": request.product_id,
+                        "analysis_report": {
+                            "project_id": project_id,
+                            "voiceover_text": source,
+                            "hook_3s": source[:120],
+                            "structure": [],
+                        },
+                        "strategy_brief": {
+                            "content_direction": source,
+                            "product_guardrails": product_library.product_guardrail_text(request.product_id),
+                        },
+                    },
+                    context={"mock": request.mock, "run_root": root},
+                )
+                if not script_result.ok:
+                    error = script_result.error or {"message": "script foundation failed"}
+                    raise HTTPException(status_code=422, detail=error.get("message") or error)
+                script = script_result.data["script_copy"]
+                artifacts.save_artifact(project_id, "script_copy", script, run_root=root)
+            else:
+                script = _load_artifact(project_id, "script_copy")
+        payload["script_copy"] = script
         tool_name, artifact_name = "script_breakdown", "script_breakdown"
     else:
         raise HTTPException(status_code=400, detail="action must be collector, research, strategy, script, script_breakdown, storyboard, or production")
@@ -1326,13 +1375,18 @@ def run_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
 
 
 @app.get("/api/v2/pipeline")
-def list_pipeline(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+def list_pipeline(
+    limit: int = Query(default=50, ge=1, le=200),
+    include_standalone: bool = Query(default=False),
+) -> dict[str, Any]:
     with queue.get_conn(_db_path()) as conn:
         rows = conn.execute(
             "SELECT * FROM projects ORDER BY created_at DESC, id DESC LIMIT ?",
-            (limit,),
+            (200,),
         ).fetchall()
-    return {"items": [_project_summary(str(row["id"]), row=row) for row in rows]}
+    if not include_standalone:
+        rows = [row for row in rows if not _is_standalone_project(row)]
+    return {"items": [_project_summary(str(row["id"]), row=row) for row in rows[:limit]]}
 
 
 @app.get("/api/v2/pipeline/{project_id}")
@@ -1979,6 +2033,11 @@ def _new_project_id() -> str:
     return f"ref-{stamp}-{secrets.token_hex(3)}"
 
 
+def _new_standalone_id() -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return f"scratch-{stamp}-{secrets.token_hex(3)}"
+
+
 def _validate_project_id(project_id: str) -> str:
     if not PROJECT_ID_RE.fullmatch(project_id):
         raise HTTPException(status_code=400, detail="invalid project_id")
@@ -2024,6 +2083,7 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
         nodes[0]["status"] = "succeeded"
     return {
         "project_id": project_id,
+        "standalone": bool(payload.get("standalone")),
         "product_id": row["product_id"],
         "source_link_id": row["source_link_id"],
         "source_material_id": payload.get("source_material_id"),
@@ -2043,6 +2103,10 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def _is_standalone_project(row: Any) -> bool:
+    return bool(_loads_json(row["payload_json"]).get("standalone"))
 
 
 def _is_playable_delivery_file(path: Path) -> bool:

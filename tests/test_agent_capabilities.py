@@ -91,3 +91,41 @@ def test_strategy_requires_research_artifact(tmp_path: Path, monkeypatch) -> Non
 
     assert response.status_code == 404
     assert response.json()["detail"] == "research_brief not found"
+
+
+def test_standalone_strategy_and_breakdown_cold_start_are_isolated(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "standalone.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        strategy = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "strategy",
+                "product_id": "便携恒温杯",
+                "source_text": "面向夜间喂养照护者，突出准备流程更从容。",
+                "mock": True,
+            },
+        )
+        breakdown = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "script_breakdown",
+                "product_id": "便携恒温杯",
+                "source_text": "为便携恒温杯写一条夜间喂养的 30 秒短视频脚本。",
+                "mock": True,
+            },
+        )
+        visible = client.get("/api/v2/pipeline")
+        all_projects = client.get("/api/v2/pipeline?include_standalone=true")
+        strategy_download = client.get(strategy.json()["download_url"])
+
+    assert strategy.status_code == 200, strategy.text
+    assert breakdown.status_code == 200, breakdown.text
+    assert strategy.json()["project_id"].startswith("scratch-")
+    assert breakdown.json()["project_id"].startswith("scratch-")
+    assert strategy.json()["artifact_name"] == "strategy_brief"
+    assert len(breakdown.json()["artifact"]["beats"]) == 5
+    assert strategy_download.status_code == 200
+    assert all(not item["standalone"] for item in visible.json()["items"])
+    assert any(item["standalone"] for item in all_projects.json()["items"])

@@ -55,6 +55,26 @@ const agentLabels = {
   asset: "产品素材", media: "视频制作", review: "质量审核",
 };
 
+const independentActionLabels = {
+  collector: "素材采集",
+  research: "研究洞察",
+  strategy: "内容策略",
+  script: "脚本生成",
+  script_breakdown: "脚本拆解",
+  storyboard: "分镜生成",
+  production: "单镜制作",
+};
+
+const independentActionHints = {
+  collector: "按关键词、账号或话题发现参考视频；可选择下载入库后进入分析。",
+  research: "输入转写、竞品文案或研究资料，生成结构、节奏与受众洞察。",
+  strategy: "输入研究结论、产品事实或内容需求，生成受众、卖点、钩子和 CTA 策略。",
+  script: "输入产品、受众、平台和内容需求，生成完整中文脚本。",
+  script_breakdown: "输入已有脚本或内容需求，生成逐段意图、画面和连续性拆解。",
+  storyboard: "输入场景、人物、动作、镜头运动和风格，生成可编辑分镜。",
+  production: "输入单镜画面 Prompt，使用产品素材库生成 720P 竖屏视频。",
+};
+
 const motionLabels = {
   dolly_in: "推进", dolly_out: "拉远", pan_left: "左移", pan_right: "右移",
   static: "固定", arc: "环绕", crash_zoom: "快速推进",
@@ -101,8 +121,26 @@ function renderAgentResult(host, payload) {
   host.className = "nodeResult complete";
   host.innerHTML = `
     <div class="resultHead"><strong>${escapeHtml(payload.artifact_name)}</strong>${download}</div>
+    ${payload.project_id && payload.project_id.startsWith("scratch-") ? "<p>独立工作区产物已保存，不会出现在生产项目列表中。</p>" : ""}
     <pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>
   `;
+}
+
+async function loadIndependentAgentActions() {
+  const select = $("#independentAgentAction");
+  try {
+    const capabilityMap = await api("/api/v2/agents");
+    const actions = ["collector"];
+    (capabilityMap.agents || []).forEach((agent) => {
+      String(agent.independent_action || "").split(",").map((item) => item.trim()).filter(Boolean).forEach((action) => {
+        if (independentActionLabels[action] && !actions.includes(action)) actions.push(action);
+      });
+    });
+    select.innerHTML = actions.map((action) => `<option value="${escapeAttr(action)}">${escapeHtml(independentActionLabels[action])}</option>`).join("");
+  } catch {
+    select.innerHTML = '<option value="collector">素材采集</option>';
+  }
+  updateIndependentAgentUI();
 }
 
 function beginOperation(label, estimateSeconds) {
@@ -132,6 +170,7 @@ async function boot() {
   const initialView = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
   showView(views[initialView] ? initialView : "projects", { updateUrl: false });
   await checkHealth();
+  await loadIndependentAgentActions();
   await loadProductLibrary();
   await loadProducts();
   await loadAutoCollector();
@@ -263,13 +302,8 @@ function updateIndependentAgentUI() {
   const action = $("#independentAgentAction").value;
   const targetLabel = $("#independentTargetLabel");
   targetLabel.hidden = action !== "collector";
-  $("#independentAgentPrompt").placeholder = action === "collector"
-    ? "可填写采集备注；目标请填在下方"
-    : action === "storyboard"
-      ? "输入想要的场景、人物、动作、镜头运动和风格，系统会生成可编辑分镜"
-      : action === "production"
-        ? "输入单镜画面 Prompt，系统会使用产品素材库生成 720P 竖屏视频"
-        : "输入产品、受众、平台和内容需求，系统会生成完整中文脚本";
+  $("#independentAgentPrompt").placeholder = independentActionHints[action] || "输入需求";
+  $("#independentAgentState").textContent = independentActionHints[action] || "";
 }
 
 async function runIndependentAgent() {
