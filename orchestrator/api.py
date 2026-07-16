@@ -1286,6 +1286,10 @@ def collect_material_file(material_id: str, relative_path: str) -> FileResponse:
 @app.post("/api/v2/pipeline/run")
 def run_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
     project_id = _validate_project_id(request.project_id or _new_project_id())
+    if not request.mock:
+        missing = [name for name in ("DOUBAO_API_KEY", "SEEDANCE_API_KEY") if not os.environ.get(name)]
+        if missing:
+            raise HTTPException(status_code=422, detail=f"真实运行缺少配置：{', '.join(missing)}。请在服务器 .env.local 配置后重试。")
     source_link_id = _normalize_source_link_id(request.source_link_id, request.link_id)
     source_meta = _source_material_or_none(request.source_material_id)
     if not request.mock and source_meta and str(source_meta.get("source_mode") or "") == "mock":
@@ -1484,8 +1488,8 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
         }
     elif stage == "compose":
         _require_approved_gate(project_id, "hero_gate", root)
-        _load_artifact(project_id, "shot_report")
         _require_selected_playable_takes(project_id, root)
+        _load_artifact(project_id, "shot_report")
         task_stage, agent, payload = "compose", "media", {
             "run_root": root.as_posix(),
             "revision": revision,

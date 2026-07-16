@@ -68,8 +68,14 @@ function renderRegistrationRequests(items) {
   });
 }
 
+function formatTime(value) {
+  if (!value) return "尚未登录";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
 function renderUsers(users) {
-  document.querySelector("#userRows").innerHTML = users.map((user) => `<tr><td><strong>${escapeHtml(user.username)}</strong></td><td>${escapeHtml(user.display_name || "-")}</td><td>${user.role === "admin" ? "管理员" : "操作员"}</td><td><span class="statusTag status-${user.status === "active" ? "succeeded" : "blocked"}">${user.status === "active" ? "启用" : "停用"}</span></td><td>${escapeHtml(user.last_login_at || "尚未登录")}</td><td><button type="button" class="tableAction" data-user-id="${user.id}" data-next-status="${user.status === "active" ? "disabled" : "active"}">${user.status === "active" ? "停用" : "启用"}</button></td></tr>`).join("") || '<tr><td colspan="6">暂无成员账号</td></tr>';
+  document.querySelector("#userRows").innerHTML = users.map((user) => `<tr><td><strong>${escapeHtml(user.username)}</strong></td><td>${escapeHtml(user.display_name || "-")}</td><td>${user.role === "admin" ? "管理员" : "操作员"}</td><td><span class="statusTag status-${user.status === "active" ? "succeeded" : "blocked"}">${user.status === "active" ? "启用" : "停用"}</span></td><td>${escapeHtml(formatTime(user.last_login_at))}</td><td><button type="button" class="tableAction" data-user-id="${user.id}" data-next-status="${user.status === "active" ? "disabled" : "active"}">${user.status === "active" ? "停用" : "启用"}</button><button type="button" class="tableAction" data-reset-user="${user.id}">重置密码</button></td></tr>`).join("") || '<tr><td colspan="6">暂无成员账号</td></tr>';
   document.querySelectorAll("[data-user-id]").forEach((button) => button.addEventListener("click", async () => {
     button.disabled = true;
     try {
@@ -80,6 +86,15 @@ function renderUsers(users) {
     } finally {
       button.disabled = false;
     }
+  }));
+  document.querySelectorAll("[data-reset-user]").forEach((button) => button.addEventListener("click", async () => {
+    const password = window.prompt("输入新的登录密码（至少 8 位）：");
+    if (!password) return;
+    if (password.length < 8) { window.alert("密码至少需要 8 位"); return; }
+    try {
+      await api(`/api/v2/admin/users/${button.dataset.resetUser}`, { method: "PATCH", body: JSON.stringify({ password }) });
+      window.alert("密码已重置");
+    } catch (error) { window.alert(error.message); }
   }));
 }
 

@@ -126,5 +126,5 @@ def _list(value: Any) -> list[str]:
 
 
 def _intent(role: str) -> str:
-    intents = {"钩子": "stop the scroll", "痛点": "make the audience recognize the situation", "方案": "show the safe solution", "证明": "demonstrate a grounded benefit", "行动号召": "prompt a low-pressure next action"}
-    return intents.get(role, "advance the story")
+    intents = {"钩子": "在前三秒建立注意力", "痛点": "让用户识别真实困扰", "方案": "展示正确且安全的解决方式", "证明": "用可感知细节说明价值", "行动号召": "给出低压力的下一步行动"}
+    return intents.get(role, "推动故事自然向前")

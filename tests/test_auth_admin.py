@@ -193,3 +193,14 @@ def test_login_and_registration_are_rate_limited(monkeypatch, tmp_path):
         for index in range(5):
             assert client.post("/api/v2/auth/register", json={"username": f"user-{index}", "password": "password-123"}).status_code == 200
         assert client.post("/api/v2/auth/register", json={"username": "user-over-limit", "password": "password-123"}).status_code == 429
+
+
+def test_real_pipeline_requires_model_keys(monkeypatch, tmp_path):
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "real-preflight.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+    monkeypatch.delenv("DOUBAO_API_KEY", raising=False)
+    monkeypatch.delenv("SEEDANCE_API_KEY", raising=False)
+    with TestClient(app) as client:
+        response = client.post("/api/v2/pipeline/run", json={"product_id": "便携恒温杯", "mock": False})
+    assert response.status_code == 422
+    assert "DOUBAO_API_KEY" in response.json()["detail"]

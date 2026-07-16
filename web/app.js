@@ -314,8 +314,8 @@ async function runIndependentAgent() {
 function updateRuntimeModeHint() {
   const real = $("#runtimeMode").value === "real";
   $("#runtimeModeHint").textContent = real
-    ? "真实调用采集、分析和视频模型，耗时与费用以实际任务为准。"
-    : "仅用于界面与流程演练：不抓取真实 TikTok 视频，也不会产生可交付成片。";
+    ? "真实调用采集、分析和视频模型，会产生实际耗时与费用；缺少密钥时系统会拒绝创建。"
+    : "用于完整流程演练：生成带演练标记的可播放 720P 成片，不调用外部模型。";
 }
 
 function updateCrawlTargetUI() {
@@ -840,6 +840,7 @@ async function loadSelectedProject(projectId) {
 }
 
 async function safeArtifact(projectId, artifactName) {
+  if (!state.selected?.artifacts?.[artifactName]) return null;
   try {
     return await api(`/api/v2/artifacts/${encodeURIComponent(projectId)}/${artifactName}`);
   } catch {
@@ -978,13 +979,21 @@ function renderErrors(projectId, errors) {
         : `<button type="button" data-project="${escapeAttr(projectId)}" data-retry-task="${task.id}">重试此节点</button>`;
       return `
         <details>
-          <summary>${escapeHtml(task.stage)} ${shot ? `shot ${shot}` : ""} failed</summary>
+          <summary>${escapeHtml(stageLabel(task.stage))}${shot ? ` · 镜头 ${shot}` : ""}失败：${escapeHtml(explainTaskError(task.error_json))}</summary>
           <pre>${escapeHtml(JSON.stringify(task.error_json, null, 2))}</pre>
           ${retry}
         </details>
       `;
     })
     .join("");
+}
+
+function explainTaskError(error) {
+  const message = String(error?.message || error?.detail || "任务执行失败");
+  if (/DOUBAO_API_KEY|SEEDANCE_API_KEY|not configured|missing/i.test(message)) return "缺少模型密钥或模型未配置";
+  if (/timeout|timed out/i.test(message)) return "调用超时，可重试";
+  if (/quota|balance|insufficient/i.test(message)) return "模型余额或配额不足";
+  return message;
 }
 
 function renderPanels() {

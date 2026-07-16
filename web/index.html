@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/styles.css?v=20260716-2" />
   </head>
   <body>
@@ -57,8 +58,8 @@
           <label>
             运行模式
             <select id="runtimeMode">
+              <option value="mock" selected>演练模式（不调用模型）</option>
               <option value="real">真实运行</option>
-              <option value="mock">演练模式（不调用模型）</option>
             </select>
             <small id="runtimeModeHint">真实调用采集、分析和视频模型，耗时与费用以实际任务为准。</small>
           </label>

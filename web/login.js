@@ -58,6 +58,7 @@ document.querySelector("#showLogin").addEventListener("click", () => setRegistra
 
 document.querySelector("#registrationForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const error = document.querySelector("#registrationError");
   error.textContent = "";
   const password = document.querySelector("#registrationPassword").value;
@@ -77,7 +78,7 @@ document.querySelector("#registrationForm").addEventListener("submit", async (ev
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "账号申请提交失败");
-    event.currentTarget.reset();
+    form.reset();
     error.style.color = "#23734d";
     error.textContent = "申请已提交，请等待管理员审核开通。";
   } catch (cause) {
