@@ -1547,6 +1547,7 @@ async function runManualStage(stage, shotIndex = null, takeId = null) {
     await refreshProjects();
   } catch (error) {
     toast(error.message, "error");
+    await refreshProjects({ silent: true });
   } finally {
     endOperation();
   }

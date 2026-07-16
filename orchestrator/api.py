@@ -1716,6 +1716,13 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
             "revision": revision,
         }
     elif stage == "storyboard":
+        if not request.mock:
+            missing = [name for name in ("DOUBAO_API_KEY", "ARK_DOUBAO_API_KEY", "ARK_API_KEY") if not os.environ.get(name)]
+            if len(missing) == 3:
+                raise HTTPException(
+                    status_code=422,
+                    detail="真实分镜生成缺少豆包模型密钥。请在服务器 .env.local 配置 DOUBAO_API_KEY 或 ARK_API_KEY 后重试。",
+                )
         _require_approved_gate(project_id, "script_gate", root)
         _load_artifact(project_id, "script_copy")
         task_stage, agent, payload = "storyboard", "storyboard", {
@@ -1780,6 +1787,11 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
     else:
         status = engine.run_until_blocked(
             project_id, db_path=_db_path(), run_root=root, mock=request.mock
+        )
+    if status.status == "failed":
+        raise HTTPException(
+            status_code=502,
+            detail=f"{_manual_stage_label(stage)}失败：{status.message or '请检查模型配置和项目日志后重试'}",
         )
     return {
         "task_id": task_id,
@@ -1925,6 +1937,15 @@ def promote_standalone_artifact(request: StandalonePromoteRequest) -> dict[str, 
         "engine": _engine_status(status),
         "project": _project_summary(project_id),
     }
+
+
+def _manual_stage_label(stage: str) -> str:
+    return {
+        "script": "脚本生成",
+        "storyboard": "分镜生成",
+        "production": "镜头生成",
+        "compose": "成片合成",
+    }.get(stage, "任务运行")
 
 
 @app.post("/api/v2/gates/approve")
