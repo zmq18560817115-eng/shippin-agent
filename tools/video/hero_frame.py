@@ -7,6 +7,7 @@ from typing import Any
 from libshared import artifacts
 from libshared.paths import ROOT
 from tools.base_tool import ToolContext, ToolResult
+from tools.collect import product_library
 from tools.tool_registry import register_tool
 
 
@@ -46,6 +47,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "project_id": project_id,
         "product_id": product_id,
         "seedance_source": seedance_source,
+        "reference_paths": product_library.resolve_generation_references(product_id),
         "hero_frames": hero_frames,
     }
     artifacts.validate_artifact("asset_manifest", manifest)

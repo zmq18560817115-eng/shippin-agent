@@ -51,8 +51,9 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "Create script_copy JSON for product_id "
                     f"{product_id}. Use exactly 5 sections with roles 钩子, 痛点, 方案, 证明, 行动号召 and continuous timings "
                     "0-6s, 6-12s, 12-18s, 18-24s, 24-30s. For every section return voiceover_en plus these Chinese operator fields: voiceover_zh, scene_zh (environment, lighting, props, character state), action_zh (visible action and product-use step), and story_beat_zh (what changes from the previous beat and why it advances the story). "
-                    "The five sections must create one continuous, filmable story: scene -> pain -> product as solution -> safe proof/demo -> CTA. Product fact: portable warming cup is separate from baby bottle; "
-                    "milk is poured into the cup, warmed/kept warm, then poured through the spout into a clean bottle. "
+                    "The five sections must create one continuous, filmable story. Beat 1 establishes the scene; beat 2 shows the waiting problem; "
+                    "beat 3 only pours an approved milk source into the warming cup; beat 4 only pours from the warming cup through its round spout into a separate clean baby bottle; beat 5 closes with a CTA. "
+                    "Do not combine the two pouring directions in one beat. Product fact: portable warming cup is separate from baby bottle. "
                     f"Approved product facts and hard constraints: {product_facts or 'not provided'}. "
                     f"Previous review feedback that must be fixed: {rewrite_reason or 'none'}. "
                     f"Approved content strategy: {strategy_brief}. Analysis: {analysis_report}"
@@ -87,8 +88,8 @@ def _normalize_sections(value: Any) -> list[dict[str, Any]]:
     defaults = [
         ("钩子", "0-6s", "Bottle prep should not take over your night."),
         ("痛点", "6-12s", "Cold milk and long waits can make late feeds harder."),
-        ("方案", "12-18s", "Pour milk into the warming cup and prepare a clean bottle when it is ready."),
-        ("证明", "18-24s", "Its portable shape fits a nightstand or travel bag."),
+        ("方案", "12-18s", "Pour milk from the approved source into the warming cup."),
+        ("证明", "18-24s", "When ready, pour through the round spout into a separate clean bottle."),
         ("行动号召", "24-30s", "Save this for calmer feeds at home or on the go."),
     ]
     raw = value if isinstance(value, list) else []
@@ -105,7 +106,7 @@ def _normalize_sections(value: Any) -> list[dict[str, Any]]:
                 "voiceover_en": line,
                 "voiceover_zh": chinese_line or _default_chinese_voiceover(index),
                 "scene_zh": str(item.get("scene_zh") or _default_scene(index)),
-                "action_zh": str(item.get("action_zh") or _default_action(index)),
+                "action_zh": _default_action(index) if index in {3, 4} else str(item.get("action_zh") or _default_action(index)),
                 "story_beat_zh": str(item.get("story_beat_zh") or _default_story_beat(index)),
                 "subtitle_en": line,
                 "selling_points": _string_list(item.get("selling_points"), []),
@@ -145,8 +146,8 @@ def _default_chinese_voiceover(index: int) -> str:
     return {
         1: "夜间喂养准备，不必占满你的时间。",
         2: "奶液变冷和漫长等待，会让睡前准备更困难。",
-        3: "将奶液倒入恒温杯，准备好后再倒入干净奶瓶。",
-        4: "小巧机身，适合放在床头或随身包中。",
+        3: "将允许的奶液倒入恒温杯，开始恒温准备。",
+        4: "准备好后，经圆形出液口倒入独立干净奶瓶。",
         5: "为下一次夜间喂养先收藏这条。",
     }.get(index, "为下一次夜间喂养先收藏这条。")
 
@@ -156,7 +157,7 @@ def _default_scene(index: int) -> str:
         1: "深夜卧室，暖黄色床头灯，床头柜上有恒温杯、干净奶瓶和已准备好的喂养用品；同一位照护者穿浅色家居服。",
         2: "保持同一卧室与暖光，照护者查看等待中的奶瓶，婴儿不入镜，仅以环境声和急切动作表达时间压力。",
         3: "同一床头柜台面，恒温杯与干净奶瓶并排摆放，产品白底身份图作为外观锚点。",
-        4: "镜头转为床头柜细节和随身包收纳场景，人物、服装、光线和产品外观保持一致。",
+        4: "保持同一床头柜、人物、服装与暖光，独立干净奶瓶位于恒温杯出液口下方。",
         5: "回到整洁的床头柜全景，照护者放下准备完成的奶瓶，恒温杯置于画面前景。",
     }.get(index, "保持同一场景、人物、光线与产品外观。")
 
@@ -165,8 +166,8 @@ def _default_action(index: int) -> str:
     return {
         1: "照护者轻放恒温杯到床头柜，建立夜间喂养准备的真实场景。",
         2: "照护者看向等待中的奶液和奶瓶，停顿后开始准备，表现等待带来的不便。",
-        3: "将允许的奶液倒入恒温杯；准备完成后，从杯子的出液口倒入独立、干净的奶瓶，禁止把奶瓶插入杯中。",
-        4: "展示小巧机身放入床头柜抽屉或随身包；若显示温度，只能是 98 华氏度（98 F）。",
+        3: "只展示将允许的奶液从独立容器倒入恒温杯内部；禁止在本镜头反向倒出，禁止把奶瓶插入杯中。",
+        4: "只展示倾斜恒温杯，经圆形出液口将奶液倒入独立、干净的奶瓶；若显示温度，只能是 98°F。",
         5: "照护者轻松收好物品，镜头停留在产品与准备完成的奶瓶上，形成自然收束。",
     }.get(index, "以连续、可执行的产品使用动作推进画面。")
 
@@ -175,8 +176,8 @@ def _default_story_beat(index: int) -> str:
     return {
         1: "从夜间真实情境切入，让观众立刻识别自己熟悉的喂养时刻。",
         2: "把“准备麻烦”具体化，为产品出现建立合理动机。",
-        3: "产品作为解决方案进入画面，用正确的倒液流程完成关键转折。",
-        4: "用收纳与近景细节证明它适合该情境，而不是额外堆砌卖点。",
+        3: "产品作为解决方案进入画面，先清楚展示奶液进入恒温杯的方向。",
+        4: "承接上一动作，清楚证明奶液从恒温杯流向独立奶瓶的正确方向。",
         5: "回到平静有序的结果，给出低压力的收藏或了解更多引导。",
     }.get(index, "承接前一段并推进到下一段。")
 

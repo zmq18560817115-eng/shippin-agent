@@ -79,6 +79,13 @@ pip install -r requirements-tiktok.txt
 ARK_API_KEY=你的豆包密钥
 DOUBAO_API_KEY=你的豆包分析密钥
 SEEDANCE_API_KEY=你的视频生成密钥
+VAF_AUTH_ENABLED=true
+VAF_SESSION_SECRET=使用随机长字符串
+VAF_OPERATOR_USER=生产操作员账号
+VAF_OPERATOR_PASSWORD=生产操作员强密码
+VAF_ADMIN_USER=后台管理员账号
+VAF_ADMIN_PASSWORD=后台管理员强密码
+VAF_COOKIE_SECURE=true
 ```
 
 密钥只放在本地环境或服务器环境变量中，不要提交到 Git。真实模式会产生模型费用；Mock 模式只用于接口和流程测试，不会生成可交付成片。
@@ -89,7 +96,15 @@ SEEDANCE_API_KEY=你的视频生成密钥
 uvicorn orchestrator.api:app --host 127.0.0.1 --port 8790
 ```
 
-打开 `http://127.0.0.1:8790/`。内网部署时，将监听地址改为服务器内网地址，并通过反向代理、访问控制和 HTTPS 保护服务。
+打开 `http://127.0.0.1:8790/`，先选择内容生产工作台或后台管理平台。开发环境可保持 `VAF_AUTH_ENABLED=false`；内网服务器必须启用认证、配置两组独立账号，并通过反向代理和 HTTPS 保护服务。
+
+部署到目标服务器后先执行环境预检：
+
+```powershell
+python scripts/deployment_preflight.py --env-file .env.local
+```
+
+预检会实际启动 Playwright Chromium，并验证应用 FFmpeg、yt-dlp、SQLite WAL、素材持久卷、运行持久卷、Cookies 路径和模型密钥。`TIKTOK_COOKIES_FILE` 必须指向服务器持久卷中的 Netscape 格式 Cookies 文件；不要把 Cookies 或密钥提交到仓库。
 
 健康检查：
 

@@ -37,6 +37,36 @@ def test_seedance_shot_forwards_additional_reference_paths(tmp_path: Path, monke
     assert captured["image_paths"] == ["usage.png"]
 
 
+def test_seedance_shot_uses_manifest_references_when_shot_has_none(tmp_path: Path, monkeypatch) -> None:
+    captured = {}
+
+    def fake_create(context, **kwargs):
+        captured.update(kwargs)
+        Path(kwargs["output_path"]).write_bytes(b"video")
+        return {"provider": "ark", "task_id": "task-2", "reference_count": 2}
+
+    monkeypatch.setattr(seedance_shot.ark, "create_seedance_video", fake_create)
+    result = seedance_shot.execute(
+        {
+            "project_id": "manifest-refs",
+            "shot": {"number": 1},
+            "asset_manifest": {
+                "version": "2.0",
+                "project_id": "manifest-refs",
+                "product_id": "便携恒温杯",
+                "seedance_source": "白底主图.png",
+                "reference_paths": ["倒出口参考.png"],
+                "hero_frames": [{"number": 1, "path": "hero.png"}],
+            },
+        },
+        ToolContext.from_mapping(
+            {"mock": False, "run_root": str(tmp_path), "env": {"SEEDANCE_API_KEY": "configured"}}
+        ),
+    )
+    assert result.ok
+    assert captured["image_paths"] == ["倒出口参考.png"]
+
+
 def test_seedance_request_marks_all_images_as_references(tmp_path: Path, monkeypatch) -> None:
     primary = tmp_path / "primary.png"
     usage = tmp_path / "usage.png"

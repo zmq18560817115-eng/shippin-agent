@@ -94,10 +94,13 @@ def _normalize_shots(
         role = str(section.get("role") or "")
         visual = _clean_temperature_text(str(item.get("visual") or _fallback_visual(index, role)))
         visual_prompt = _clean_temperature_text(str(item.get("visual_prompt") or visual))
-        if index == 4 and not _has_outbound_pour(visual + " " + visual_prompt):
+        # The two directional product-use shots are deterministic safety beats.
+        # Free-form model copy is retained for the other three shots only.
+        safety_fallback = index in {3, 4}
+        if safety_fallback:
             visual = _fallback_visual(index, role)
             visual_prompt = visual
-        prompt = _clean_temperature_text(str(item.get("seedance_prompt") or visual_prompt or visual))
+        prompt = visual_prompt if safety_fallback else _clean_temperature_text(str(item.get("seedance_prompt") or visual_prompt or visual))
         prompt = _lock_prompt(
             prompt,
             str(section.get("voiceover_en") or ""),
@@ -112,8 +115,8 @@ def _normalize_shots(
                 "visual": visual,
                 "visual_prompt": visual_prompt,
                 "seedance_prompt": prompt,
-                "visual_zh": str(item.get("visual_zh") or _fallback_visual_zh(index)),
-                "seedance_prompt_zh": str(item.get("seedance_prompt_zh") or _fallback_prompt_zh(index)),
+                "visual_zh": _fallback_visual_zh(index) if safety_fallback else str(item.get("visual_zh") or _fallback_visual_zh(index)),
+                "seedance_prompt_zh": _fallback_prompt_zh(index) if safety_fallback else str(item.get("seedance_prompt_zh") or _fallback_prompt_zh(index)),
                 "footage_type": "AI_VIDEO",
                 "camera_motion": {
                     "type": _motion_type(str(motion_value or motions[min(index - 1, len(motions) - 1)])),
@@ -143,7 +146,7 @@ def _lock_prompt(
     )
     prompt = " ".join(prompt.strip().split())
     prompt = lock + prompt
-    if voiceover:
+    if voiceover and shot_index not in {3, 4}:
         prompt = f"{prompt} Voiceover context: {voiceover}"
     return prompt
 
@@ -156,7 +159,7 @@ def _fallback_visual(index: int, role: str) -> str:
         4: "Close-up: tilt the warming cup and pour through the round spout into the separate clean baby bottle; show 98 F only if legible.",
         5: "Return to the same scene for a stable product-and-caregiver CTA composition with the approved cup identity clear.",
     }
-    return f"{role}: {visuals.get(index, visuals[5])}"
+    return visuals.get(index, visuals[5])
 
 
 def _fallback_visual_zh(index: int) -> str:

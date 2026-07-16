@@ -91,6 +91,18 @@ def test_product_guardrail_text_exposes_fahrenheit_rule(tmp_path: Path, monkeypa
     assert "98°C" in guardrails
 
 
+def test_generation_references_include_approved_usage_step(tmp_path: Path, monkeypatch) -> None:
+    root, _ = _sample_product_root(tmp_path)
+    index_path = tmp_path / "index.json"
+    product_library.refresh_index([root], path=index_path)
+    monkeypatch.setenv("VAF_PRODUCT_LIBRARY_INDEX", str(index_path))
+
+    references = product_library.resolve_generation_references("便携恒温杯")
+
+    assert len(references) == 1
+    assert references[0].endswith("倒出口参考.png")
+
+
 def _sample_product_root(tmp_path: Path) -> tuple[Path, Path]:
     root = tmp_path / "产品资料"
     root.mkdir()

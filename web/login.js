@@ -1,0 +1,50 @@
+const portalState = { portal: "operator", authEnabled: false };
+
+const portalCopy = {
+  operator: { code: "普通用户入口", title: "进入内容生产工作台" },
+  admin: { code: "管理员入口", title: "进入后台管理平台" },
+};
+
+document.querySelectorAll("[data-portal]").forEach((button) => {
+  button.addEventListener("click", () => {
+    portalState.portal = button.dataset.portal;
+    document.querySelectorAll("[data-portal]").forEach((item) => item.classList.toggle("active", item === button));
+    document.querySelector("#portalCode").textContent = portalCopy[portalState.portal].code;
+    document.querySelector("#portalTitle").textContent = portalCopy[portalState.portal].title;
+  });
+});
+
+async function loadSession() {
+  const response = await fetch("/api/v2/auth/session");
+  const session = await response.json();
+  portalState.authEnabled = Boolean(session.auth_enabled);
+  document.querySelector("#authHint").textContent = portalState.authEnabled
+    ? "请输入服务器配置的内网账号与密码。"
+    : "当前为本地开发模式，填写任意账号即可进入。";
+}
+
+document.querySelector("#loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const error = document.querySelector("#loginError");
+  error.textContent = "";
+  try {
+    const response = await fetch("/api/v2/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.querySelector("#username").value.trim(),
+        password: document.querySelector("#password").value,
+        portal: portalState.portal,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "登录失败");
+    window.location.assign(payload.redirect);
+  } catch (cause) {
+    error.textContent = cause.message;
+  }
+});
+
+loadSession().catch(() => {
+  document.querySelector("#loginError").textContent = "无法连接服务器，请检查服务状态。";
+});

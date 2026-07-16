@@ -22,3 +22,7 @@ def test_real_script_contract_targets_30_seconds() -> None:
     assert all(section["scene_zh"] for section in sections)
     assert all(section["action_zh"] for section in sections)
     assert all(section["story_beat_zh"] for section in sections)
+    assert "倒入恒温杯" in sections[2]["action_zh"]
+    assert "反向倒出" in sections[2]["action_zh"]
+    assert "圆形出液口" in sections[3]["action_zh"]
+    assert "98°F" in sections[3]["action_zh"]

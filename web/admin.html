@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>视频内容工厂 · 管理后台</title>
+    <link rel="stylesheet" href="/static/portal.css?v=20260716-1" />
+  </head>
+  <body class="adminPage">
+    <header class="adminTopbar">
+      <div class="adminBrand"><span class="productMark">VF</span><div><h1>视频内容工厂</h1><p>运行治理与数据分析</p></div></div>
+      <div class="adminActions"><span id="adminUser">管理员</span><a href="/workbench">进入生产工作台</a><button id="logout">退出</button></div>
+    </header>
+    <main class="adminWorkspace">
+      <section class="adminIntro"><div><span>ADMIN CONSOLE</span><h2>系统运行总览</h2><p>项目、任务、成本、素材和存储状态</p></div><button id="refreshAdmin">刷新数据</button></section>
+      <section id="stats" class="statsGrid"></section>
+      <section class="adminColumns">
+        <div class="adminPanel"><div class="panelHead"><h3>项目状态</h3><span id="projectTotal"></span></div><div id="projectStates" class="stateBars"></div></div>
+        <div class="adminPanel"><div class="panelHead"><h3>采集与模型后端</h3><span>实时配置状态</span></div><div id="backendStates" class="backendList"></div></div>
+      </section>
+      <section class="adminPanel"><div class="panelHead"><h3>近期项目</h3><span>最近更新 12 条</span></div><div class="tableScroll"><table><thead><tr><th>项目编号</th><th>产品</th><th>状态</th><th>更新时间</th><th>入口</th></tr></thead><tbody id="recentProjects"></tbody></table></div></section>
+      <section class="adminPanel"><div class="panelHead"><h3>近期失败节点</h3><span>用于定位供应商、素材和流程问题</span></div><div id="recentFailures" class="failureList"></div></section>
+    </main>
+    <script src="/static/admin.js?v=20260716-1"></script>
+  </body>
+</html>

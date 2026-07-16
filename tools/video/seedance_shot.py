@@ -48,7 +48,11 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             context,
             prompt=_shot_prompt(shot, asset_manifest),
             image_path=str(asset_manifest.get("seedance_source") or ""),
-            image_paths=[str(path) for path in shot.get("reference_paths") or [] if str(path)],
+            image_paths=[
+                str(path)
+                for path in (shot.get("reference_paths") or asset_manifest.get("reference_paths") or [])
+                if str(path)
+            ],
             output_path=output,
             duration_sec=_duration_sec(shot),
         )
@@ -78,7 +82,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "shot_index": number,
             "take_id": take_id or None,
             "seedance_source": asset_manifest.get("seedance_source"),
-            "reference_paths": shot.get("reference_paths") or [],
+            "reference_paths": shot.get("reference_paths") or asset_manifest.get("reference_paths") or [],
             **provider_meta,
         },
     )
@@ -94,6 +98,7 @@ def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
             f"Approved product facts and hard constraints: {product_facts}" if product_facts else "",
             "Use only the approved product identity from the reference image. Do not add any invented brand name, logo, watermark, label, or readable text. Do not replace the product with a generic bottle or another brand.",
             "For a warming-cup pouring shot: pour liquid from the warming cup spout into a separate clean baby bottle; never place the baby bottle inside the warming cup and never pour in the reverse direction.",
+            "The single required action must visibly complete on camera: keep the main lid closed, tilt the warming cup, show one continuous liquid stream leaving the approved round spout, and show that stream entering the separate baby bottle. Do not open the main lid, do not merely place the products side by side, and do not end before the pour is visible.",
             "If the display is visible, show exactly 98°F with the Fahrenheit symbol; never show Celsius or 98°C.",
         )
         if part

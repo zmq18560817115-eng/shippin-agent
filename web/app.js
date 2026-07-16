@@ -128,6 +128,7 @@ function endOperation() {
 
 async function boot() {
   bindEvents();
+  await loadWorkbenchSession();
   const initialView = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
   showView(views[initialView] ? initialView : "projects", { updateUrl: false });
   await checkHealth();
@@ -135,6 +136,15 @@ async function boot() {
   await loadProducts();
   await refreshProjects();
   window.setInterval(() => refreshProjects({ silent: true }), 3000);
+}
+
+async function loadWorkbenchSession() {
+  try {
+    const session = await api("/api/v2/auth/session");
+    $("#adminEntry").hidden = session.auth_enabled && session.role !== "admin";
+  } catch {
+    $("#adminEntry").hidden = true;
+  }
 }
 
 async function runFlowCapability(action, button, resultSelector) {
@@ -171,6 +181,10 @@ async function runFlowCapability(action, button, resultSelector) {
 }
 
 function bindEvents() {
+  $("#logoutWorkbench").addEventListener("click", async () => {
+    await api("/api/v2/auth/logout", { method: "POST" });
+    window.location.assign("/login");
+  });
   $("#startForm").addEventListener("submit", startProject);
   $("#collectForm").addEventListener("submit", collectLinks);
   $("#crawlForm").addEventListener("submit", crawlTikTok);

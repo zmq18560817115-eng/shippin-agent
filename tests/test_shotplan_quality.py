@@ -58,3 +58,6 @@ def test_normalization_repairs_temperature_encoding_and_shot_four_action() -> No
     assert "98掳F" not in str(shots)
     assert "98°F" not in str(shots)
     assert "pour through the round spout" in shots[3]["visual"]
+    assert "travel bag" not in shots[3]["seedance_prompt"]
+    assert "pour through the round spout" in shots[3]["seedance_prompt"]
+    assert "pour through the round spout" not in shots[2]["visual"]

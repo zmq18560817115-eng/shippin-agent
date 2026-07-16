@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>视频内容工厂 · 登录</title>
+    <link rel="stylesheet" href="/static/portal.css?v=20260716-1" />
+  </head>
+  <body class="loginPage">
+    <main class="loginShell">
+      <header class="loginBrand">
+        <span class="productMark">VF</span>
+        <div>
+          <h1>视频内容工厂</h1>
+          <p>企业产品短视频 Agent 生产与管理平台</p>
+        </div>
+        <span class="environmentTag">内网工作台</span>
+      </header>
+
+      <section class="portalChoice" aria-label="选择登录入口">
+        <button type="button" class="portalOption active" data-portal="operator">
+          <span>01</span><strong>内容生产工作台</strong><small>素材、脚本、分镜、制作与交付</small>
+        </button>
+        <button type="button" class="portalOption" data-portal="admin">
+          <span>02</span><strong>后台管理平台</strong><small>项目治理、运行监控与数据统计</small>
+        </button>
+      </section>
+
+      <form id="loginForm" class="loginForm">
+        <div class="formIntro">
+          <span id="portalCode">普通用户入口</span>
+          <h2 id="portalTitle">进入内容生产工作台</h2>
+          <p id="authHint">请输入内网账号。开发模式未开启认证时，可直接进入。</p>
+        </div>
+        <label>账号<input id="username" autocomplete="username" placeholder="请输入账号" /></label>
+        <label>密码<input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" /></label>
+        <button type="submit" class="loginButton">登录并进入</button>
+        <p id="loginError" class="loginError" role="alert"></p>
+      </form>
+
+      <footer>产品素材与生成产物仅用于内部生产，请勿外传。</footer>
+    </main>
+    <script src="/static/login.js?v=20260716-1"></script>
+  </body>
+</html>

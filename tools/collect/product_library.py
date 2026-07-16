@@ -113,6 +113,28 @@ def resolve_seedance_source(product_id: str) -> str:
     return fallback.as_posix() if fallback.exists() else ""
 
 
+def resolve_generation_references(product_id: str, *, limit: int = 1) -> list[str]:
+    product = get_product(product_id)
+    if not product:
+        return []
+    primary = str(product.get("seedance_source") or "")
+    references: list[str] = []
+    for asset in product.get("assets") or []:
+        path = str(asset.get("source_path") or "")
+        if (
+            path
+            and path != primary
+            and asset.get("approval_status") == "approved"
+            and asset.get("asset_type") == "usage_step"
+            and Path(path).is_file()
+            and path not in references
+        ):
+            references.append(path)
+        if len(references) >= max(0, limit):
+            break
+    return references
+
+
 def product_guardrail_text(product_id: str) -> str:
     product = get_product(product_id)
     facts = product.get("facts") if product else {}

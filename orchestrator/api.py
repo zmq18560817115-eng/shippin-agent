@@ -5,14 +5,18 @@ import os
 import re
 import secrets
 import shutil
+import base64
+import hashlib
+import hmac
+import time
 import zipfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -185,6 +189,12 @@ class AgentRunRequest(BaseModel):
     mock: bool = True
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str = ""
+    portal: str = "operator"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     queue.init_db(db_path=_db_path())
@@ -197,9 +207,82 @@ if WEB_ROOT.exists():
     app.mount("/static", StaticFiles(directory=WEB_ROOT), name="static")
 
 
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if _auth_enabled() and request.url.path.startswith(("/api/v2/", "/workbench", "/admin")):
+        if request.url.path.startswith(("/api/v2/auth/", "/api/v2/runtime")):
+            return await call_next(request)
+        session = _read_session(request)
+        if session is None:
+            if request.url.path.startswith("/api/"):
+                return JSONResponse({"detail": "authentication required"}, status_code=401)
+            return RedirectResponse("/login", status_code=303)
+        if request.url.path.startswith(("/admin", "/api/v2/admin")) and session.get("role") != "admin":
+            return JSONResponse({"detail": "administrator role required"}, status_code=403)
+    return await call_next(request)
+
+
 @app.get("/", include_in_schema=False)
+def home() -> RedirectResponse:
+    return RedirectResponse("/login", status_code=303)
+
+
+@app.get("/login", include_in_schema=False)
+def login_page() -> FileResponse:
+    return FileResponse(WEB_ROOT / "login.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/workbench", include_in_schema=False)
 def workbench() -> FileResponse:
     return FileResponse(WEB_ROOT / "index.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/admin", include_in_schema=False)
+def admin_page() -> FileResponse:
+    return FileResponse(WEB_ROOT / "admin.html", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/v2/auth/login")
+def login(request: LoginRequest) -> JSONResponse:
+    role = request.portal.strip().casefold()
+    if role not in {"operator", "admin"}:
+        raise HTTPException(status_code=400, detail="unknown portal")
+    username = request.username.strip()
+    if _auth_enabled():
+        configuration_error = _auth_configuration_error()
+        if configuration_error:
+            raise HTTPException(status_code=503, detail=configuration_error)
+        expected_user = os.environ.get("VAF_ADMIN_USER" if role == "admin" else "VAF_OPERATOR_USER", "")
+        expected_password = os.environ.get("VAF_ADMIN_PASSWORD" if role == "admin" else "VAF_OPERATOR_PASSWORD", "")
+        if not expected_user or not expected_password:
+            raise HTTPException(status_code=503, detail=f"{role} credentials are not configured")
+        if not hmac.compare_digest(username, expected_user) or not hmac.compare_digest(request.password, expected_password):
+            raise HTTPException(status_code=401, detail="账号或密码错误")
+    elif not username:
+        username = "local-admin" if role == "admin" else "local-operator"
+    response = JSONResponse({"ok": True, "role": role, "username": username, "redirect": "/admin" if role == "admin" else "/workbench"})
+    response.set_cookie(
+        "vaf_session",
+        _sign_session(username, role),
+        httponly=True,
+        secure=_env_bool("VAF_COOKIE_SECURE", False),
+        samesite="strict",
+        max_age=8 * 60 * 60,
+    )
+    return response
+
+
+@app.post("/api/v2/auth/logout")
+def logout() -> JSONResponse:
+    response = JSONResponse({"ok": True})
+    response.delete_cookie("vaf_session")
+    return response
+
+
+@app.get("/api/v2/auth/session")
+def auth_session(request: Request) -> dict[str, Any]:
+    session = _read_session(request)
+    return {"authenticated": session is not None, "auth_enabled": _auth_enabled(), **(session or {})}
 
 
 @app.get("/healthz")
@@ -250,6 +333,45 @@ def runtime_status() -> dict[str, Any]:
 @app.get("/api/v2/agents")
 def agent_capabilities() -> dict[str, Any]:
     return capability_map()
+
+
+@app.get("/api/v2/admin/summary")
+def admin_summary() -> dict[str, Any]:
+    queue.init_db(db_path=_db_path())
+    with queue.get_conn(_db_path()) as conn:
+        project_rows = conn.execute("SELECT status, COUNT(*) AS count FROM projects GROUP BY status").fetchall()
+        task_rows = conn.execute("SELECT status, COUNT(*) AS count FROM tasks GROUP BY status").fetchall()
+        total_cost = float(conn.execute("SELECT COALESCE(SUM(cost_cny), 0) FROM cost_entries").fetchone()[0])
+        recent = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT id, product_id, status, created_at, updated_at FROM projects ORDER BY updated_at DESC LIMIT 12"
+            ).fetchall()
+        ]
+        failures = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT project_id, stage, agent, error_json, updated_at FROM tasks WHERE status = 'failed' ORDER BY updated_at DESC LIMIT 12"
+            ).fetchall()
+        ]
+    material_index = manual_import.load_library_index(_material_library_root())
+    runs_root = _runs_root()
+    return {
+        "status": "ok",
+        "projects": {row["status"]: row["count"] for row in project_rows},
+        "tasks": {row["status"]: row["count"] for row in task_rows},
+        "total_cost_cny": round(total_cost, 4),
+        "material_count": len(material_index.get("items") or []),
+        "run_count": len([path for path in runs_root.iterdir() if path.is_dir()]) if runs_root.exists() else 0,
+        "storage_bytes": {
+            "database": _path_size(queue.resolve_db_path(_db_path())),
+            "materials": _path_size(_material_library_root()),
+            "runs": _path_size(runs_root),
+        },
+        "recent_projects": recent,
+        "recent_failures": failures,
+        "runtime": runtime_status(),
+    }
 
 
 @app.post("/api/v2/agents/run")
@@ -355,11 +477,12 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     elif action == "production":
         prompt = (request.prompt or request.source_text or "Create a product-safe vertical shot").strip()
         source = product_library.resolve_seedance_source(request.product_id)
+        references = product_library.resolve_generation_references(request.product_id)
         payload.update({
-            "shot": {"number": 1, "visual": prompt, "seedance_prompt": prompt, "camera_motion": {"duration_sec": 6}},
+            "shot": {"number": 1, "visual": prompt, "seedance_prompt": prompt, "reference_paths": references, "camera_motion": {"duration_sec": 6}},
             "shot_index": 1,
             "take_id": "A",
-            "asset_manifest": {"version": "2.0", "project_id": project_id, "product_id": request.product_id, "seedance_source": source, "hero_frames": [{"number": 1, "path": source, "source_refs": [source], "status": "approved"}]},
+            "asset_manifest": {"version": "2.0", "project_id": project_id, "product_id": request.product_id, "seedance_source": source, "reference_paths": references, "hero_frames": [{"number": 1, "path": source, "source_refs": [source, *references], "status": "approved"}]},
         })
         tool_name, artifact_name = "seedance_shot", "shot_report"
     elif action == "script_breakdown":
@@ -672,6 +795,67 @@ def _nonnegative_int(value: Any) -> int:
         return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = str(os.environ.get(name) or "").strip().casefold()
+    if not value:
+        return default
+    return value in {"1", "true", "yes", "on"}
+
+
+def _auth_enabled() -> bool:
+    return _env_bool("VAF_AUTH_ENABLED", False)
+
+
+def _auth_configuration_error() -> str | None:
+    if len(str(os.environ.get("VAF_SESSION_SECRET") or "").strip()) < 32:
+        return "VAF_SESSION_SECRET must contain at least 32 characters"
+    return None
+
+
+def _session_secret() -> bytes:
+    configured = str(os.environ.get("VAF_SESSION_SECRET") or "").strip()
+    if _auth_enabled() and len(configured) < 32:
+        raise ValueError("invalid session secret")
+    return (configured or "local-development-session-secret").encode("utf-8")
+
+
+def _sign_session(username: str, role: str) -> str:
+    payload = json.dumps(
+        {"username": username, "role": role, "exp": int(time.time()) + 8 * 60 * 60},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    encoded = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+    signature = hmac.new(_session_secret(), encoded.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{encoded}.{signature}"
+
+
+def _read_session(request: Request) -> dict[str, Any] | None:
+    token = str(request.cookies.get("vaf_session") or "")
+    try:
+        encoded, signature = token.rsplit(".", 1)
+        expected = hmac.new(_session_secret(), encoded.encode("ascii"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return None
+        padding = "=" * (-len(encoded) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(encoded + padding).decode("utf-8"))
+        if int(payload.get("exp") or 0) < int(time.time()):
+            return None
+        if payload.get("role") not in {"operator", "admin"}:
+            return None
+        return {"username": str(payload.get("username") or ""), "role": payload["role"]}
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def _path_size(path: Path) -> int:
+    if path.is_file():
+        return path.stat().st_size
+    if not path.exists():
+        return 0
+    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
 
 
 @app.get("/api/v2/collect/library")

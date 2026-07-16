@@ -152,6 +152,24 @@ textarea {
   color: #ffffff;
 }
 
+.topLink {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.topLink:hover {
+  color: var(--blue);
+}
+
+.quietButton {
+  min-height: 32px;
+  border-color: transparent;
+  padding-inline: 7px;
+  color: var(--muted);
+}
+
 .continueButton:hover {
   border-color: #244b99;
   background: #244b99;
