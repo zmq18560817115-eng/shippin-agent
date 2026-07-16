@@ -20,6 +20,7 @@ def test_local_portals_are_available_without_auth(monkeypatch):
 def test_admin_endpoint_requires_admin_role(monkeypatch, tmp_path):
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "auth.db"))
     monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_COOKIE_SECURE", "false")
     monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
     monkeypatch.setenv("VAF_OPERATOR_USER", "operator")
     monkeypatch.setenv("VAF_OPERATOR_PASSWORD", "operator-pass")
@@ -52,6 +53,7 @@ def test_admin_endpoint_requires_admin_role(monkeypatch, tmp_path):
 def test_admin_can_create_and_disable_database_user(monkeypatch, tmp_path):
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "users.db"))
     monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_COOKIE_SECURE", "false")
     monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
     monkeypatch.setenv("VAF_ADMIN_USER", "admin")
     monkeypatch.setenv("VAF_ADMIN_PASSWORD", "admin-pass")
@@ -87,6 +89,7 @@ def test_admin_can_create_and_disable_database_user(monkeypatch, tmp_path):
 def test_disabling_user_revokes_existing_session(monkeypatch, tmp_path):
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "revoked.db"))
     monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_COOKIE_SECURE", "false")
     monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
     monkeypatch.setenv("VAF_ADMIN_USER", "admin")
     monkeypatch.setenv("VAF_ADMIN_PASSWORD", "admin-pass")
@@ -112,6 +115,7 @@ def test_disabling_user_revokes_existing_session(monkeypatch, tmp_path):
 def test_last_active_admin_cannot_be_disabled(monkeypatch, tmp_path):
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "last-admin.db"))
     monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_COOKIE_SECURE", "false")
     monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
     monkeypatch.setenv("VAF_ADMIN_USER", "admin")
     monkeypatch.setenv("VAF_ADMIN_PASSWORD", "admin-pass")
@@ -128,6 +132,7 @@ def test_last_active_admin_cannot_be_disabled(monkeypatch, tmp_path):
 def test_registration_request_needs_admin_approval(monkeypatch, tmp_path):
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "registration.db"))
     monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_COOKIE_SECURE", "false")
     monkeypatch.setenv("VAF_SELF_REGISTRATION_ENABLED", "true")
     monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
     monkeypatch.setenv("VAF_ADMIN_USER", "admin")
@@ -166,3 +171,25 @@ def test_registration_request_needs_admin_approval(monkeypatch, tmp_path):
             json={"username": "new-editor", "password": "new-editor-pass", "portal": "operator"},
         )
         assert accepted.status_code == 200
+
+
+def test_login_and_registration_are_rate_limited(monkeypatch, tmp_path):
+    from orchestrator import api
+
+    api.LOGIN_FAILURES.clear()
+    api.REGISTRATION_ATTEMPTS.clear()
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "rate-limit.db"))
+    monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_COOKIE_SECURE", "false")
+    monkeypatch.setenv("VAF_SELF_REGISTRATION_ENABLED", "true")
+    monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
+    monkeypatch.setenv("VAF_ADMIN_USER", "admin")
+    monkeypatch.setenv("VAF_ADMIN_PASSWORD", "admin-pass")
+
+    with TestClient(app) as client:
+        for _ in range(5):
+            assert client.post("/api/v2/auth/login", json={"username": "admin", "password": "wrong", "portal": "admin"}).status_code == 401
+        assert client.post("/api/v2/auth/login", json={"username": "admin", "password": "wrong", "portal": "admin"}).status_code == 429
+        for index in range(5):
+            assert client.post("/api/v2/auth/register", json={"username": f"user-{index}", "password": "password-123"}).status_code == 200
+        assert client.post("/api/v2/auth/register", json={"username": "user-over-limit", "password": "password-123"}).status_code == 429

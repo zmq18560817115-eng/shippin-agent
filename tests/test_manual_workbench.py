@@ -110,7 +110,7 @@ def test_manual_production_stops_before_compose(tmp_path: Path, monkeypatch) -> 
         )
 
     assert response.status_code == 200
-    assert response.json()["engine"]["stage"] == "production"
+    assert response.json()["engine"]["stage"] == "take_gate"
     assert response.json()["engine"]["status"] == "awaiting_human"
     tasks = queue.list_tasks(project_id="manual-shot", db_path=db_path)
     stale_compose = queue.get_task(stale_compose_id, db_path=db_path)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -148,7 +149,7 @@ def approve_gate(
     db_path: str | Path | None = None,
     run_root: str | Path | None = None,
 ) -> EngineRunStatus:
-    if stage not in {"script_gate", "hero_gate"}:
+    if stage not in {"script_gate", "hero_gate", "take_gate"}:
         raise ValueError(f"unknown gate stage: {stage}")
     root = _run_root(project_id, run_root)
     approved = checkpoint.approve_gate(project_id, stage, approver=approver, notes=notes, run_root=root)
@@ -169,6 +170,9 @@ def approve_gate(
                 },
                 db_path=db_path,
             )
+    elif stage == "take_gate":
+        _require_selected_takes(root)
+        _enqueue_stage(project_id, "compose", {"run_root": root.as_posix()}, db_path=db_path)
     return EngineRunStatus(project_id, stage, approved["status"], "gate approved")
 
 
@@ -549,7 +553,7 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         awaiting_selection = bool(task.payload_json.get("manual_only"))
         checkpoint.write_checkpoint(
             task.project_id,
-            "production",
+            "take_gate" if awaiting_selection else "production",
             status="awaiting_human" if awaiting_selection else "succeeded",
             artifacts={"take_manifest": "artifacts/take_manifest.json"} if awaiting_selection else {"shot_report": "artifacts/shot_report.json"},
             data={"reason": "select_takes_before_compose"} if awaiting_selection else None,
@@ -567,7 +571,7 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
                 db_path=db_path,
             )
         if awaiting_selection:
-            return EngineRunStatus(task.project_id, "production", "awaiting_human", "select a playable take for every shot before composing")
+            return EngineRunStatus(task.project_id, "take_gate", "awaiting_human", "select a playable take for every shot before composing")
         return EngineRunStatus(task.project_id, "production", "succeeded", "shot completed")
     return EngineRunStatus(task.project_id, "production", "running", "shot completed")
 
@@ -912,6 +916,32 @@ def _merge_take_manifest(root: Path, project_id: str, new_report: dict[str, Any]
         entry["takes"] = [takes[key] for key in sorted(takes)]
     existing["shots"] = [by_number[number] for number in sorted(by_number)]
     artifacts.save_artifact(project_id, "take_manifest", existing, run_root=root)
+
+
+def _require_selected_takes(root: Path) -> None:
+    manifest = _load_artifact(root, "take_manifest")
+    missing = [
+        str(item.get("number"))
+        for item in manifest.get("shots", [])
+        if not item.get("selected_take_id")
+    ]
+    if missing:
+        raise ValueError(f"take_gate requires a selected take for every shot; missing: {', '.join(missing)}")
+    selected_shots: list[dict[str, Any]] = []
+    for entry in manifest.get("shots", []):
+        selected = next((take for take in entry.get("takes", []) if take.get("take_id") == entry.get("selected_take_id")), None)
+        if selected is None:
+            raise ValueError(f"take_gate selection missing for shot {entry.get('number')}")
+        selected_shots.append(
+            {
+                "number": int(entry["number"]), "status": "succeeded", "path": selected["path"],
+                "cost_cny": float(selected.get("cost_cny") or 0), "attempt": int(selected.get("attempt") or 1),
+                "duration_sec": float(selected.get("duration_sec") or 6), "take_id": selected["take_id"],
+            }
+        )
+    artifacts.save_artifact(
+        manifest["project_id"], "shot_report", {"version": "2.0", "project_id": manifest["project_id"], "shots": selected_shots}, run_root=root
+    )
 
 
 def _all_production_succeeded(

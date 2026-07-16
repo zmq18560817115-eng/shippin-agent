@@ -20,6 +20,7 @@ STAGE_ORDER = [
     "asset",
     "hero_gate",
     "production",
+    "take_gate",
     "compose",
     "final_qa",
     "archive",

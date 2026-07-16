@@ -69,8 +69,8 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
     report_shot = selected.json()["shot_report"]["shots"][0]
     assert report_shot["take_id"] == "B"
     assert report_shot["path"].endswith("shot-001-take-b.mp4")
-    assert displayed.json()["shots"][0]["takes"][0]["playable"] is False
-    assert displayed.json()["shots"][0]["takes"][0]["media_url"] == ""
+    assert displayed.json()["shots"][0]["takes"][0]["playable"] is True
+    assert displayed.json()["shots"][0]["takes"][0]["media_url"]
 
 
 def test_hero_approval_generates_initial_take_and_waits_for_selection(tmp_path: Path, monkeypatch) -> None:
@@ -89,7 +89,7 @@ def test_hero_approval_generates_initial_take_and_waits_for_selection(tmp_path: 
 
     manifest = json.loads((run_root / "artifacts" / "take_manifest.json").read_text(encoding="utf-8"))
     tasks = queue.list_tasks(project_id="selection-gate", db_path=db_path)
-    assert status.stage == "production"
+    assert status.stage == "take_gate"
     assert status.status == "awaiting_human"
     assert len(manifest["shots"]) == 5
     assert all(shot["takes"][0]["take_id"] == "A" for shot in manifest["shots"])

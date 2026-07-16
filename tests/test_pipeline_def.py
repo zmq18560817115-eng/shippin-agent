@@ -15,6 +15,7 @@ EXPECTED_STAGE_ORDER = [
     "asset",
     "hero_gate",
     "production",
+    "take_gate",
     "compose",
     "final_qa",
     "archive",
@@ -31,3 +32,4 @@ def test_viral_imitate_v2_stage_order() -> None:
     assert [stage["name"] for stage in definition["stages"]] == EXPECTED_STAGE_ORDER
     stages = {stage["name"]: stage for stage in definition["stages"]}
     assert stages["production"]["task_type"] == "shot_gen"
+    assert stages["take_gate"]["gate"] == "human"

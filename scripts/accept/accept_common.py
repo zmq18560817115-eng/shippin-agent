@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Mapping, Sequence
+import json
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -116,3 +117,29 @@ def managed_services(*, port: int = DEFAULT_PORT) -> Iterator[tuple[ManagedProce
     finally:
         worker.terminate()
         orchestrator.terminate()
+
+
+def approve_take_gate_and_final_review(project_id: str, *, run_root: Path, db_path: Path, mock: bool = True) -> None:
+    """Complete the two post-production human approvals used by the v2 pipeline."""
+    from orchestrator import engine, queue
+
+    manifest_path = run_root / "artifacts" / "take_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for shot in manifest["shots"]:
+        take = shot["takes"][0]
+        take["status"] = "selected"
+        shot["selected_take_id"] = take["take_id"]
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    engine.approve_gate(project_id, "take_gate", approver="accept", db_path=db_path, run_root=run_root)
+    blocked = engine.run_until_blocked(project_id, db_path=db_path, run_root=run_root, mock=mock)
+    assert blocked.stage == "final_qa" and blocked.status == "blocked"
+    review = {
+        "version": "2.0", "project_id": project_id, "artifact_type": "final_visual_review",
+        "status": "approved",
+        "checks": {
+            "product_identity": True, "no_invented_brand": True, "temperature_display": True,
+            "usage_flow": True, "person_scene_continuity": True,
+        },
+    }
+    (run_root / "artifacts" / "final_visual_review.json").write_text(json.dumps(review), encoding="utf-8")
+    queue.enqueue_task(project_id=project_id, stage="final_qa", agent="review", payload={"run_root": run_root.as_posix()}, db_path=db_path)

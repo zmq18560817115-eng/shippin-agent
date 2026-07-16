@@ -59,8 +59,33 @@ def test_a6_api_workbench_two_gate_flow_and_polling(tmp_path: Path, monkeypatch)
             json={"project_id": "ref-a6", "stage": "hero_gate", "approver": "qa"},
         )
         assert hero_gate.status_code == 200
-        assert hero_gate.json()["engine"]["stage"] == "archive"
-        assert hero_gate.json()["engine"]["status"] == "succeeded"
+        assert hero_gate.json()["engine"]["stage"] == "take_gate"
+        assert hero_gate.json()["engine"]["status"] == "awaiting_human"
+
+        takes = client.get("/api/v2/artifacts/ref-a6/take_manifest").json()
+        for shot in takes["shots"]:
+            take_id = shot["takes"][0]["take_id"]
+            reviewed = client.post(
+                "/api/v2/takes/review",
+                json={"project_id": "ref-a6", "shot_index": shot["number"], "take_id": take_id,
+                      "product_identity": True, "no_invented_brand": True, "temperature_display": True,
+                      "usage_flow": True, "continuity": True},
+            )
+            assert reviewed.status_code == 200
+            selected = client.post("/api/v2/takes/select", json={"project_id": "ref-a6", "shot_index": shot["number"], "take_id": take_id})
+            assert selected.status_code == 200
+        take_gate = client.post("/api/v2/gates/approve", json={"project_id": "ref-a6", "stage": "take_gate", "approver": "qa"})
+        assert take_gate.status_code == 200
+        assert take_gate.json()["engine"]["stage"] == "final_qa"
+        assert take_gate.json()["engine"]["status"] == "blocked"
+        final_review = client.post(
+            "/api/v2/review/final-visual",
+            json={"project_id": "ref-a6", "product_identity": True, "no_invented_brand": True,
+                  "temperature_display": True, "usage_flow": True, "person_scene_continuity": True},
+        )
+        assert final_review.status_code == 200
+        assert final_review.json()["engine"]["stage"] == "archive"
+        assert final_review.json()["engine"]["status"] == "succeeded"
 
         def poll_pipeline(_: int) -> int:
             with TestClient(app) as polling_client:
@@ -84,7 +109,7 @@ def test_a6_api_workbench_two_gate_flow_and_polling(tmp_path: Path, monkeypatch)
 
         root = client.get("/")
         assert root.status_code == 200
-        assert "/static/app.js" in root.text
+        assert "/static/login.js" in root.text
 
 
 def test_a6_script_gate_rewrite_returns_to_script_gate(tmp_path: Path, monkeypatch) -> None:

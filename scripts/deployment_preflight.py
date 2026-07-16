@@ -91,6 +91,17 @@ def playwright_check() -> dict[str, object]:
         return {"ok": False, "detail": str(exc).splitlines()[0]}
 
 
+def security_checks() -> dict[str, dict[str, object]]:
+    auth_enabled = os.environ.get("VAF_AUTH_ENABLED", "").strip().casefold() in {"1", "true", "yes", "on"}
+    secret = os.environ.get("VAF_SESSION_SECRET", "").strip()
+    cookie_secure = os.environ.get("VAF_COOKIE_SECURE", "").strip().casefold() in {"1", "true", "yes", "on"}
+    return {
+        "auth_enabled": {"ok": auth_enabled, "detail": "enabled" if auth_enabled else "intranet deployment must enable authentication"},
+        "session_secret": {"ok": (not auth_enabled) or len(secret) >= 32, "detail": "configured" if len(secret) >= 32 else "VAF_SESSION_SECRET must contain at least 32 characters when authentication is enabled"},
+        "cookie_secure": {"ok": True, "detail": "enabled" if cookie_secure else ("warning: set VAF_COOKIE_SECURE=true behind HTTPS" if auth_enabled else "not applicable while authentication is disabled")},
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a video-agent-factory deployment host.")
     parser.add_argument("--env-file", default=".env.local", help="Environment file relative to the repository root")
@@ -117,7 +128,8 @@ def main() -> int:
         "doubao_key": {"ok": bool(os.environ.get("DOUBAO_API_KEY")), "detail": "configured" if os.environ.get("DOUBAO_API_KEY") else "missing"},
         "seedance_key": {"ok": bool(os.environ.get("SEEDANCE_API_KEY")), "detail": "configured" if os.environ.get("SEEDANCE_API_KEY") else "missing"},
     }
-    required = ["ffmpeg", "yt_dlp", "playwright", "database", "materials_volume", "runs_volume"]
+    checks.update(security_checks())
+    required = ["ffmpeg", "yt_dlp", "playwright", "database", "materials_volume", "runs_volume", "auth_enabled", "session_secret"]
     report = {
         "status": "pass" if all(bool(checks[name]["ok"]) for name in required) else "fail",
         "checks": checks,

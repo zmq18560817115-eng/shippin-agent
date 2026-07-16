@@ -41,7 +41,8 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         output = reference_path
         provider_meta = {"provider": "reference_video", "reference_path": reference_path.as_posix()}
     elif context.mock:
-        output.write_bytes(b"mock seedance mp4\n")
+        # The mock is deliberately a media-shaped file so selection checks stay enabled.
+        output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 2048))
         provider_meta = {"provider": "mock"}
     else:
         provider_meta = ark.create_seedance_video(

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from libshared import checkpoint
 from orchestrator import engine, queue
+from scripts.accept.accept_common import approve_take_gate_and_final_review
 
 
 def test_a5_mock_pipeline_runs_with_two_human_gates(tmp_path: Path) -> None:
@@ -31,6 +32,10 @@ def test_a5_mock_pipeline_runs_with_two_human_gates(tmp_path: Path) -> None:
     assert second_stop.stage == "hero_gate"
 
     engine.approve_gate("ref-e2e", "hero_gate", approver="qa", db_path=db_path, run_root=run_root)
+    take_stop = engine.run_until_blocked("ref-e2e", db_path=db_path, run_root=run_root, mock=True)
+    assert take_stop.stage == "take_gate"
+    assert take_stop.status == "awaiting_human"
+    approve_take_gate_and_final_review("ref-e2e", run_root=run_root, db_path=db_path)
     done = engine.run_until_blocked("ref-e2e", db_path=db_path, run_root=run_root, mock=True)
 
     assert done.status == "succeeded"
@@ -82,6 +87,10 @@ def test_a5_seedance_failure_isolated_and_retry_only_failed_shot(tmp_path: Path,
     monkeypatch.delenv("SEEDANCE_MOCK_FAIL", raising=False)
     retried = engine.retry_failed_shot("ref-shotfail", 3, db_path=db_path, run_root=first_root, mock=True)
     assert retried.status == "succeeded"
+    assert retried.stage == "production"
+    take_stop = engine.run_until_blocked("ref-shotfail", db_path=db_path, run_root=first_root, mock=True)
+    assert take_stop.stage == "take_gate"
+    approve_take_gate_and_final_review("ref-shotfail", run_root=first_root, db_path=db_path)
     all_done = engine.run_until_blocked("ref-shotfail", db_path=db_path, run_root=first_root, mock=True)
 
     assert all_done.status == "succeeded"

@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import time
 import zipfile
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,14 +51,14 @@ ARTIFACT_NAMES = {
     "script_breakdown",
     "take_manifest",
 }
-GATE_STAGES = ("script_gate", "hero_gate")
+GATE_STAGES = ("script_gate", "hero_gate", "take_gate")
 NODE_STAGES = {
     "collector": (),
     "analysis": ("analysis", "research"),
     "script": ("strategy", "script", "script_breakdown"),
     "storyboard": ("storyboard",),
     "asset": ("asset", "hero_gate"),
-    "media": ("production", "compose"),
+    "media": ("production", "take_gate", "compose"),
     "review": ("script_review", "script_gate", "final_qa", "archive"),
 }
 STATUS_PRIORITY = (
@@ -70,6 +71,13 @@ STATUS_PRIORITY = (
     "succeeded",
     "idle",
 )
+LOGIN_FAILURES: dict[str, deque[float]] = defaultdict(deque)
+REGISTRATION_ATTEMPTS: dict[str, deque[float]] = defaultdict(deque)
+LOGIN_WINDOW_S = 60
+LOGIN_FAILURE_LIMIT = 5
+REGISTRATION_WINDOW_S = 3600
+REGISTRATION_LIMIT = 5
+PENDING_REGISTRATION_LIMIT = 200
 
 
 class PipelineRunRequest(BaseModel):
@@ -268,7 +276,7 @@ if WEB_ROOT.exists():
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     if _auth_enabled() and request.url.path.startswith(("/api/v2/", "/workbench", "/admin")):
-        if request.url.path.startswith(("/api/v2/auth/", "/api/v2/runtime")):
+        if request.url.path.startswith("/api/v2/auth/"):
             return await call_next(request)
         session = _read_session(request)
         if session is None:
@@ -301,11 +309,15 @@ def admin_page() -> FileResponse:
 
 
 @app.post("/api/v2/auth/login")
-def login(request: LoginRequest) -> JSONResponse:
+def login(request: LoginRequest, raw_request: Request) -> JSONResponse:
     role = request.portal.strip().casefold()
     if role not in {"operator", "admin"}:
         raise HTTPException(status_code=400, detail="unknown portal")
     username = request.username.strip()
+    client_ip = _client_ip(raw_request)
+    login_key = f"{client_ip}:{username.casefold()}"
+    if _rate_limited(LOGIN_FAILURES, login_key, LOGIN_WINDOW_S, LOGIN_FAILURE_LIMIT):
+        raise HTTPException(status_code=429, detail="登录失败次数过多，请稍后再试")
     authenticated_role = role
     if _auth_enabled():
         configuration_error = _auth_configuration_error()
@@ -313,7 +325,9 @@ def login(request: LoginRequest) -> JSONResponse:
             raise HTTPException(status_code=503, detail=configuration_error)
         account = user_store.authenticate(username, request.password, db_path=_db_path())
         if account is None:
+            _record_attempt(LOGIN_FAILURES, login_key, LOGIN_WINDOW_S)
             raise HTTPException(status_code=401, detail="账号或密码错误")
+        LOGIN_FAILURES.pop(login_key, None)
         authenticated_role = str(account["role"])
         if role == "admin" and authenticated_role != "admin":
             raise HTTPException(status_code=403, detail="该账号没有管理员权限")
@@ -324,7 +338,7 @@ def login(request: LoginRequest) -> JSONResponse:
         "vaf_session",
         _sign_session(username, authenticated_role),
         httponly=True,
-        secure=_env_bool("VAF_COOKIE_SECURE", False),
+        secure=_env_bool("VAF_COOKIE_SECURE", _auth_enabled()),
         samesite="strict",
         max_age=8 * 60 * 60,
     )
@@ -339,11 +353,16 @@ def logout() -> JSONResponse:
 
 
 @app.post("/api/v2/auth/register")
-def register_account(request: RegistrationRequest) -> dict[str, Any]:
+def register_account(request: RegistrationRequest, raw_request: Request) -> dict[str, Any]:
     if not _auth_enabled():
         raise HTTPException(status_code=409, detail="registration is only available when intranet authentication is enabled")
     if not _self_registration_enabled():
         raise HTTPException(status_code=403, detail="self registration is disabled; contact an administrator")
+    client_ip = _client_ip(raw_request)
+    if _rate_limited(REGISTRATION_ATTEMPTS, client_ip, REGISTRATION_WINDOW_S, REGISTRATION_LIMIT):
+        raise HTTPException(status_code=429, detail="注册申请过于频繁，请一小时后再试")
+    if user_store.pending_registration_count(db_path=_db_path()) >= PENDING_REGISTRATION_LIMIT:
+        raise HTTPException(status_code=429, detail="待审核注册申请已达上限，请联系管理员")
     try:
         registration = user_store.request_registration(
             request.username,
@@ -353,6 +372,7 @@ def register_account(request: RegistrationRequest) -> dict[str, Any]:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _record_attempt(REGISTRATION_ATTEMPTS, client_ip, REGISTRATION_WINDOW_S)
     return {"ok": True, "registration": registration}
 
 
@@ -1141,6 +1161,26 @@ def _auth_enabled() -> bool:
     return _env_bool("VAF_AUTH_ENABLED", False)
 
 
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limited(store: dict[str, deque[float]], key: str, window_s: int, limit: int) -> bool:
+    now = time.monotonic()
+    attempts = store[key]
+    while attempts and now - attempts[0] >= window_s:
+        attempts.popleft()
+    return len(attempts) >= limit
+
+
+def _record_attempt(store: dict[str, deque[float]], key: str, window_s: int) -> None:
+    now = time.monotonic()
+    attempts = store[key]
+    while attempts and now - attempts[0] >= window_s:
+        attempts.popleft()
+    attempts.append(now)
+
+
 def _self_registration_enabled() -> bool:
     return _env_bool("VAF_SELF_REGISTRATION_ENABLED", True)
 
@@ -1577,6 +1617,11 @@ def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
                 status_code=409,
                 detail={"message": "分镜安全预检未通过", "errors": preflight_errors},
             )
+    if request.stage == "take_gate":
+        try:
+            _require_selected_playable_takes(project_id, _run_root(project_id))
+        except HTTPException:
+            raise HTTPException(status_code=409, detail="请先完成每个镜头的真实媒体质检与 Take 选用") from None
     try:
         approved = engine.approve_gate(
             project_id,

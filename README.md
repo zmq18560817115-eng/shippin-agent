@@ -150,9 +150,11 @@ node --check web/app.js
 - `schemas/artifacts/`：结构化产物 JSON Schema。
 - `pipeline_defs/`：流程定义。
 - `web/`：中文工作台前端。
-- `data/`：运行产物、素材和交付文件，默认不提交 Git。
+- `data/01_素材库/` 的示例产品素材与 `data/05_反馈库/` 的反馈样本随仓库提交；`data/runs/`、SQLite 数据库文件和交付产物不提交 Git。
 - `tests/`：当前有效的接口、流程和产物契约测试。
 
 ## 生产安全边界
 
 产品素材必须来自可追溯的批准素材库。参考视频只用于分析结构和节奏，不直接复制品牌表达。任何关键帧、产品身份、使用动作或成片质检未通过时，系统必须停在人工节点，禁止自动归档交付。
+
+内网部署必须设置 `VAF_AUTH_ENABLED=true`、至少 32 位的 `VAF_SESSION_SECRET`，并在 HTTPS 反向代理下设置 `VAF_COOKIE_SECURE=true`。仅本地 HTTP 调试可显式设置 `VAF_COOKIE_SECURE=false`。

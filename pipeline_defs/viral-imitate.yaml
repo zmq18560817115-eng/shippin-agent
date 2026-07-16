@@ -86,6 +86,12 @@ stages:
     max_retries: 2
     budget_guard: true
 
+  - name: take_gate
+    agent: media
+    gate: human
+    consumes: [shot_report]
+    gate_ui_hint: "逐镜完成 Take 质检与选用；全部镜头选定后才能合成"
+
   - name: compose
     agent: media
     task_type: compose

@@ -18,6 +18,7 @@ from libshared import checkpoint
 from libshared.paths import ROOT
 from orchestrator import cost_tracker, engine, queue
 from tools.collect import manual_import
+from scripts.accept.accept_common import approve_take_gate_and_final_review
 
 
 DEFAULT_REPORT = ROOT / "scripts" / "accept" / "report_10videos.md"
@@ -123,6 +124,11 @@ def run_a8_batch(
             hero_gate_passes += 1
             engine.approve_gate(project_id, "hero_gate", approver="a8", db_path=db_path, run_root=run_root)
 
+        take_stop = engine.run_until_blocked(project_id, db_path=db_path, run_root=run_root, mock=mock)
+        if take_stop.stage != "take_gate" or take_stop.status != "awaiting_human":
+            risks.append(f"BLOCKED expected take_gate, got {take_stop.stage}:{take_stop.status}")
+        else:
+            approve_take_gate_and_final_review(project_id, run_root=run_root, db_path=db_path, mock=mock)
         done = engine.run_until_blocked(project_id, db_path=db_path, run_root=run_root, mock=mock)
         qa_status = _review_status(run_root, "qa_report")
         render_path = _render_path(run_root)
@@ -160,7 +166,7 @@ def run_a8_batch(
 
 
 def real_readiness(env: dict[str, str] | None = None) -> dict[str, Any]:
-    selected_env = env or os.environ
+    selected_env = os.environ if env is None else env
     missing = [name for name in REQUIRED_REAL_ENV if not selected_env.get(name)]
     warnings: list[str] = []
     pricing = _pricing_config()

@@ -17,6 +17,7 @@ def test_stage_order_matches_v2_manual() -> None:
         "asset",
         "hero_gate",
         "production",
+        "take_gate",
         "compose",
         "final_qa",
         "archive",

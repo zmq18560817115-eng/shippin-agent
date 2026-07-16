@@ -115,6 +115,11 @@ def list_registration_requests(
     return [_public_registration_request(dict(row)) for row in rows]
 
 
+def pending_registration_count(*, db_path: str | os.PathLike[str] | None = None) -> int:
+    with queue.get_conn(db_path) as conn:
+        return int(conn.execute("SELECT COUNT(*) FROM registration_requests WHERE status = 'pending'").fetchone()[0])
+
+
 def get_registration_request(
     request_id: int,
     *,

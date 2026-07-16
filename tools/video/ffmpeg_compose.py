@@ -28,7 +28,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / "final-video.mp4"
     if context.mock:
-        output.write_bytes(b"mock composed mp4\n")
+        _compose_mock(output, _duration_from_shots(shot_report))
         ffprobe = {
             "duration": _duration_from_shots(shot_report),
             "resolution": "720x1280",
@@ -68,6 +68,22 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         cost_cny=context.pricing_for("ffmpeg_compose") if not context.mock else 0.0,
         meta={"tool": "ffmpeg_compose", "mock": context.mock, "shots_used": len(shot_report.get("shots") or [])},
     )
+
+
+def _compose_mock(output: Path, duration_sec: float) -> None:
+    """Produce a structurally playable mock delivery so final QA remains strict."""
+    ffmpeg = _find_ffmpeg()
+    if not ffmpeg:
+        raise ToolNotConfiguredError("ffmpeg executable not found for mock delivery")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        ffmpeg, "-y", "-f", "lavfi", "-i", "color=c=black:s=720x1280:r=30",
+        "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", str(max(1, duration_sec)),
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", output.as_posix(),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if completed.returncode != 0 or not output.is_file():
+        raise RuntimeError(f"mock compose failed: {completed.stderr[-1200:]}")
 
 
 def _find_ffmpeg() -> str | None:

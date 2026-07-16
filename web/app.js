@@ -44,7 +44,7 @@ const statusGlyph = {
 const stageLabels = {
   analysis: "素材分析", research: "研究洞察", strategy: "内容策略", script: "脚本文案",
   script_breakdown: "脚本拆解", script_review: "脚本审核", script_gate: "脚本确认",
-  storyboard: "分镜生成", asset: "产品素材", hero_gate: "分镜确认", production: "视频生成",
+  storyboard: "分镜生成", asset: "产品素材", hero_gate: "分镜确认", production: "视频生成", take_gate: "镜头选用",
   compose: "视频合成", final_qa: "成片质检", archive: "交付归档", succeeded: "已交付",
   failed: "运行失败", awaiting_human: "等待人工确认", running: "运行中", queued: "排队中",
   idle: "未开始", blocked: "已阻塞", needs_review: "需要复核",
@@ -357,7 +357,7 @@ function showView(view, { updateUrl = true } = {}) {
 function viewForStage(stage) {
   if (["analysis", "research", "strategy", "script", "script_breakdown", "script_review", "script_gate"].includes(stage)) return "script";
   if (["storyboard", "asset", "hero_gate"].includes(stage)) return "storyboard";
-  if (["production", "compose", "final_qa"].includes(stage)) return "production";
+  if (["production", "take_gate", "compose", "final_qa"].includes(stage)) return "production";
   if (["archive", "succeeded"].includes(stage)) return "delivery";
   return "projects";
 }
