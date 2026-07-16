@@ -615,6 +615,11 @@ textarea {
   padding: 10px 0 14px;
 }
 
+.takePromptLabel textarea {
+  min-height: 72px;
+  margin-top: 5px;
+}
+
 .takeCandidates {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
@@ -857,6 +862,25 @@ th {
   gap: 6px;
   max-width: 520px;
 }
+
+.nodeSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.nodeSummary.succeeded { color: var(--green); border-color: #b8ddc5; }
+.nodeSummary.failed,
+.nodeSummary.blocked { color: var(--red); border-color: #efc1bc; }
+.nodeSummary.running,
+.nodeSummary.awaiting_human { color: var(--blue); border-color: #b9ccec; }
 
 .node,
 .stageTag {

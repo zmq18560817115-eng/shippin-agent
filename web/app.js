@@ -928,9 +928,12 @@ function renderProjectRows() {
 }
 
 function renderNodes(nodes) {
-  return `<div class="nodes">${nodes
-    .map((node) => `<span class="node ${statusClass(node.status)}" title="${escapeAttr(agentLabels[node.agent] || node.agent)}：${escapeAttr(stageLabel(node.status))}">${statusGlyph[node.status] || "·"} ${escapeHtml(agentLabels[node.agent] || node.agent)}</span>`)
-    .join("")}</div>`;
+  const total = nodes.length;
+  const completed = nodes.filter((node) => node.status === "succeeded").length;
+  const current = nodes.find((node) => ["running", "awaiting_human", "failed", "blocked"].includes(node.status));
+  const status = current?.status || (completed === total ? "succeeded" : "idle");
+  const label = current ? agentLabels[current.agent] || current.agent : completed === total ? "全部完成" : "等待开始";
+  return `<div class="nodeSummary ${statusClass(status)}" title="${escapeAttr(nodes.map((node) => `${agentLabels[node.agent] || node.agent}：${stageLabel(node.status)}`).join("；"))}">${completed}/${total} 已完成 · ${statusGlyph[status] || "○"} ${escapeHtml(label)}</div>`;
 }
 
 function renderProjectActions(project) {
@@ -1233,6 +1236,7 @@ function renderProductionNode() {
     return `<section class="takeShot">
       <strong>镜头 ${shot.number} · ${shot.camera_motion?.duration_sec || 6}s</strong>
       <label class="takePromptLabel">生成提示词（可针对本镜修改后再生成）<textarea class="promptField" data-production-prompt="${shot.number}">${escapeHtml(prompt)}</textarea></label>
+      <label class="takePromptLabel">返工说明（仅在“不通过并重做”时写入新 Take）<textarea data-rework-notes="${shot.number}" placeholder="例如：删除虚构 Logo；温度只显示 98°F；杯嘴向独立奶瓶倒液。"></textarea></label>
       <div class="actionBar"><button type="button" data-run-shot="${shot.number}" data-take-id="${escapeAttr(nextTakeId)}">${takes.length ? `生成新的候选 Take ${escapeHtml(nextTakeId)}` : "生成第一个候选 Take"}</button></div>
       <div class="takeCandidates">${candidates || "尚未生成候选"}</div>
     </section>`;
@@ -1415,7 +1419,11 @@ async function reviewTake(shotIndex, takeId, approved, notes = "") {
 }
 
 async function rejectAndRegenerate(shotIndex, takeId) {
-  const notes = window.prompt("请写明问题，例如：产品出现虚构 Logo；温度必须为 98°F；倒液方向不正确。")?.trim();
+  const notes = $(`[data-rework-notes="${shotIndex}"]`)?.value?.trim();
+  if (!notes) {
+    toast("请先在本镜的“返工说明”中写明产品、温标、动作或连续性问题", "error");
+    return;
+  }
   if (!notes) return;
   const shot = state.shotPlan?.shots?.find((item) => Number(item.number) === shotIndex);
   if (!shot) return;
