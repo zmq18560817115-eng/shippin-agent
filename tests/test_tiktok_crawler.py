@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from orchestrator import api
 from orchestrator.api import app
 from tools.base_tool import ToolContext
 from tools.collect import tiktok_crawler
@@ -177,3 +178,12 @@ def test_auto_collector_can_be_configured_and_run_on_demand(tmp_path: Path, monk
         assert ran.json()["ran"] is True
         assert ran.json()["result"]["completed_count"] == 2
         assert ran.json()["settings"]["last_finished_at"]
+
+
+def test_auto_collector_env_real_flag_enables_real_collection(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "auto-real.db"))
+    monkeypatch.setenv("VAF_AUTO_COLLECT_ENABLED", "true")
+    monkeypatch.setenv("VAF_AUTO_COLLECT_TARGET", "heated cup")
+    monkeypatch.setenv("VAF_AUTO_COLLECT_REAL", "true")
+    api._ensure_auto_collector_settings()
+    assert api._auto_collector_settings()["mock"] is False

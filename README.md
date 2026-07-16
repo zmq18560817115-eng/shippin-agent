@@ -118,8 +118,8 @@ VAF_AUTO_COLLECT_TARGET=heated cup
 VAF_AUTO_COLLECT_PROVIDER=auto
 VAF_AUTO_COLLECT_LIMIT=3
 VAF_AUTO_COLLECT_INTERVAL_MINUTES=60
-# false 才会执行真实下载与分析；true 仅演练采集
-VAF_AUTO_COLLECT_REAL=false
+# true 执行真实下载与分析；false 仅演练采集
+VAF_AUTO_COLLECT_REAL=true
 ```
 
 服务器上建议为 TikTok 服务账号导出持久化 Cookies，并设置：
