@@ -39,22 +39,20 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "system",
                 "content": (
-                    "You create traceable, continuous AI video shot plans. Return strict JSON only. "
-                    "Use one stable scene and one stable caregiver profile across all shots. "
-                    "Every shot must continue the previous action and lock product appearance to the approved white-background hero reference."
+                    "You create concise, continuous AI video shot plans. Return strict JSON only. "
+                    "Keep one stable scene and one stable caregiver profile across all shots. "
+                    "Do not repeat product safety locks: the production system adds them deterministically."
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    "Create shot_plan JSON with one shot per script section, vertical 9:16. "
-                    "Return shots plus scene_continuity and character_continuity. For every shot include visual, visual_prompt, "
-                    "seedance_prompt, visual_zh, and seedance_prompt_zh, plus camera_motion.type. Chinese fields are for the operator workbench; English fields are sent to the generation model. Keep the same location, lighting, wardrobe, hands, props, "
-                    "product color, lid, spout, display, button, proportions, and logo placement. Build a visible action sequence: "
-                    "establish the feeding-prep scene, show the pain, introduce the separate warming cup, demonstrate the approved "
-                    "pouring flow, then finish with a product CTA. Never place a whole baby bottle inside the cup. "
-                    "If the display is visible it must read 98 degrees Fahrenheit (98 F), never Celsius. Script: "
-                    f"{script_copy}. Approved product facts and hard constraints: {product_facts or 'not provided'}"
+                    "Create a compact JSON object with scene_continuity, character_continuity, and exactly five shots in vertical 9:16. "
+                    "For every shot return only visual, visual_zh, seedance_prompt, seedance_prompt_zh, and camera_motion.type. "
+                    "Keep every text field below 45 words; do not restate global continuity or product rules inside each shot. "
+                    "Use this five-beat sequence: establish feeding-prep scene, show the pain, introduce the separate warming cup, "
+                    "demonstrate the pour, then finish with a product CTA. Script sections: "
+                    f"{_shotplan_input(script_copy)}. Product facts: {(product_facts or 'not provided')[:900]}"
                 ),
             },
         ],
@@ -77,6 +75,21 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         cost_cny=context.pricing_for("doubao_shotplan"),
         meta={"tool": "doubao_shotplan", "mock": False, **meta},
     )
+
+
+def _shotplan_input(script_copy: dict[str, Any]) -> list[dict[str, str]]:
+    """Keep real model input bounded; deterministic guards are added after generation."""
+    return [
+        {
+            "number": str(section.get("number") or index),
+            "timing": str(section.get("timing") or ""),
+            "role": str(section.get("role") or ""),
+            "scene": str(section.get("scene_zh") or "")[:260],
+            "action": str(section.get("action_zh") or "")[:260],
+            "story": str(section.get("story_beat_zh") or "")[:180],
+        }
+        for index, section in enumerate((script_copy.get("sections") or [])[:5], start=1)
+    ]
 
 
 def _normalize_shots(

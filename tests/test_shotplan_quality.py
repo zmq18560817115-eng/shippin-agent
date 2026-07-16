@@ -1,6 +1,6 @@
 from tools.base_tool import ToolContext
 from tools.llm import doubao_shotplan
-from tools.llm.doubao_shotplan import _normalize_shots
+from tools.llm.doubao_shotplan import _normalize_shots, _shotplan_input
 from tools.llm.mock_artifacts import mock_script_copy
 
 
@@ -43,6 +43,24 @@ def test_real_shotplan_reads_product_facts_and_returns_five_shots(monkeypatch) -
     assert result.ok is True
     assert len(result.data["shot_plan"]["shots"]) == 5
     assert "Approved product facts" in captured["messages"][1]["content"]
+
+
+def test_real_shotplan_input_is_bounded_for_model_reliability() -> None:
+    script = mock_script_copy("compact-shotplan")
+    script["sections"][0].update(
+        {
+            "scene_zh": "S" * 500,
+            "action_zh": "A" * 500,
+            "story_beat_zh": "B" * 500,
+        }
+    )
+
+    compact = _shotplan_input(script)
+
+    assert len(compact) == 5
+    assert len(compact[0]["scene"]) == 260
+    assert len(compact[0]["action"]) == 260
+    assert len(compact[0]["story"]) == 180
 
 
 def test_normalization_repairs_temperature_encoding_and_shot_four_action() -> None:
