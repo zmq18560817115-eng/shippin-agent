@@ -55,6 +55,33 @@ def test_manual_real_storyboard_requires_doubao_key_before_creating_a_task(tmp_p
     assert len(queue.list_tasks(project_id="storyboard-key-required", db_path=db_path)) == task_count_before
 
 
+def test_manual_storyboard_returns_an_error_when_engine_fails(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "agentflow.db"
+    runs_root = tmp_path / "runs"
+    run_root = runs_root / "storyboard-error-visible"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    monkeypatch.setenv("DOUBAO_API_KEY", "configured-for-test")
+    queue.init_db(db_path)
+    engine.start_pipeline("storyboard-error-visible", product_id="便携恒温杯", db_path=db_path, run_root=run_root, mock=True)
+    engine.run_until_blocked("storyboard-error-visible", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("storyboard-error-visible", "script_gate", approver="test", db_path=db_path, run_root=run_root)
+    monkeypatch.setattr(
+        engine,
+        "run_until_blocked",
+        lambda *args, **kwargs: engine.EngineRunStatus("storyboard-error-visible", "storyboard", "failed", "provider rejected model"),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/manual/run",
+            json={"project_id": "storyboard-error-visible", "stage": "storyboard", "mock": False},
+        )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "分镜生成失败：provider rejected model"
+
+
 def test_archived_project_allows_shot_edit_and_manual_storyboard_run(
     tmp_path: Path,
     monkeypatch,

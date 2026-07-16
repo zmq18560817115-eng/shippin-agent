@@ -14,6 +14,7 @@ const state = {
   takeManifest: null,
   renderReport: null,
   runReport: null,
+  runtime: null,
   refreshing: false,
   operation: null,
   currentView: "projects",
@@ -390,6 +391,7 @@ function updateRuntimeModeHint() {
   $("#runtimeModeHint").textContent = real
     ? "真实调用采集、分析和视频模型，会产生实际耗时与费用；缺少密钥时系统会拒绝创建。"
     : "用于完整流程演练：生成带演练标记的可播放 720P 成片，不调用外部模型。";
+  renderStoryboardNode();
 }
 
 function updateCrawlTargetUI() {
@@ -447,6 +449,7 @@ async function checkHealth() {
     $("#health").textContent = health.status === "ok" ? "在线" : "异常";
     $("#health").dataset.status = health.status;
     const runtime = await api("/api/v2/runtime");
+    state.runtime = runtime;
     const backendHost = $("#collectorBackendState");
     if (backendHost) {
       const backends = runtime.collector_backends || [];
@@ -1326,9 +1329,12 @@ async function rewriteScript() {
 function renderStoryboardNode() {
   const host = $("#shotEditor");
   const currentDuration = plannedDuration();
+  const realMode = $("#runtimeMode").value === "real";
+  const doubaoReady = Boolean(state.runtime?.providers?.doubao?.configured);
+  const modelState = realMode ? (doubaoReady ? "真实豆包分镜模型已配置" : "真实分镜不可用：缺少豆包模型密钥") : "演练模式";
   $("#storyboardNodeState").textContent = state.shotPlan
-    ? `${state.shotPlan.shots.length} 镜 · 当前 ${currentDuration} 秒 · 目标 30 秒`
-    : "";
+    ? `${state.shotPlan.shots.length} 镜 · 当前 ${currentDuration} 秒 · 目标 30 秒 · ${modelState}`
+    : modelState;
   if (!state.selected || !state.shotPlan) {
     host.className = "emptyState";
     const storyboardErrors = state.selected?.stages?.storyboard?.errors || [];
