@@ -40,3 +40,27 @@ def test_tiktok_intake_runs_to_script_gate_in_mock_mode(tmp_path: Path, monkeypa
     assert (project_root / "artifacts" / "research_brief.json").exists()
     assert (project_root / "artifacts" / "strategy_brief.json").exists()
     assert (project_root / "artifacts" / "script_breakdown.json").exists()
+
+
+def test_material_detail_lists_only_files_inside_the_material_directory(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "queue.db"
+    library_root = tmp_path / "materials"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_MATERIAL_LIBRARY_ROOT", str(library_root))
+    with TestClient(app) as client:
+        imported = client.post(
+            "/api/v2/collect/manual",
+            json={"urls": ["https://www.tiktok.com/@demo/video/11223344"], "product_id": "便携恒温杯"},
+        )
+        assert imported.status_code == 200
+        material_id = imported.json()["items"][0]["material_id"]
+        material_dir = library_root / material_id
+        (material_dir / "source.mp4").write_bytes(b"video")
+        (material_dir / "frames").mkdir()
+        (material_dir / "frames" / "frame-01.jpg").write_bytes(b"frame")
+        detail = client.get(f"/api/v2/collect/materials/{material_id}")
+    assert detail.status_code == 200
+    paths = [item["path"] for item in detail.json()["files"]]
+    assert "source.mp4" in paths
+    assert "frames/frame-01.jpg" in paths
+    assert all(".." not in path for path in paths)

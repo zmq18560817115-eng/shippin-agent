@@ -577,6 +577,9 @@ textarea {
 }
 
 @media (max-width: 900px) {
+  .materialDetailGrid {
+    grid-template-columns: 1fr;
+  }
   .agentWorkbenchGrid {
     grid-template-columns: 1fr;
   }
@@ -739,6 +742,70 @@ textarea {
 
 .materialAnalysis {
   color: var(--muted) !important;
+}
+
+.materialActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.materialDetailPanel {
+  border: 1px solid var(--teal);
+  border-radius: 8px;
+  padding: 14px;
+  background: #f7fcfb;
+}
+
+.materialDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.materialDetailGrid section {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.materialDetailGrid h4,
+.materialDetailGrid p {
+  margin: 0 0 7px;
+}
+
+.materialDetailGrid pre {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.materialDetailGrid ol {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+
+.materialFrames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.materialFrames img {
+  width: 72px;
+  height: 108px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 4px;
 }
 
 .productLibrary {

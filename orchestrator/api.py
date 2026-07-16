@@ -1462,7 +1462,23 @@ def collect_library(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, A
 @app.get("/api/v2/collect/materials/{material_id}")
 def collect_material(material_id: str) -> dict[str, Any]:
     try:
-        return manual_import.load_material_meta(material_id, _material_library_root())
+        root = _material_library_root()
+        payload = manual_import.load_material_meta(material_id, root)
+        material_dir = (root / material_id).resolve()
+        files: list[dict[str, Any]] = []
+        if material_dir.is_dir():
+            for path in sorted(item for item in material_dir.rglob("*") if item.is_file()):
+                relative = path.relative_to(material_dir).as_posix()
+                files.append(
+                    {
+                        "path": relative,
+                        "size_bytes": path.stat().st_size,
+                        "download_url": f"/api/v2/collect/materials/{material_id}/file/{relative}",
+                    }
+                )
+        payload["files"] = files
+        payload["transcript_status"] = "ready" if str(payload.get("transcript_text") or "").strip() else "missing"
+        return payload
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:

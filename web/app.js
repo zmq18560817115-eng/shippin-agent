@@ -853,6 +853,9 @@ function renderMaterialLibrary() {
   host.querySelectorAll("[data-start-material]").forEach((button) => {
     button.addEventListener("click", () => startFromMaterial(button.dataset.startMaterial));
   });
+  host.querySelectorAll("[data-material-detail]").forEach((button) => {
+    button.addEventListener("click", () => showMaterialDetail(button.dataset.materialDetail));
+  });
 }
 
 function renderMaterialItem(item) {
@@ -861,6 +864,10 @@ function renderMaterialItem(item) {
   const caption = meta.caption || "未取得视频简介";
   const analysis = materialAnalysisSummary(meta);
   const sourceUrl = meta.source_url || meta.video_url || "";
+  const videoName = String(meta.local_video_path || "").split(/[\\/]/).pop();
+  const localVideo = videoName
+    ? `/api/v2/collect/materials/${encodeURIComponent(item.material_id)}/file/${encodeURIComponent(videoName)}`
+    : "";
   const localCover = meta.local_cover_path
     ? `/api/v2/collect/materials/${encodeURIComponent(item.material_id)}/file/${encodeURIComponent(String(meta.local_cover_path).split(/[\\/]/).pop())}`
     : "";
@@ -876,6 +883,10 @@ function renderMaterialItem(item) {
         <p>${escapeHtml(caption)}</p>
         <p class="materialAnalysis">${escapeHtml(analysis)}</p>
         ${sourceUrl ? `<a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener">打开 TikTok 来源</a>` : ""}
+        <div class="materialActions">
+          <button type="button" data-material-detail="${escapeAttr(item.material_id)}">查看转写与拆解</button>
+          ${localVideo ? `<a class="buttonLink" href="${escapeAttr(localVideo)}" download>下载原视频</a>` : ""}
+        </div>
       </div>
       <button type="button" data-start-material="${escapeAttr(item.material_id)}">发起项目</button>
     </article>
@@ -891,6 +902,59 @@ function materialAnalysisSummary(meta) {
       : "已采集，等待分析拆解";
   } catch {
     return "已采集，等待分析拆解";
+  }
+}
+
+function materialStatusLabel(value) {
+  return {
+    raw: "已入库，待处理",
+    metadata_only: "仅元数据",
+    captured: "已下载，待分析",
+    analyzed: "已完成分析",
+  }[String(value || "")] || String(value || "待处理");
+}
+
+function materialDetailHtml(meta) {
+  let analysis = {};
+  try {
+    analysis = JSON.parse(meta.ai_analysis_json || "{}").analysis || {};
+  } catch {
+    analysis = {};
+  }
+  const breakdown = Array.isArray(analysis.shot_breakdown) ? analysis.shot_breakdown : [];
+  const keyframes = Array.isArray(analysis.keyframes) ? analysis.keyframes : [];
+  const transcript = String(meta.transcript_text || "").trim();
+  const files = Array.isArray(meta.files) ? meta.files : [];
+  const video = files.find((file) => /(^|\/)source\.(mp4|mov|webm|mkv)$/i.test(String(file.path || "")));
+  const frameFiles = files.filter((file) => /(^|\/)frames\/.*\.(jpg|jpeg|png)$/i.test(String(file.path || "")));
+  return `
+    <div class="materialDetailGrid">
+      <section><h4>采集状态</h4><p>${escapeHtml(materialStatusLabel(meta.processing_status))}</p><p>${transcript ? "转写已就绪" : "未取得字幕或转写，请补充文本后再运行分析"}</p></section>
+      <section><h4>视频转写</h4><pre>${escapeHtml(transcript || "暂无转写")}</pre></section>
+      <section><h4>结构与镜头拆解</h4>
+        <p>${escapeHtml(analysis.hook_3s ? `3 秒钩子：${analysis.hook_3s}` : "尚未生成结构分析")}</p>
+        ${breakdown.length ? `<ol>${breakdown.map((shot) => `<li>${escapeHtml(typeof shot === "string" ? shot : shot.description || shot.action || JSON.stringify(shot))}</li>`).join("")}</ol>` : "<p>尚未生成逐镜拆解</p>"}
+        ${keyframes.length ? `<p>关键帧：${escapeHtml(keyframes.map((frame) => typeof frame === "string" ? frame : frame.description || frame.time || "关键帧").join("；"))}</p>` : ""}
+      </section>
+      <section><h4>本地文件</h4>
+        ${video ? `<a class="buttonLink" href="${escapeAttr(video.download_url)}" download>下载原视频</a>` : "<p>未下载本地原视频</p>"}
+        ${frameFiles.length ? `<div class="materialFrames">${frameFiles.map((file) => `<a href="${escapeAttr(file.download_url)}" target="_blank" rel="noopener"><img src="${escapeAttr(file.download_url)}" alt="视频抽帧" loading="lazy"></a>`).join("")}</div>` : ""}
+      </section>
+    </div>`;
+}
+
+async function showMaterialDetail(materialId) {
+  try {
+    const meta = await api(`/api/v2/collect/materials/${encodeURIComponent(materialId)}`);
+    const host = $("#materialLibrary");
+    host.querySelector(".materialDetailPanel")?.remove();
+    const panel = document.createElement("section");
+    panel.className = "materialDetailPanel";
+    panel.innerHTML = `<div class="resultHead"><strong>素材详情</strong><button type="button" class="closeMaterialDetail">关闭</button></div>${materialDetailHtml(meta)}`;
+    panel.querySelector(".closeMaterialDetail").addEventListener("click", () => panel.remove());
+    host.prepend(panel);
+  } catch (error) {
+    toast(error.message, "error");
   }
 }
 
