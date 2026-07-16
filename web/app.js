@@ -1019,7 +1019,7 @@ function renderScriptGate() {
   $("#scriptGateState").textContent = state.selected?.current_gate === "script_gate" ? "待确认" : "";
   if (!state.selected || !state.scriptCopy) {
     host.className = "emptyState";
-    host.textContent = "等待脚本闸门项目";
+    host.innerHTML = renderPipelineProgress(state.selected, "脚本生成中，完成后可在此逐段编辑并确认。");
     return;
   }
   host.className = "editor";
@@ -1055,6 +1055,16 @@ function renderScriptGate() {
   $("#approveScript")?.addEventListener("click", approveScriptGate);
   $("#rewriteScript")?.addEventListener("click", rewriteScript);
   $("#regenerateScript").addEventListener("click", () => runManualStage("script"));
+}
+
+function renderPipelineProgress(project, fallback) {
+  if (!project) return `<span>${escapeHtml(fallback)}</span>`;
+  const order = ["analysis", "research", "strategy", "script", "script_breakdown", "script_review", "script_gate"];
+  const stages = project.stages || {};
+  return `<div class="pipelineProgress"><strong>${escapeHtml(fallback)}</strong><div>${order.map((stage) => {
+    const status = stages[stage]?.status || "idle";
+    return `<span class="progressStep ${statusClass(status)}">${status === "succeeded" ? "✓" : status === "running" ? "◐" : status === "failed" ? "×" : "○"} ${escapeHtml(stageLabel(stage))}</span>`;
+  }).join("")}</div><small>当前：${escapeHtml(stageLabel(project.current_stage || project.status))}</small></div>`;
 }
 
 function renderScriptRow(section) {
@@ -1223,11 +1233,7 @@ function renderProductionNode() {
     return `<section class="takeShot">
       <strong>镜头 ${shot.number} · ${shot.camera_motion?.duration_sec || 6}s</strong>
       <label class="takePromptLabel">生成提示词（可针对本镜修改后再生成）<textarea class="promptField" data-production-prompt="${shot.number}">${escapeHtml(prompt)}</textarea></label>
-      <div class="actionBar">
-        <button type="button" data-run-shot="${shot.number}" data-take-id="A">生成 Take A</button>
-        <button type="button" data-run-shot="${shot.number}" data-take-id="B">生成 Take B</button>
-        <button type="button" data-run-shot="${shot.number}" data-take-id="${escapeAttr(nextTakeId)}">增加候选 Take ${escapeHtml(nextTakeId)}</button>
-      </div>
+      <div class="actionBar"><button type="button" data-run-shot="${shot.number}" data-take-id="${escapeAttr(nextTakeId)}">${takes.length ? `生成新的候选 Take ${escapeHtml(nextTakeId)}` : "生成第一个候选 Take"}</button></div>
       <div class="takeCandidates">${candidates || "尚未生成候选"}</div>
     </section>`;
   }).join("")}</div>`;
@@ -1531,7 +1537,10 @@ function renderDelivery() {
   $("#deliveryState").textContent = delivered.length ? `${delivered.length} 个可交付` : "";
   if (!delivered.length) {
     host.className = "emptyState";
-    host.textContent = "暂无可交付项目";
+    const current = state.selected;
+    const nextView = current?.current_gate === "take_gate" || current?.current_stage === "production" ? "production" : current?.current_gate === "script_gate" ? "script" : "storyboard";
+    host.innerHTML = `<div class="emptyGuide"><strong>暂无可交付项目</strong><span>${current ? `当前项目停在“${escapeHtml(stageLabel(current.current_gate || current.current_stage || current.status))}”。完成该节点后即可继续交付。` : "请先创建或打开一个项目。"}</span>${current ? `<button type="button" data-go-next>前往下一步</button>` : ""}</div>`;
+    host.querySelector("[data-go-next]")?.addEventListener("click", () => showView(nextView));
     return;
   }
   host.className = "delivery";

@@ -931,6 +931,41 @@ pre {
   background: #fbfcfb;
 }
 
+.pipelineProgress,
+.emptyGuide {
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+  padding: 14px;
+  text-align: left;
+}
+
+.pipelineProgress > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.progressStep {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 7px;
+  font-size: 12px;
+}
+
+.progressStep.succeeded { color: var(--green); background: #eff9f3; }
+.progressStep.running { color: var(--blue); background: #edf4ff; }
+.progressStep.failed { color: var(--red); background: #fff1f0; }
+
+.editor > .actionBar:last-child {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  padding: 10px 0;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border-top: 1px solid var(--line);
+}
+
 .reviewStrip {
   display: flex;
   flex-wrap: wrap;
