@@ -102,6 +102,22 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_role_status
 ON users(role, status, username);
 
+CREATE TABLE IF NOT EXISTS registration_requests (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    username        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    display_name    TEXT NOT NULL DEFAULT '',
+    password_hash   TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'approved', 'rejected')),
+    requested_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    reviewed_at     TEXT,
+    reviewed_by     TEXT,
+    review_note     TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_registration_requests_status
+ON registration_requests(status, requested_at DESC);
+
 CREATE TABLE IF NOT EXISTS collector_schedules (
     id                  INTEGER PRIMARY KEY CHECK (id = 1),
     enabled             INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),

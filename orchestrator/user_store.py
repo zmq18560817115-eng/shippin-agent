@@ -68,6 +68,104 @@ def create_user(
     return get_user(user_id, db_path=db_path) or {}
 
 
+def request_registration(
+    username: str,
+    password: str,
+    *,
+    display_name: str = "",
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    clean_username = username.strip()
+    if not clean_username or len(clean_username) > 64:
+        raise ValueError("username must contain 1 to 64 characters")
+    now = queue.utc_now()
+    with queue.get_conn(db_path) as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM users WHERE username = ? COLLATE NOCASE", (clean_username,)
+        ).fetchone()
+        if existing is not None:
+            raise ValueError("username already exists")
+        try:
+            cursor = conn.execute(
+                """
+                INSERT INTO registration_requests (username, display_name, password_hash, requested_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (clean_username, display_name.strip()[:80], hash_password(password), now),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("a registration request already exists for this username") from exc
+        request_id = int(cursor.lastrowid)
+    return get_registration_request(request_id, db_path=db_path) or {}
+
+
+def list_registration_requests(
+    *,
+    status: str | None = None,
+    db_path: str | os.PathLike[str] | None = None,
+) -> list[dict[str, Any]]:
+    query = "SELECT * FROM registration_requests"
+    values: list[Any] = []
+    if status:
+        query += " WHERE status = ?"
+        values.append(status)
+    query += " ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, requested_at DESC"
+    with queue.get_conn(db_path) as conn:
+        rows = conn.execute(query, values).fetchall()
+    return [_public_registration_request(dict(row)) for row in rows]
+
+
+def get_registration_request(
+    request_id: int,
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any] | None:
+    with queue.get_conn(db_path) as conn:
+        row = conn.execute("SELECT * FROM registration_requests WHERE id = ?", (request_id,)).fetchone()
+    return _public_registration_request(dict(row)) if row else None
+
+
+def review_registration_request(
+    request_id: int,
+    *,
+    approve: bool,
+    reviewer: str,
+    note: str = "",
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    now = queue.utc_now()
+    with queue.get_conn(db_path) as conn:
+        request = conn.execute(
+            "SELECT * FROM registration_requests WHERE id = ?", (request_id,)
+        ).fetchone()
+        if request is None:
+            raise KeyError(request_id)
+        if request["status"] != "pending":
+            raise ValueError("registration request has already been reviewed")
+        if approve:
+            existing = conn.execute(
+                "SELECT 1 FROM users WHERE username = ? COLLATE NOCASE", (request["username"],)
+            ).fetchone()
+            if existing is not None:
+                raise ValueError("username already exists")
+            conn.execute(
+                """
+                INSERT INTO users (username, display_name, password_hash, role, created_at, updated_at)
+                VALUES (?, ?, ?, 'operator', ?, ?)
+                """,
+                (request["username"], request["display_name"], request["password_hash"], now, now),
+            )
+        conn.execute(
+            """
+            UPDATE registration_requests
+            SET status = ?, reviewed_at = ?, reviewed_by = ?, review_note = ?
+            WHERE id = ?
+            """,
+            ("approved" if approve else "rejected", now, reviewer, note.strip()[:300], request_id),
+        )
+    return get_registration_request(request_id, db_path=db_path) or {}
+
+
 def authenticate(
     username: str,
     password: str,
@@ -171,4 +269,8 @@ def seed_environment_users(*, db_path: str | os.PathLike[str] | None = None) -> 
 
 
 def _public_user(row: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in row.items() if key != "password_hash"}
+
+
+def _public_registration_request(row: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in row.items() if key != "password_hash"}

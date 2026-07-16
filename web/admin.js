@@ -11,7 +11,11 @@ async function api(path, options = {}) {
 }
 
 async function loadAdmin() {
-  const [payload, users] = await Promise.all([api("/api/v2/admin/summary"), api("/api/v2/admin/users")]);
+  const [payload, users, registrations] = await Promise.all([
+    api("/api/v2/admin/summary"),
+    api("/api/v2/admin/users"),
+    api("/api/v2/admin/registration-requests"),
+  ]);
   const projectTotal = Object.values(payload.projects).reduce((sum, value) => sum + Number(value), 0);
   const failedTasks = Number(payload.tasks.failed || 0);
   const storageTotal = Object.values(payload.storage_bytes).reduce((sum, value) => sum + Number(value), 0);
@@ -30,6 +34,38 @@ async function loadAdmin() {
   document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(project.updated_at)}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';
   document.querySelector("#recentFailures").innerHTML = payload.recent_failures.map((failure) => `<details><summary>${escapeHtml(failure.project_id)} · ${escapeHtml(failure.stage)} · ${escapeHtml(failure.agent)}</summary><pre>${escapeHtml(failure.error_json || "无错误详情")}</pre></details>`).join("") || '<p class="emptyMessage">当前没有失败节点</p>';
   renderUsers(users.items || []);
+  renderRegistrationRequests(registrations.items || []);
+}
+
+function renderRegistrationRequests(items) {
+  const pending = items.filter((item) => item.status === "pending");
+  document.querySelector("#registrationRequestCount").textContent = pending.length ? `${pending.length} 个待审核` : "暂无待审核";
+  document.querySelector("#registrationRequestRows").innerHTML = items.map((item) => `<tr>
+    <td><strong>${escapeHtml(item.username)}</strong></td>
+    <td>${escapeHtml(item.display_name || "-")}</td>
+    <td>${escapeHtml(item.requested_at)}</td>
+    <td><span class="statusTag status-${item.status === "approved" ? "succeeded" : item.status === "rejected" ? "blocked" : "running"}">${item.status === "pending" ? "待审核" : item.status === "approved" ? "已开通" : "已拒绝"}</span></td>
+    <td>${item.status === "pending" ? `<button type="button" class="tableAction" data-registration-approve="${item.id}">通过</button> <button type="button" class="tableAction" data-registration-reject="${item.id}">拒绝</button>` : escapeHtml(item.reviewed_by || "-")}</td>
+  </tr>`).join("") || '<tr><td colspan="5">暂无账号申请</td></tr>';
+  document.querySelectorAll("[data-registration-approve], [data-registration-reject]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const approved = Boolean(button.dataset.registrationApprove);
+      const requestId = button.dataset.registrationApprove || button.dataset.registrationReject;
+      const note = window.prompt(approved ? "审核备注（可选）" : "拒绝原因（可选）") || "";
+      button.disabled = true;
+      try {
+        await api(`/api/v2/admin/registration-requests/${requestId}/${approved ? "approve" : "reject"}`, {
+          method: "POST",
+          body: JSON.stringify({ note }),
+        });
+        await loadAdmin();
+      } catch (error) {
+        window.alert(error.message);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
 }
 
 function renderUsers(users) {

@@ -57,3 +57,26 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
     assert report_shot["path"].endswith("shot-001-take-b.mp4")
     assert displayed.json()["shots"][0]["takes"][0]["playable"] is False
     assert displayed.json()["shots"][0]["takes"][0]["media_url"] == ""
+
+
+def test_hero_approval_generates_initial_take_and_waits_for_selection(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "agentflow.db"
+    runs_root = tmp_path / "runs"
+    run_root = runs_root / "selection-gate"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    queue.init_db(db_path)
+    engine.start_pipeline("selection-gate", product_id="thermos", db_path=db_path, run_root=run_root, mock=True)
+    engine.run_until_blocked("selection-gate", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("selection-gate", "script_gate", approver="test", db_path=db_path, run_root=run_root)
+    engine.run_until_blocked("selection-gate", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("selection-gate", "hero_gate", approver="test", db_path=db_path, run_root=run_root)
+    status = engine.run_until_blocked("selection-gate", db_path=db_path, run_root=run_root, mock=True)
+
+    manifest = json.loads((run_root / "artifacts" / "take_manifest.json").read_text(encoding="utf-8"))
+    tasks = queue.list_tasks(project_id="selection-gate", db_path=db_path)
+    assert status.stage == "production"
+    assert status.status == "awaiting_human"
+    assert len(manifest["shots"]) == 5
+    assert all(shot["takes"][0]["take_id"] == "A" for shot in manifest["shots"])
+    assert not any(task.stage == "compose" and task.status == "queued" for task in tasks)

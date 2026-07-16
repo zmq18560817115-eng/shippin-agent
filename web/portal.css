@@ -68,6 +68,7 @@ button, a { border-radius: 6px; }
 .portalOption.active { border-color: var(--purple); box-shadow: inset 4px 0 var(--purple); color: #3525b0; }
 
 .loginForm { display: grid; gap: 16px; padding: 34px 38px; }
+.loginForm[hidden], .registrationPanel[hidden], .registrationToggle[hidden] { display: none !important; }
 .formIntro span { color: var(--purple); font-size: 12px; font-weight: 750; }
 .formIntro h2 { margin: 5px 0; font-size: 22px; }
 .formIntro p { margin: 0; color: var(--muted); font-size: 13px; }
@@ -76,6 +77,10 @@ button, a { border-radius: 6px; }
 .loginForm input:focus { border-color: var(--purple); outline: 2px solid rgba(90, 67, 238, 0.12); }
 .loginButton { min-height: 44px; border: 0; background: var(--purple); color: #fff; cursor: pointer; }
 .loginError { min-height: 20px; margin: 0; color: #b02d35; font-size: 13px; }
+.registrationPanel { grid-column: 2; grid-row: 2; border-top: 1px solid var(--line); }
+.registrationPanel .formIntro { padding: 28px 38px 0; }
+.registrationForm { padding-top: 18px; }
+.registrationToggle { grid-column: 2; grid-row: 3; justify-self: start; align-self: center; z-index: 1; margin-left: 38px; border: 0; padding: 0; background: transparent; color: var(--purple); cursor: pointer; font-size: 13px; }
 .loginShell footer { grid-column: 1 / -1; border-top: 1px solid var(--line); padding: 13px 28px; color: var(--muted); font-size: 12px; }
 
 .adminPage { min-height: 100vh; background: #f3f5f8; }
@@ -141,6 +146,7 @@ dialog::backdrop { background: rgba(17, 26, 47, .62); }
 @media (max-width: 900px) {
   .loginShell { grid-template-columns: 1fr; }
   .portalChoice { border-right: 0; border-bottom: 1px solid var(--line); }
+  .registrationPanel, .registrationToggle { grid-column: 1; grid-row: auto; }
   .loginBrand { align-items: flex-start; }
   .environmentTag { display: none; }
   .adminTopbar, .adminIntro { align-items: flex-start; flex-direction: column; }

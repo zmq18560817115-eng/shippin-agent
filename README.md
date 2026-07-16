@@ -80,6 +80,7 @@ ARK_API_KEY=你的豆包密钥
 DOUBAO_API_KEY=你的豆包分析密钥
 SEEDANCE_API_KEY=你的视频生成密钥
 VAF_AUTH_ENABLED=true
+VAF_SELF_REGISTRATION_ENABLED=true
 VAF_SESSION_SECRET=使用随机长字符串
 VAF_OPERATOR_USER=首个生产操作员账号
 VAF_OPERATOR_PASSWORD=首个生产操作员强密码
@@ -110,7 +111,7 @@ VAF_AUTO_COLLECT_REAL=true
 uvicorn orchestrator.api:app --host 127.0.0.1 --port 8790
 ```
 
-打开 `http://127.0.0.1:8790/`，先选择内容生产工作台或后台管理平台。开发环境可保持 `VAF_AUTH_ENABLED=false`；内网服务器必须启用认证，并配置首个操作员和管理员账号。服务首次启动时会把这两个账号加密写入 SQLite；后续多人账号由后台的“成员账号”创建、启停和管理。停用账号会立即使其旧会话失效，系统不会允许停用最后一个启用中的管理员。通过反向代理和 HTTPS 保护服务。
+打开 `http://127.0.0.1:8790/`，先选择内容生产工作台或后台管理平台。开发环境可保持 `VAF_AUTH_ENABLED=false`；内网服务器必须启用认证，并配置首个操作员和管理员账号。服务首次启动时会把这两个账号加密写入 SQLite；后续多人账号可由后台的“成员账号”创建、启停和管理，也可以在登录页提交申请。管理员在“账号申请”中审核通过后，系统才会创建普通操作员账号。密码只保存 PBKDF2 加密摘要，管理员无法读取明文。停用账号会立即使其旧会话失效，系统不会允许停用最后一个启用中的管理员。通过反向代理和 HTTPS 保护服务。
 
 部署到目标服务器后先执行环境预检：
 

@@ -137,6 +137,7 @@ async function boot() {
   await loadAutoCollector();
   await refreshProjects();
   window.setInterval(() => refreshProjects({ silent: true }), 3000);
+  window.setInterval(() => loadAutoCollector(), 15000);
 }
 
 async function loadWorkbenchSession() {
@@ -190,6 +191,7 @@ function bindEvents() {
   $("#collectForm").addEventListener("submit", collectLinks);
   $("#crawlForm").addEventListener("submit", crawlTikTok);
   $("#saveAutoCrawl").addEventListener("click", saveAutoCollector);
+  $("#stopAutoCrawl").addEventListener("click", stopAutoCollector);
   $("#runtimeMode").addEventListener("change", updateRuntimeModeHint);
   $("#crawlTargetType").addEventListener("change", updateCrawlTargetUI);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
@@ -646,6 +648,10 @@ function autoCollectorPayload(enabled) {
 
 function renderAutoCollector(settings) {
   const host = $("#autoCrawlStatus");
+  const startButton = $("#saveAutoCrawl");
+  const stopButton = $("#stopAutoCrawl");
+  startButton.textContent = settings.enabled ? "更新后台自动采集" : "启动后台自动采集";
+  stopButton.hidden = !settings.enabled;
   if (!settings.enabled) {
     host.className = "autoCrawlStatus";
     host.textContent = "后台自动采集未启动。填写目标后点击“启动后台自动采集”，服务器将按设定频率持续运行。";
@@ -695,6 +701,23 @@ async function saveAutoCollector(event) {
   } finally {
     button.disabled = false;
     $("#crawlState").textContent = "";
+  }
+}
+
+async function stopAutoCollector(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const settings = await api("/api/v2/collect/tiktok/auto", {
+      method: "PUT",
+      body: JSON.stringify(autoCollectorPayload(false)),
+    });
+    renderAutoCollector(settings);
+    toast("后台自动采集已停止，已入库素材不受影响");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -1480,6 +1503,11 @@ function renderDelivery() {
       refreshProjects();
     });
   });
+  const feedbackButton = $("#sendFeedback");
+  if (!selectedDelivered && feedbackButton) {
+    feedbackButton.disabled = true;
+    feedbackButton.title = "请先选择一个可交付项目";
+  }
   if (selectedDelivered) {
     $("#sendFeedback").addEventListener("click", () => sendFeedback(selectedDelivered.project_id));
   }

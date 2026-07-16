@@ -207,6 +207,16 @@ class LoginRequest(BaseModel):
     portal: str = "operator"
 
 
+class RegistrationRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str = ""
+
+
+class RegistrationReviewRequest(BaseModel):
+    note: str = ""
+
+
 class UserCreateRequest(BaseModel):
     username: str
     password: str
@@ -316,6 +326,24 @@ def logout() -> JSONResponse:
     return response
 
 
+@app.post("/api/v2/auth/register")
+def register_account(request: RegistrationRequest) -> dict[str, Any]:
+    if not _auth_enabled():
+        raise HTTPException(status_code=409, detail="registration is only available when intranet authentication is enabled")
+    if not _self_registration_enabled():
+        raise HTTPException(status_code=403, detail="self registration is disabled; contact an administrator")
+    try:
+        registration = user_store.request_registration(
+            request.username,
+            request.password,
+            display_name=request.display_name,
+            db_path=_db_path(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True, "registration": registration}
+
+
 @app.get("/api/v2/auth/session")
 def auth_session(request: Request) -> dict[str, Any]:
     session = _read_session(request)
@@ -376,15 +404,9 @@ def agent_capabilities() -> dict[str, Any]:
 def admin_summary() -> dict[str, Any]:
     queue.init_db(db_path=_db_path())
     with queue.get_conn(_db_path()) as conn:
-        project_rows = conn.execute("SELECT status, COUNT(*) AS count FROM projects GROUP BY status").fetchall()
+        project_rows = conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall()
         task_rows = conn.execute("SELECT status, COUNT(*) AS count FROM tasks GROUP BY status").fetchall()
         total_cost = float(conn.execute("SELECT COALESCE(SUM(cost_cny), 0) FROM cost_entries").fetchone()[0])
-        recent = [
-            dict(row)
-            for row in conn.execute(
-                "SELECT id, product_id, status, created_at, updated_at FROM projects ORDER BY updated_at DESC LIMIT 12"
-            ).fetchall()
-        ]
         failures = [
             dict(row)
             for row in conn.execute(
@@ -394,9 +416,24 @@ def admin_summary() -> dict[str, Any]:
     material_index = manual_import.load_library_index(_material_library_root())
     runs_root = _runs_root()
     users = user_store.list_users(db_path=_db_path())
+    summaries = [_project_summary(str(row["id"]), row=row) for row in project_rows]
+    project_counts: dict[str, int] = {}
+    for summary in summaries:
+        project_counts[summary["status"]] = project_counts.get(summary["status"], 0) + 1
+    recent = [
+        {
+            "id": summary["project_id"],
+            "product_id": summary["product_id"],
+            "status": summary["status"],
+            "current_stage": summary["current_stage"],
+            "created_at": summary["created_at"],
+            "updated_at": summary["updated_at"],
+        }
+        for summary in summaries[:12]
+    ]
     return {
         "status": "ok",
-        "projects": {row["status"]: row["count"] for row in project_rows},
+        "projects": project_counts,
         "tasks": {row["status"]: row["count"] for row in task_rows},
         "total_cost_cny": round(total_cost, 4),
         "material_count": len(material_index.get("items") or []),
@@ -451,6 +488,47 @@ def update_admin_user(user_id: int, request: UserUpdateRequest) -> dict[str, Any
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="user not found") from exc
     return {"ok": True, "user": user}
+
+
+@app.get("/api/v2/admin/registration-requests")
+def admin_registration_requests() -> dict[str, Any]:
+    return {"items": user_store.list_registration_requests(db_path=_db_path())}
+
+
+@app.post("/api/v2/admin/registration-requests/{request_id}/approve")
+def approve_registration_request(request_id: int, request: RegistrationReviewRequest, raw_request: Request) -> dict[str, Any]:
+    session = _read_session(raw_request) or {}
+    try:
+        item = user_store.review_registration_request(
+            request_id,
+            approve=True,
+            reviewer=str(session.get("username") or "admin"),
+            note=request.note,
+            db_path=_db_path(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="registration request not found") from exc
+    return {"ok": True, "registration": item}
+
+
+@app.post("/api/v2/admin/registration-requests/{request_id}/reject")
+def reject_registration_request(request_id: int, request: RegistrationReviewRequest, raw_request: Request) -> dict[str, Any]:
+    session = _read_session(raw_request) or {}
+    try:
+        item = user_store.review_registration_request(
+            request_id,
+            approve=False,
+            reviewer=str(session.get("username") or "admin"),
+            note=request.note,
+            db_path=_db_path(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="registration request not found") from exc
+    return {"ok": True, "registration": item}
 
 
 @app.post("/api/v2/agents/run")
@@ -1049,6 +1127,10 @@ async def _auto_collector_loop() -> None:
 
 def _auth_enabled() -> bool:
     return _env_bool("VAF_AUTH_ENABLED", False)
+
+
+def _self_registration_enabled() -> bool:
+    return _env_bool("VAF_SELF_REGISTRATION_ENABLED", True)
 
 
 def _auth_configuration_error() -> str | None:

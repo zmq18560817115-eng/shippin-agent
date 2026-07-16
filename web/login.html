@@ -39,7 +39,24 @@
       </form>
 
       <footer>产品素材与生成产物仅用于内部生产，请勿外传。</footer>
+      <section id="registrationPanel" class="registrationPanel" hidden>
+        <div class="formIntro">
+          <span>账号申请</span>
+          <h2>申请内容生产工作台账号</h2>
+          <p>提交后由管理员审核。通过后使用所填账号和密码登录，密码不会以明文形式保存。</p>
+        </div>
+        <form id="registrationForm" class="loginForm registrationForm">
+          <label>姓名或工号<input id="registrationDisplayName" maxlength="80" autocomplete="name" placeholder="例如 张三" /></label>
+          <label>登录账号<input id="registrationUsername" required maxlength="64" autocomplete="username" placeholder="例如 content-editor" /></label>
+          <label>设置密码<input id="registrationPassword" required minlength="8" type="password" autocomplete="new-password" placeholder="至少 8 位" /></label>
+          <label>确认密码<input id="registrationConfirmPassword" required minlength="8" type="password" autocomplete="new-password" placeholder="再次输入密码" /></label>
+          <button type="submit" class="loginButton">提交账号申请</button>
+          <p id="registrationError" class="loginError" role="alert"></p>
+        </form>
+      </section>
+      <button id="showRegistration" type="button" class="registrationToggle" hidden>没有账号？申请开通</button>
+      <button id="showLogin" type="button" class="registrationToggle" hidden>返回登录</button>
     </main>
-    <script src="/static/login.js?v=20260716-1"></script>
+    <script src="/static/login.js?v=20260716-3"></script>
   </body>
 </html>

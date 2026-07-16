@@ -123,3 +123,46 @@ def test_last_active_admin_cannot_be_disabled(monkeypatch, tmp_path):
         current = admin.get("/api/v2/admin/users").json()["items"][0]
         denied = admin.patch(f"/api/v2/admin/users/{current['id']}", json={"status": "disabled"})
         assert denied.status_code == 422
+
+
+def test_registration_request_needs_admin_approval(monkeypatch, tmp_path):
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "registration.db"))
+    monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_SELF_REGISTRATION_ENABLED", "true")
+    monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
+    monkeypatch.setenv("VAF_ADMIN_USER", "admin")
+    monkeypatch.setenv("VAF_ADMIN_PASSWORD", "admin-pass")
+    monkeypatch.delenv("VAF_OPERATOR_USER", raising=False)
+    monkeypatch.delenv("VAF_OPERATOR_PASSWORD", raising=False)
+
+    with TestClient(app) as anonymous:
+        submitted = anonymous.post(
+            "/api/v2/auth/register",
+            json={"username": "new-editor", "display_name": "New Editor", "password": "new-editor-pass"},
+        )
+        assert submitted.status_code == 200, submitted.text
+        request_id = submitted.json()["registration"]["id"]
+        denied = anonymous.post(
+            "/api/v2/auth/login",
+            json={"username": "new-editor", "password": "new-editor-pass", "portal": "operator"},
+        )
+        assert denied.status_code == 401
+
+    with TestClient(app) as admin:
+        assert admin.post(
+            "/api/v2/auth/login",
+            json={"username": "admin", "password": "admin-pass", "portal": "admin"},
+        ).status_code == 200
+        items = admin.get("/api/v2/admin/registration-requests")
+        assert items.status_code == 200
+        assert items.json()["items"][0]["status"] == "pending"
+        approved = admin.post(f"/api/v2/admin/registration-requests/{request_id}/approve", json={})
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["registration"]["status"] == "approved"
+
+    with TestClient(app) as editor:
+        accepted = editor.post(
+            "/api/v2/auth/login",
+            json={"username": "new-editor", "password": "new-editor-pass", "portal": "operator"},
+        )
+        assert accepted.status_code == 200

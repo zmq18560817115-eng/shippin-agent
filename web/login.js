@@ -11,6 +11,7 @@ document.querySelectorAll("[data-portal]").forEach((button) => {
     document.querySelectorAll("[data-portal]").forEach((item) => item.classList.toggle("active", item === button));
     document.querySelector("#portalCode").textContent = portalCopy[portalState.portal].code;
     document.querySelector("#portalTitle").textContent = portalCopy[portalState.portal].title;
+    if (typeof setRegistrationMode === "function") setRegistrationMode(false);
   });
 });
 
@@ -44,6 +45,48 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
     error.textContent = cause.message;
   }
 });
+
+function setRegistrationMode(showRegistration) {
+  document.querySelector("#loginForm").hidden = showRegistration;
+  document.querySelector("#registrationPanel").hidden = !showRegistration;
+  document.querySelector("#showRegistration").hidden = showRegistration || !portalState.authEnabled || portalState.portal !== "operator";
+  document.querySelector("#showLogin").hidden = !showRegistration;
+}
+
+document.querySelector("#showRegistration").addEventListener("click", () => setRegistrationMode(true));
+document.querySelector("#showLogin").addEventListener("click", () => setRegistrationMode(false));
+
+document.querySelector("#registrationForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const error = document.querySelector("#registrationError");
+  error.textContent = "";
+  const password = document.querySelector("#registrationPassword").value;
+  if (password !== document.querySelector("#registrationConfirmPassword").value) {
+    error.textContent = "两次输入的密码不一致";
+    return;
+  }
+  try {
+    const response = await fetch("/api/v2/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.querySelector("#registrationUsername").value.trim(),
+        display_name: document.querySelector("#registrationDisplayName").value.trim(),
+        password,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "账号申请提交失败");
+    event.currentTarget.reset();
+    error.style.color = "#23734d";
+    error.textContent = "申请已提交，请等待管理员审核开通。";
+  } catch (cause) {
+    error.style.color = "";
+    error.textContent = cause.message;
+  }
+});
+
+loadSession().then(() => setRegistrationMode(false));
 
 loadSession().catch(() => {
   document.querySelector("#loginError").textContent = "无法连接服务器，请检查服务状态。";

@@ -164,6 +164,8 @@ def approve_gate(
                     "run_root": root.as_posix(),
                     "shot_index": int(shot["number"]),
                     "shot": shot,
+                    "take_id": "A",
+                    "manual_only": True,
                 },
                 db_path=db_path,
             )
@@ -544,14 +546,16 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         revision=task.payload_json.get("revision"),
         db_path=db_path,
     ):
+        awaiting_selection = bool(task.payload_json.get("manual_only"))
         checkpoint.write_checkpoint(
             task.project_id,
             "production",
-            status="succeeded",
-            artifacts={"shot_report": "artifacts/shot_report.json"},
+            status="awaiting_human" if awaiting_selection else "succeeded",
+            artifacts={"take_manifest": "artifacts/take_manifest.json"} if awaiting_selection else {"shot_report": "artifacts/shot_report.json"},
+            data={"reason": "select_takes_before_compose"} if awaiting_selection else None,
             run_root=root,
         )
-        if not task.payload_json.get("manual_only"):
+        if not awaiting_selection:
             _enqueue_stage(
                 task.project_id,
                 "compose",
@@ -562,6 +566,8 @@ def _run_production(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
                 },
                 db_path=db_path,
             )
+        if awaiting_selection:
+            return EngineRunStatus(task.project_id, "production", "awaiting_human", "select a playable take for every shot before composing")
         return EngineRunStatus(task.project_id, "production", "succeeded", "shot completed")
     return EngineRunStatus(task.project_id, "production", "running", "shot completed")
 
