@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from orchestrator import api
+from orchestrator import api, queue
 from orchestrator.api import app
 from tools.base_tool import ToolContext
 from tools.collect import tiktok_crawler
@@ -187,3 +187,36 @@ def test_auto_collector_env_real_flag_enables_real_collection(tmp_path: Path, mo
     monkeypatch.setenv("VAF_AUTO_COLLECT_REAL", "true")
     api._ensure_auto_collector_settings()
     assert api._auto_collector_settings()["mock"] is False
+
+
+def test_auto_collector_recovers_abandoned_run_and_retries_with_backoff(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "auto-recovery.db"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    api._ensure_auto_collector_settings()
+    api._save_auto_collector_settings(
+        api.AutoCollectorSettingsRequest(
+            enabled=True,
+            target_type="keyword",
+            provider="auto",
+            target="heated cup",
+            limit=1,
+            interval_minutes=10,
+            product_id="便携恒温杯",
+            mock=True,
+        )
+    )
+    with queue.get_conn(db_path) as conn:
+        conn.execute("UPDATE collector_schedules SET status = 'running', failure_count = 2 WHERE id = 1")
+
+    api._recover_auto_collector_on_startup()
+    recovered = api._auto_collector_settings()
+    assert recovered["status"] == "failed"
+    assert recovered["failure_count"] == 3
+    assert recovered["next_run_at"]
+    assert api._auto_collector_due(recovered) is False
+
+    monkeypatch.setattr(api, "crawl_tiktok_and_run", lambda request: (_ for _ in ()).throw(RuntimeError("provider blocked")))
+    failed = api._run_auto_collector_once(force=True)
+    assert failed["ok"] is False
+    assert failed["settings"]["failure_count"] == 4
+    assert failed["settings"]["next_run_at"]

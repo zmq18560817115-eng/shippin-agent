@@ -102,6 +102,11 @@ def get_conn(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connectio
 def init_db(db_path: str | os.PathLike[str] | None = None) -> None:
     with get_conn(db_path) as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(collector_schedules)").fetchall()}
+        if "failure_count" not in columns:
+            conn.execute("ALTER TABLE collector_schedules ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0")
+        if "next_run_at" not in columns:
+            conn.execute("ALTER TABLE collector_schedules ADD COLUMN next_run_at TEXT")
 
 
 def ensure_project(

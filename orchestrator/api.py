@@ -13,7 +13,7 @@ import time
 import zipfile
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -266,6 +266,7 @@ async def lifespan(_: FastAPI):
         user_store.seed_environment_users(db_path=_db_path())
     queue.recover_running_tasks_on_startup(db_path=_db_path())
     _ensure_auto_collector_settings()
+    _recover_auto_collector_on_startup()
     scheduler = asyncio.create_task(_auto_collector_loop())
     try:
         yield
@@ -1207,6 +1208,8 @@ def _auto_collector_settings() -> dict[str, Any]:
         "last_started_at": payload.get("last_started_at"),
         "last_finished_at": payload.get("last_finished_at"),
         "last_message": payload.get("last_message") or "",
+        "failure_count": int(payload.get("failure_count") or 0),
+        "next_run_at": payload.get("next_run_at"),
         "updated_at": payload.get("updated_at"),
     }
 
@@ -1219,7 +1222,10 @@ def _save_auto_collector_settings(request: AutoCollectorSettingsRequest) -> None
             UPDATE collector_schedules
             SET enabled = ?, target_type = ?, provider = ?, target = ?, limit_count = ?, interval_minutes = ?,
                 product_id = ?, mock = ?, status = CASE WHEN status = 'running' THEN status ELSE 'idle' END,
-                last_message = CASE WHEN status = 'running' THEN last_message ELSE '' END, updated_at = ?
+                last_message = CASE WHEN status = 'running' THEN last_message ELSE '' END,
+                failure_count = CASE WHEN status = 'running' THEN failure_count ELSE 0 END,
+                next_run_at = CASE WHEN status = 'running' THEN next_run_at ELSE NULL END,
+                updated_at = ?
             WHERE id = 1
             """,
             (
@@ -1235,6 +1241,9 @@ def _auto_collector_due(settings: dict[str, Any]) -> bool:
         return False
     if settings["target_type"] != "trending" and not settings["target"].strip():
         return False
+    retry_at = _parse_utc_timestamp(settings.get("next_run_at"))
+    if retry_at is not None:
+        return datetime.now(timezone.utc) >= retry_at
     last_finished = str(settings.get("last_finished_at") or "")
     if not last_finished:
         return True
@@ -1242,7 +1251,42 @@ def _auto_collector_due(settings: dict[str, Any]) -> bool:
         completed = datetime.fromisoformat(last_finished.replace("Z", "+00:00"))
     except ValueError:
         return True
-    return (datetime.now(UTC) - completed).total_seconds() >= settings["interval_minutes"] * 60
+    return (datetime.now(timezone.utc) - completed).total_seconds() >= settings["interval_minutes"] * 60
+
+
+def _parse_utc_timestamp(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _collector_retry_delay_seconds(failure_count: int, interval_minutes: int) -> int:
+    return min(max(60, interval_minutes * 60), 60 * (2 ** min(max(failure_count, 1), 6)))
+
+
+def _recover_auto_collector_on_startup() -> None:
+    """Release a schedule abandoned by a process restart without losing its error history."""
+    with queue.get_conn(_db_path()) as conn:
+        row = conn.execute("SELECT status, failure_count, interval_minutes FROM collector_schedules WHERE id = 1").fetchone()
+        if row is None or row["status"] != "running":
+            return
+        failure_count = int(row["failure_count"] or 0) + 1
+        retry_after = _collector_retry_delay_seconds(failure_count, int(row["interval_minutes"] or 60))
+        now = queue.utc_now()
+        retry_at = (datetime.now(timezone.utc) + timedelta(seconds=retry_after)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        conn.execute(
+            """
+            UPDATE collector_schedules
+            SET status = 'failed', failure_count = ?, next_run_at = ?, last_finished_at = ?,
+                last_message = '服务重启后恢复：上一次采集任务未完成，将按退避策略重试', updated_at = ?
+            WHERE id = 1
+            """,
+            (failure_count, retry_at, now, now),
+        )
 
 
 def _run_auto_collector_once(force: bool = False) -> dict[str, Any]:
@@ -1251,6 +1295,7 @@ def _run_auto_collector_once(force: bool = False) -> dict[str, Any]:
         return {"ok": True, "ran": False, "settings": settings}
     if settings["target_type"] != "trending" and not settings["target"].strip():
         return {"ok": False, "ran": False, "error": "请先设置自动采集目标", "settings": settings}
+    failure_count = int(settings.get("failure_count") or 0)
     with queue.get_conn(_db_path()) as conn:
         claimed = conn.execute(
             """
@@ -1277,10 +1322,27 @@ def _run_auto_collector_once(force: bool = False) -> dict[str, Any]:
     except Exception as exc:  # Defensive: a scheduler fault must not stop the API process.
         message = str(exc)
         outcome = {"ok": False, "ran": True, "error": message}
+    next_run_at = None
+    if not outcome["ok"]:
+        failure_count += 1
+        retry_after = _collector_retry_delay_seconds(failure_count, settings["interval_minutes"])
+        next_run_at = (datetime.now(timezone.utc) + timedelta(seconds=retry_after)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        message = f"{message}；将在约 {max(1, retry_after // 60)} 分钟后重试"
     with queue.get_conn(_db_path()) as conn:
         conn.execute(
-            "UPDATE collector_schedules SET status = ?, last_finished_at = ?, last_message = ?, updated_at = ? WHERE id = 1",
-            ("idle" if outcome["ok"] else "failed", queue.utc_now(), message[:1000], queue.utc_now()),
+            """
+            UPDATE collector_schedules
+            SET status = ?, last_finished_at = ?, last_message = ?, failure_count = ?, next_run_at = ?, updated_at = ?
+            WHERE id = 1
+            """,
+            (
+                "idle" if outcome["ok"] else "failed",
+                queue.utc_now(),
+                message[:1000],
+                0 if outcome["ok"] else failure_count,
+                next_run_at,
+                queue.utc_now(),
+            ),
         )
     outcome["settings"] = _auto_collector_settings()
     return outcome

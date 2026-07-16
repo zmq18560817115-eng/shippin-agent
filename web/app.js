@@ -733,8 +733,11 @@ function renderAutoCollector(settings) {
   }
   const mode = settings.mock ? "演练模式" : "真实运行";
   const last = settings.last_message ? `最近结果：${settings.last_message}` : "等待首轮执行";
+  const retry = settings.next_run_at
+    ? `连续失败 ${settings.failure_count || 0} 次；下次重试：${new Date(settings.next_run_at).toLocaleString("zh-CN", { hour12: false })}。`
+    : "";
   host.className = `autoCrawlStatus ${settings.status === "failed" ? "error" : "active"}`;
-  host.textContent = `后台自动采集已启动：每 ${settings.interval_minutes} 分钟，${mode}。${last}`;
+  host.textContent = `后台自动采集已启动：每 ${settings.interval_minutes} 分钟，${mode}。${last}${retry}`;
 }
 
 async function loadAutoCollector() {

@@ -132,5 +132,7 @@ CREATE TABLE IF NOT EXISTS collector_schedules (
     last_started_at     TEXT,
     last_finished_at    TEXT,
     last_message        TEXT NOT NULL DEFAULT '',
+    failure_count       INTEGER NOT NULL DEFAULT 0,
+    next_run_at         TEXT,
     updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
