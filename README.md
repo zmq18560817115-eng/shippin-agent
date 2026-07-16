@@ -90,6 +90,20 @@ VAF_COOKIE_SECURE=true
 
 密钥只放在本地环境或服务器环境变量中，不要提交到 Git。真实模式会产生模型费用；Mock 模式只用于接口和流程测试，不会生成可交付成片。
 
+素材采集默认以“自动发现与后台采集”为主。可在素材采集页设置关键词、账号或话题、采集后端、单轮数量和执行频率，然后启动后台任务；服务器会持续发现、下载、入库并进入分析。也可用下列变量在部署时预置首个任务，未设置目标时不会自动抓取：
+
+```dotenv
+VAF_AUTO_COLLECT_ENABLED=true
+VAF_AUTO_COLLECT_TARGET_TYPE=keyword
+VAF_AUTO_COLLECT_TARGET=heated cup
+VAF_AUTO_COLLECT_PROVIDER=auto
+VAF_AUTO_COLLECT_LIMIT=3
+VAF_AUTO_COLLECT_INTERVAL_MINUTES=60
+VAF_AUTO_COLLECT_REAL=true
+```
+
+手动粘贴 TikTok 链接保留在“补充：直接导入视频链接”，适合已知链接或临时补充，不再是主流程。
+
 ## 启动
 
 ```powershell

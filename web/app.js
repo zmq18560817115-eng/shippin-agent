@@ -134,6 +134,7 @@ async function boot() {
   await checkHealth();
   await loadProductLibrary();
   await loadProducts();
+  await loadAutoCollector();
   await refreshProjects();
   window.setInterval(() => refreshProjects({ silent: true }), 3000);
 }
@@ -188,6 +189,7 @@ function bindEvents() {
   $("#startForm").addEventListener("submit", startProject);
   $("#collectForm").addEventListener("submit", collectLinks);
   $("#crawlForm").addEventListener("submit", crawlTikTok);
+  $("#saveAutoCrawl").addEventListener("click", saveAutoCollector);
   $("#runtimeMode").addEventListener("change", updateRuntimeModeHint);
   $("#crawlTargetType").addEventListener("change", updateCrawlTargetUI);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
@@ -626,6 +628,73 @@ async function crawlTikTok(event) {
     button.disabled = false;
     $("#crawlState").textContent = "";
     endOperation();
+  }
+}
+
+function autoCollectorPayload(enabled) {
+  return {
+    enabled,
+    target_type: $("#crawlTargetType").value,
+    provider: $("#crawlProvider").value,
+    target: $("#crawlTarget").value.trim(),
+    limit: Number($("#crawlLimit").value || 3),
+    interval_minutes: Number($("#autoCrawlInterval").value || 60),
+    product_id: $("#productSelect").value,
+    mock: $("#runtimeMode").value !== "real",
+  };
+}
+
+function renderAutoCollector(settings) {
+  const host = $("#autoCrawlStatus");
+  if (!settings.enabled) {
+    host.className = "autoCrawlStatus";
+    host.textContent = "后台自动采集未启动。填写目标后点击“启动后台自动采集”，服务器将按设定频率持续运行。";
+    return;
+  }
+  const mode = settings.mock ? "演练模式" : "真实运行";
+  const last = settings.last_message ? `最近结果：${settings.last_message}` : "等待首轮执行";
+  host.className = `autoCrawlStatus ${settings.status === "failed" ? "error" : "active"}`;
+  host.textContent = `后台自动采集已启动：每 ${settings.interval_minutes} 分钟，${mode}。${last}`;
+}
+
+async function loadAutoCollector() {
+  try {
+    const settings = await api("/api/v2/collect/tiktok/auto");
+    $("#crawlTargetType").value = settings.target_type;
+    $("#crawlProvider").value = settings.provider;
+    $("#crawlTarget").value = settings.target || "";
+    $("#crawlLimit").value = settings.limit;
+    $("#autoCrawlInterval").value = String(settings.interval_minutes);
+    updateCrawlTargetUI();
+    renderAutoCollector(settings);
+  } catch (error) {
+    $("#autoCrawlStatus").className = "autoCrawlStatus error";
+    $("#autoCrawlStatus").textContent = `无法读取后台采集状态：${error.message}`;
+  }
+}
+
+async function saveAutoCollector(event) {
+  const button = event.currentTarget;
+  const targetType = $("#crawlTargetType").value;
+  if (targetType !== "trending" && !$("#crawlTarget").value.trim()) {
+    toast("请先填写自动采集目标", "error");
+    $("#crawlTarget").focus();
+    return;
+  }
+  button.disabled = true;
+  $("#crawlState").textContent = "正在保存后台任务";
+  try {
+    const settings = await api("/api/v2/collect/tiktok/auto", {
+      method: "PUT",
+      body: JSON.stringify(autoCollectorPayload(true)),
+    });
+    renderAutoCollector(settings);
+    toast("后台自动采集已启动，服务器将持续发现并分析素材");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    $("#crawlState").textContent = "";
   }
 }
 

@@ -101,3 +101,20 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_role_status
 ON users(role, status, username);
+
+CREATE TABLE IF NOT EXISTS collector_schedules (
+    id                  INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled             INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    target_type         TEXT NOT NULL DEFAULT 'keyword',
+    provider            TEXT NOT NULL DEFAULT 'auto',
+    target              TEXT NOT NULL DEFAULT '',
+    limit_count         INTEGER NOT NULL DEFAULT 3 CHECK (limit_count BETWEEN 1 AND 20),
+    interval_minutes    INTEGER NOT NULL DEFAULT 60 CHECK (interval_minutes BETWEEN 10 AND 1440),
+    product_id          TEXT NOT NULL DEFAULT '便携恒温杯',
+    mock                INTEGER NOT NULL DEFAULT 1 CHECK (mock IN (0, 1)),
+    status              TEXT NOT NULL DEFAULT 'idle',
+    last_started_at     TEXT,
+    last_finished_at    TEXT,
+    last_message        TEXT NOT NULL DEFAULT '',
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);

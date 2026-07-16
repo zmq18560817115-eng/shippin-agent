@@ -87,24 +87,9 @@
           <span id="collectState"></span>
         </div>
         <div id="collectorBackendState" class="backendStrip">正在检测服务器采集后端...</div>
-        <form class="collectForm quickIntake" id="collectForm">
-          <input type="hidden" id="collectMode" value="official" />
-          <input type="hidden" id="sourceKeywordInput" value="tiktok_oembed" />
-          <div class="quickIntakeIntro"><span>推荐入口</span><strong>粘贴视频链接，直接开始分析</strong><small>单条链接会下载、入库并进入脚本拆解；多条链接可先批量导入素材库。</small></div>
-          <label class="collectLinks">
-            视频链接
-            <textarea id="collectLinksInput" placeholder="粘贴 TikTok 视频链接；批量导入时每行一条"></textarea>
-          </label>
-          <div class="formActions">
-            <button type="submit" value="analyze" class="primary">下载、采集并分析</button>
-            <button type="submit" value="import">仅存入素材库</button>
-          </div>
-        </form>
-        <details class="advancedIntake">
-          <summary><span><strong>主动发现素材</strong><small>按关键词、账号或话题批量发现</small></span><span>展开</span></summary>
-        <form class="crawlForm" id="crawlForm">
+        <form class="crawlForm autoCrawlForm" id="crawlForm">
           <div class="nodeToolHead">
-            <div><strong>主动爬取任务</strong><span>按关键词或账号发现视频，下载入库并批量运行分析</span></div>
+            <div><strong>自动发现与后台采集</strong><span>主动爬取任务：设置一次后由服务器按频率发现、下载、入库并分析；也可立即执行一轮。</span></div>
             <span id="crawlState"></span>
           </div>
           <label>
@@ -130,11 +115,40 @@
             <input id="crawlTarget" placeholder="例如 heated cup 或 https://www.tiktok.com/@brand" />
           </label>
           <label>
-            抓取数量
+            每轮数量
             <input id="crawlLimit" type="number" min="1" max="20" value="6" />
           </label>
-          <button type="submit" class="primary">开始爬取并分析</button>
+          <label>
+            后台频率
+            <select id="autoCrawlInterval">
+              <option value="30">每 30 分钟</option>
+              <option value="60" selected>每 60 分钟</option>
+              <option value="180">每 3 小时</option>
+              <option value="360">每 6 小时</option>
+              <option value="720">每 12 小时</option>
+            </select>
+          </label>
+          <div class="formActions autoCrawlActions">
+            <button type="submit" class="primary">立即抓取并分析</button>
+            <button type="button" id="saveAutoCrawl">启动后台自动采集</button>
+          </div>
         </form>
+        <div id="autoCrawlStatus" class="autoCrawlStatus">正在读取后台自动采集状态...</div>
+        <details class="advancedIntake directIntake">
+          <summary><span><strong>补充：直接导入视频链接</strong><small>仅用于已知链接、临时补充或单条快速分析</small></span><span>展开</span></summary>
+          <form class="collectForm quickIntake" id="collectForm">
+            <input type="hidden" id="collectMode" value="official" />
+            <input type="hidden" id="sourceKeywordInput" value="tiktok_oembed" />
+            <div class="quickIntakeIntro"><span>人工补充入口</span><strong>粘贴视频链接，直接开始分析</strong><small>单条链接会下载、入库并进入脚本拆解；多条链接可先批量导入素材库。</small></div>
+            <label class="collectLinks">
+              视频链接
+              <textarea id="collectLinksInput" placeholder="粘贴 TikTok 视频链接；批量导入时每行一条"></textarea>
+            </label>
+            <div class="formActions">
+              <button type="submit" value="analyze" class="primary">下载、采集并分析</button>
+              <button type="submit" value="import">仅存入素材库</button>
+            </div>
+          </form>
         </details>
         <div id="materialLibrary" class="emptyState">暂无参考素材</div>
         <div class="nodeTools" id="researchNode">

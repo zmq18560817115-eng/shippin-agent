@@ -148,3 +148,32 @@ def test_crawl_endpoint_creates_projects_for_discovered_videos(tmp_path: Path, m
     project = client.get(f"/api/v2/pipeline/{payload['results'][0]['project_id']}").json()
     collector = next(node for node in project["nodes"] if node["agent"] == "collector")
     assert collector["status"] == "succeeded"
+
+
+def test_auto_collector_can_be_configured_and_run_on_demand(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "auto.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+    monkeypatch.setenv("VAF_MATERIAL_LIBRARY_ROOT", str(tmp_path / "materials"))
+    with TestClient(app) as client:
+        saved = client.put(
+            "/api/v2/collect/tiktok/auto",
+            json={
+                "enabled": True,
+                "target_type": "keyword",
+                "provider": "auto",
+                "target": "heated cup",
+                "limit": 2,
+                "interval_minutes": 30,
+                "product_id": "便携恒温杯",
+                "mock": True,
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["enabled"] is True
+        assert saved.json()["target"] == "heated cup"
+
+        ran = client.post("/api/v2/collect/tiktok/auto/run-now")
+        assert ran.status_code == 200, ran.text
+        assert ran.json()["ran"] is True
+        assert ran.json()["result"]["completed_count"] == 2
+        assert ran.json()["settings"]["last_finished_at"]

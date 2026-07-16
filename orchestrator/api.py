@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import os
 import re
 import secrets
@@ -111,6 +112,17 @@ class TikTokCrawlRequest(BaseModel):
     mock: bool = True
 
 
+class AutoCollectorSettingsRequest(BaseModel):
+    enabled: bool = False
+    target_type: str = "keyword"
+    provider: str = "auto"
+    target: str = ""
+    limit: int = 3
+    interval_minutes: int = 60
+    product_id: str = "便携恒温杯"
+    mock: bool = True
+
+
 class ProductLibraryRefreshRequest(BaseModel):
     source_roots: list[str] | None = None
 
@@ -214,7 +226,16 @@ async def lifespan(_: FastAPI):
     if _auth_enabled():
         user_store.seed_environment_users(db_path=_db_path())
     queue.recover_running_tasks_on_startup(db_path=_db_path())
-    yield
+    _ensure_auto_collector_settings()
+    scheduler = asyncio.create_task(_auto_collector_loop())
+    try:
+        yield
+    finally:
+        scheduler.cancel()
+        try:
+            await scheduler
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="video-agent-factory", version="0.0.0", lifespan=lifespan)
@@ -834,6 +855,31 @@ def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
     }
 
 
+@app.get("/api/v2/collect/tiktok/auto")
+def get_auto_collector_settings() -> dict[str, Any]:
+    return _auto_collector_settings()
+
+
+@app.put("/api/v2/collect/tiktok/auto")
+def update_auto_collector_settings(request: AutoCollectorSettingsRequest) -> dict[str, Any]:
+    if request.target_type not in {"keyword", "account", "hashtag", "trending"}:
+        raise HTTPException(status_code=422, detail="不支持的发现方式")
+    if request.target_type != "trending" and not request.target.strip():
+        raise HTTPException(status_code=422, detail="请填写自动采集目标")
+    if request.provider not in {"auto", "tiktok_api", "apify", "yt_dlp"}:
+        raise HTTPException(status_code=422, detail="不支持的采集后端")
+    _save_auto_collector_settings(request)
+    return _auto_collector_settings()
+
+
+@app.post("/api/v2/collect/tiktok/auto/run-now")
+async def run_auto_collector_now() -> dict[str, Any]:
+    result = await asyncio.to_thread(_run_auto_collector_once, True)
+    if result.get("error"):
+        raise HTTPException(status_code=422, detail=result["error"])
+    return result
+
+
 def _discovery_meta_updates(item: dict[str, Any] | None) -> dict[str, Any]:
     item = item or {}
     return {
@@ -860,6 +906,145 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if not value:
         return default
     return value in {"1", "true", "yes", "on"}
+
+
+def _ensure_auto_collector_settings() -> None:
+    queue.init_db(db_path=_db_path())
+    target = str(os.environ.get("VAF_AUTO_COLLECT_TARGET") or "").strip()
+    enabled = int(_env_bool("VAF_AUTO_COLLECT_ENABLED", False) and bool(target))
+    target_type = str(os.environ.get("VAF_AUTO_COLLECT_TARGET_TYPE") or "keyword").strip()
+    provider = str(os.environ.get("VAF_AUTO_COLLECT_PROVIDER") or "auto").strip()
+    try:
+        limit = max(1, min(int(os.environ.get("VAF_AUTO_COLLECT_LIMIT") or 3), 20))
+        interval = max(10, min(int(os.environ.get("VAF_AUTO_COLLECT_INTERVAL_MINUTES") or 60), 1440))
+    except ValueError:
+        limit, interval = 3, 60
+    with queue.get_conn(_db_path()) as conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO collector_schedules
+            (id, enabled, target_type, provider, target, limit_count, interval_minutes, product_id, mock, status, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?)
+            """,
+            (
+                enabled,
+                target_type if target_type in {"keyword", "account", "hashtag", "trending"} else "keyword",
+                provider if provider in {"auto", "tiktok_api", "apify", "yt_dlp"} else "auto",
+                target,
+                limit,
+                interval,
+                str(os.environ.get("VAF_PRODUCT_ID") or "便携恒温杯"),
+                int(not _env_bool("VAF_AUTO_COLLECT_REAL", False)),
+                queue.utc_now(),
+            ),
+        )
+
+
+def _auto_collector_settings() -> dict[str, Any]:
+    _ensure_auto_collector_settings()
+    with queue.get_conn(_db_path()) as conn:
+        row = conn.execute("SELECT * FROM collector_schedules WHERE id = 1").fetchone()
+    payload = dict(row or {})
+    return {
+        "enabled": bool(payload.get("enabled")),
+        "target_type": payload.get("target_type") or "keyword",
+        "provider": payload.get("provider") or "auto",
+        "target": payload.get("target") or "",
+        "limit": int(payload.get("limit_count") or 3),
+        "interval_minutes": int(payload.get("interval_minutes") or 60),
+        "product_id": payload.get("product_id") or "便携恒温杯",
+        "mock": bool(payload.get("mock")),
+        "status": payload.get("status") or "idle",
+        "last_started_at": payload.get("last_started_at"),
+        "last_finished_at": payload.get("last_finished_at"),
+        "last_message": payload.get("last_message") or "",
+        "updated_at": payload.get("updated_at"),
+    }
+
+
+def _save_auto_collector_settings(request: AutoCollectorSettingsRequest) -> None:
+    _ensure_auto_collector_settings()
+    with queue.get_conn(_db_path()) as conn:
+        conn.execute(
+            """
+            UPDATE collector_schedules
+            SET enabled = ?, target_type = ?, provider = ?, target = ?, limit_count = ?, interval_minutes = ?,
+                product_id = ?, mock = ?, status = CASE WHEN status = 'running' THEN status ELSE 'idle' END,
+                last_message = CASE WHEN status = 'running' THEN last_message ELSE '' END, updated_at = ?
+            WHERE id = 1
+            """,
+            (
+                int(request.enabled), request.target_type, request.provider, request.target.strip(),
+                max(1, min(request.limit, 20)), max(10, min(request.interval_minutes, 1440)),
+                request.product_id, int(request.mock), queue.utc_now(),
+            ),
+        )
+
+
+def _auto_collector_due(settings: dict[str, Any]) -> bool:
+    if not settings["enabled"] or settings["status"] == "running":
+        return False
+    if settings["target_type"] != "trending" and not settings["target"].strip():
+        return False
+    last_finished = str(settings.get("last_finished_at") or "")
+    if not last_finished:
+        return True
+    try:
+        completed = datetime.fromisoformat(last_finished.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    return (datetime.now(UTC) - completed).total_seconds() >= settings["interval_minutes"] * 60
+
+
+def _run_auto_collector_once(force: bool = False) -> dict[str, Any]:
+    settings = _auto_collector_settings()
+    if not force and not _auto_collector_due(settings):
+        return {"ok": True, "ran": False, "settings": settings}
+    if settings["target_type"] != "trending" and not settings["target"].strip():
+        return {"ok": False, "ran": False, "error": "请先设置自动采集目标", "settings": settings}
+    with queue.get_conn(_db_path()) as conn:
+        claimed = conn.execute(
+            """
+            UPDATE collector_schedules
+            SET status = 'running', last_started_at = ?, last_message = '正在发现、下载并分析素材', updated_at = ?
+            WHERE id = 1 AND status != 'running'
+            """,
+            (queue.utc_now(), queue.utc_now()),
+        ).rowcount
+    if not claimed:
+        return {"ok": True, "ran": False, "settings": _auto_collector_settings()}
+    try:
+        result = crawl_tiktok_and_run(
+            TikTokCrawlRequest(
+                target_type=settings["target_type"], provider=settings["provider"], target=settings["target"],
+                limit=settings["limit"], product_id=settings["product_id"], mock=settings["mock"],
+            )
+        )
+        message = f"发现 {result['discovered_count']} 条，完成 {result['completed_count']} 条，失败 {result['failed_count']} 条"
+        outcome = {"ok": bool(result["ok"]), "ran": True, "result": result}
+    except HTTPException as exc:
+        message = str(exc.detail)
+        outcome = {"ok": False, "ran": True, "error": message}
+    except Exception as exc:  # Defensive: a scheduler fault must not stop the API process.
+        message = str(exc)
+        outcome = {"ok": False, "ran": True, "error": message}
+    with queue.get_conn(_db_path()) as conn:
+        conn.execute(
+            "UPDATE collector_schedules SET status = ?, last_finished_at = ?, last_message = ?, updated_at = ? WHERE id = 1",
+            ("idle" if outcome["ok"] else "failed", queue.utc_now(), message[:1000], queue.utc_now()),
+        )
+    outcome["settings"] = _auto_collector_settings()
+    return outcome
+
+
+async def _auto_collector_loop() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(_run_auto_collector_once)
+        except Exception:
+            # Settings and errors remain visible through the collection endpoint; keep the scheduler alive.
+            pass
+        await asyncio.sleep(20)
 
 
 def _auth_enabled() -> bool:

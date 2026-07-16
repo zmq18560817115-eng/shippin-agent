@@ -490,6 +490,49 @@ textarea {
   padding-top: 14px;
 }
 
+.autoCrawlForm {
+  grid-template-columns: minmax(125px, 0.8fr) minmax(145px, 0.9fr) minmax(240px, 1.7fr) minmax(90px, 0.55fr) minmax(120px, 0.7fr) minmax(170px, 1fr);
+  align-items: end;
+  border-left: 3px solid #315fbe;
+  padding: 18px 18px 18px 20px;
+  background: #f7f9fc;
+}
+
+.autoCrawlForm .nodeToolHead {
+  padding-bottom: 2px;
+}
+
+.autoCrawlActions {
+  display: grid;
+  gap: 8px;
+}
+
+.autoCrawlActions button {
+  width: 100%;
+}
+
+.autoCrawlStatus {
+  margin: 10px 0 2px;
+  border-left: 3px solid #b8c3d3;
+  padding: 8px 11px;
+  background: #fafbfd;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.autoCrawlStatus.active {
+  border-left-color: #2f855a;
+  background: #f1faf5;
+  color: #276749;
+}
+
+.autoCrawlStatus.error {
+  border-left-color: #b73a3a;
+  background: #fff6f5;
+  color: #8f2424;
+}
+
 .agentWorkbenchGrid {
   display: grid;
   grid-template-columns: minmax(180px, 0.7fr) minmax(320px, 1.6fr) minmax(240px, 1fr);
@@ -1425,6 +1468,10 @@ pre {
   .quickIntake {
     grid-template-columns: minmax(0, 1fr);
     padding: 16px;
+  }
+
+  .autoCrawlActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .quickIntake .formActions {
