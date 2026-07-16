@@ -930,7 +930,10 @@ function materialDetailHtml(meta) {
   return `
     <div class="materialDetailGrid">
       <section><h4>采集状态</h4><p>${escapeHtml(materialStatusLabel(meta.processing_status))}</p><p>${transcript ? "转写已就绪" : "未取得字幕或转写，请补充文本后再运行分析"}</p></section>
-      <section><h4>视频转写</h4><pre>${escapeHtml(transcript || "暂无转写")}</pre></section>
+      <section><h4>视频转写</h4>
+        <textarea class="materialTranscriptInput" placeholder="粘贴或修订视频转写，用于研究分析和脚本拆解">${escapeHtml(transcript)}</textarea>
+        <div class="materialActions"><button type="button" class="saveMaterialTranscript" data-material-id="${escapeAttr(meta.material_id)}">保存转写并重新分析</button></div>
+      </section>
       <section><h4>结构与镜头拆解</h4>
         <p>${escapeHtml(analysis.hook_3s ? `3 秒钩子：${analysis.hook_3s}` : "尚未生成结构分析")}</p>
         ${breakdown.length ? `<ol>${breakdown.map((shot) => `<li>${escapeHtml(typeof shot === "string" ? shot : shot.description || shot.action || JSON.stringify(shot))}</li>`).join("")}</ol>` : "<p>尚未生成逐镜拆解</p>"}
@@ -952,9 +955,35 @@ async function showMaterialDetail(materialId) {
     panel.className = "materialDetailPanel";
     panel.innerHTML = `<div class="resultHead"><strong>素材详情</strong><button type="button" class="closeMaterialDetail">关闭</button></div>${materialDetailHtml(meta)}`;
     panel.querySelector(".closeMaterialDetail").addEventListener("click", () => panel.remove());
+    panel.querySelector(".saveMaterialTranscript").addEventListener("click", () => saveMaterialTranscript(panel, materialId));
     host.prepend(panel);
   } catch (error) {
     toast(error.message, "error");
+  }
+}
+
+async function saveMaterialTranscript(panel, materialId) {
+  const button = panel.querySelector(".saveMaterialTranscript");
+  const transcript = panel.querySelector(".materialTranscriptInput").value.trim();
+  if (!transcript) {
+    toast("请先填写视频转写", "error");
+    return;
+  }
+  button.disabled = true;
+  beginOperation("正在保存转写并启动研究分析", 35);
+  try {
+    await api(`/api/v2/collect/materials/${encodeURIComponent(materialId)}/transcript`, {
+      method: "PUT",
+      body: JSON.stringify({ transcript_text: transcript }),
+    });
+    toast("转写已保存，正在创建分析项目");
+    await startFromMaterial(materialId);
+    await loadMaterials();
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    endOperation();
   }
 }
 

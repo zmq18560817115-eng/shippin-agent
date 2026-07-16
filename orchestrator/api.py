@@ -222,6 +222,10 @@ class AgentRunRequest(BaseModel):
     mock: bool = True
 
 
+class MaterialTranscriptRequest(BaseModel):
+    transcript_text: str
+
+
 class StandalonePromoteRequest(BaseModel):
     source_project_id: str
     artifact_name: str
@@ -1483,6 +1487,36 @@ def collect_material(material_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.put("/api/v2/collect/materials/{material_id}/transcript")
+def update_material_transcript(material_id: str, request: MaterialTranscriptRequest) -> dict[str, Any]:
+    transcript = request.transcript_text.strip()
+    if not transcript:
+        raise HTTPException(status_code=422, detail="转写内容不能为空")
+    if len(transcript) > 12000:
+        raise HTTPException(status_code=422, detail="转写内容不能超过 12000 个字符")
+    try:
+        meta = manual_import.update_material_meta(
+            material_id,
+            {
+                "transcript_text": transcript,
+                "processing_status": "transcript_ready",
+                "ai_analysis_json": "",
+            },
+            _material_library_root(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    queue.record_event(
+        event_type="collector.transcript_updated",
+        message=material_id,
+        meta={"characters": len(transcript)},
+        db_path=_db_path(),
+    )
+    return {"ok": True, "material": meta, "transcript_status": "ready"}
 
 
 @app.get("/api/v2/collect/materials/{material_id}/file/{relative_path:path}")

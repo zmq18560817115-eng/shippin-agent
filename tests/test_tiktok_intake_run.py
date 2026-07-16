@@ -64,3 +64,28 @@ def test_material_detail_lists_only_files_inside_the_material_directory(tmp_path
     assert "source.mp4" in paths
     assert "frames/frame-01.jpg" in paths
     assert all(".." not in path for path in paths)
+
+
+def test_material_transcript_can_be_saved_for_a_follow_up_analysis(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "queue.db"
+    library_root = tmp_path / "materials"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_MATERIAL_LIBRARY_ROOT", str(library_root))
+    with TestClient(app) as client:
+        imported = client.post(
+            "/api/v2/collect/manual",
+            json={"urls": ["https://www.tiktok.com/@demo/video/66554433"], "product_id": "便携恒温杯"},
+        )
+        material_id = imported.json()["items"][0]["material_id"]
+        updated = client.put(
+            f"/api/v2/collect/materials/{material_id}/transcript",
+            json={"transcript_text": "夜间喂养时，先确认恒温杯显示 98 华氏度，再倒入奶液。"},
+        )
+        empty = client.put(
+            f"/api/v2/collect/materials/{material_id}/transcript",
+            json={"transcript_text": "   "},
+        )
+    assert updated.status_code == 200
+    assert updated.json()["material"]["processing_status"] == "transcript_ready"
+    assert updated.json()["material"]["ai_analysis_json"] == ""
+    assert empty.status_code == 422

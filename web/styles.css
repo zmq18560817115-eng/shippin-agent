@@ -787,6 +787,13 @@ textarea {
   line-height: 1.5;
 }
 
+.materialTranscriptInput {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
 .materialDetailGrid ol {
   margin: 0;
   padding-left: 20px;
