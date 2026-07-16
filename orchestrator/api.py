@@ -50,6 +50,7 @@ ARTIFACT_NAMES = {
     "strategy_brief",
     "script_breakdown",
     "take_manifest",
+    "feedback_record",
 }
 GATE_STAGES = ("script_gate", "hero_gate", "take_gate")
 NODE_STAGES = {
@@ -609,7 +610,17 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         if not result.ok:
             raise HTTPException(status_code=422, detail=(result.error or {}).get("message") or result.error)
         return {"ok": True, "project_id": project_id if not standalone else None, "action": action, "artifact_name": "tiktok_discovery", "artifact": result.data, "meta": result.meta}
-    if action == "research":
+    if action == "analysis":
+        source = (request.source_text or request.prompt or "").strip()
+        payload.update(
+            {
+                "transcript_text": source,
+                "source_material_id": (request.source_refs or [None])[0],
+                "source_url": source if source.startswith(("http://", "https://")) else "",
+            }
+        )
+        tool_name, artifact_name = "doubao_analyze", "analysis_report"
+    elif action == "research":
         analysis = _load_artifact_or_none(project_id, "analysis_report") or {}
         payload.update(
             {
@@ -726,8 +737,79 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
                 script = _load_artifact(project_id, "script_copy")
         payload["script_copy"] = script
         tool_name, artifact_name = "script_breakdown", "script_breakdown"
+    elif action == "review":
+        script = request.input_json
+        if script is None:
+            source = (request.source_text or request.prompt or "").strip()
+            if not source:
+                raise HTTPException(status_code=400, detail="独立审核需要脚本文本、内容需求或 script_copy JSON")
+            script_result = tool_registry.execute_tool(
+                "doubao_script",
+                {
+                    "project_id": project_id,
+                    "product_id": request.product_id,
+                    "analysis_report": {
+                        "project_id": project_id,
+                        "voiceover_text": source,
+                        "hook_3s": source[:120],
+                        "structure": [],
+                    },
+                    "strategy_brief": {
+                        "content_direction": source,
+                        "product_guardrails": product_library.product_guardrail_text(request.product_id),
+                    },
+                },
+                context={"mock": request.mock, "run_root": root},
+            )
+            if not script_result.ok:
+                error = script_result.error or {"message": "script foundation failed"}
+                raise HTTPException(status_code=422, detail=error.get("message") or error)
+            script = script_result.data["script_copy"]
+            artifacts.save_artifact(project_id, "script_copy", script, run_root=root)
+        payload.update(
+            {
+                "script_copy": script,
+                "analysis_report": _load_artifact_or_none(project_id, "analysis_report") or {},
+            }
+        )
+        tool_name, artifact_name = "doubao_review", "review_report"
+    elif action == "feedback":
+        text = (request.source_text or request.prompt or "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="独立反馈需要输入复盘结论或优化要求")
+        if len(text) > 1000:
+            raise HTTPException(status_code=400, detail="反馈内容不能超过 1000 字")
+        artifact_name = "feedback_record"
+        artifact = {
+            "version": "1.0",
+            "project_id": project_id,
+            "author": "operator",
+            "text": text,
+            "created_at": queue.utc_now(),
+        }
+        artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
+        feedback_root = _feedback_root()
+        feedback_root.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        _atomic_write_json(feedback_root / f"{project_id}-{stamp}-{secrets.token_hex(2)}.json", artifact)
+        queue.record_event(
+            project_id=project_id,
+            event_type="feedback.created",
+            message=text[:120],
+            meta={"standalone": standalone},
+            db_path=_db_path(),
+        )
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "action": action,
+            "artifact_name": artifact_name,
+            "artifact": artifact,
+            "download_url": f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
+            "meta": {"tool": "feedback_library", "standalone": standalone},
+        }
     else:
-        raise HTTPException(status_code=400, detail="action must be collector, research, strategy, script, script_breakdown, storyboard, or production")
+        raise HTTPException(status_code=400, detail="action must be collector, analysis, research, strategy, script, script_breakdown, storyboard, production, review, or feedback")
 
     result = tool_registry.execute_tool(
         tool_name,

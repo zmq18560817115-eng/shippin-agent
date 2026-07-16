@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["version", "project_id", "author", "text", "created_at"],
+  "properties": {
+    "version": {"type": "string"},
+    "project_id": {"type": "string"},
+    "author": {"type": "string"},
+    "text": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "created_at": {"type": "string"}
+  },
+  "additionalProperties": false
+}

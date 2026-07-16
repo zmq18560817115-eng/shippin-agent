@@ -57,22 +57,28 @@ const agentLabels = {
 
 const independentActionLabels = {
   collector: "素材采集",
+  analysis: "素材分析",
   research: "研究洞察",
   strategy: "内容策略",
   script: "脚本生成",
   script_breakdown: "脚本拆解",
   storyboard: "分镜生成",
   production: "单镜制作",
+  review: "内容审核",
+  feedback: "反馈学习",
 };
 
 const independentActionHints = {
   collector: "按关键词、账号或话题发现参考视频；可选择下载入库后进入分析。",
+  analysis: "输入视频转写、素材说明或参考链接，生成结构、节奏和镜头拆解。",
   research: "输入转写、竞品文案或研究资料，生成结构、节奏与受众洞察。",
   strategy: "输入研究结论、产品事实或内容需求，生成受众、卖点、钩子和 CTA 策略。",
   script: "输入产品、受众、平台和内容需求，生成完整中文脚本。",
   script_breakdown: "输入已有脚本或内容需求，生成逐段意图、画面和连续性拆解。",
   storyboard: "输入场景、人物、动作、镜头运动和风格，生成可编辑分镜。",
   production: "输入单镜画面 Prompt，使用产品素材库生成 720P 竖屏视频。",
+  review: "输入脚本文本或内容需求，生成产品安全与合规审核报告。",
+  feedback: "输入人工复盘结论、问题和优化要求，保存为可下载的反馈记录。",
 };
 
 const motionLabels = {

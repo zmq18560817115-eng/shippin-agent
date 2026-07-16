@@ -52,12 +52,12 @@ def test_agent_map_and_independent_research_strategy_breakdown(tmp_path: Path, m
         )
 
     assert capability_map.status_code == 200
-    assert capability_map.json()["summary"] == {"total": 9, "deployed": 6, "partial": 3, "missing": 0}
+    assert capability_map.json()["summary"] == {"total": 10, "deployed": 7, "partial": 3, "missing": 0}
     assert [
         item["independent_action"]
         for item in capability_map.json()["agents"]
         if item["independent_action"]
-    ] == ["research", "strategy", "script,script_breakdown", "storyboard", "production"]
+    ] == ["analysis", "research", "strategy", "script,script_breakdown", "storyboard", "production", "review", "feedback"]
     assert research.status_code == 200
     assert research.json()["artifact_name"] == "research_brief"
     assert strategy.status_code == 200
@@ -129,3 +129,35 @@ def test_standalone_strategy_and_breakdown_cold_start_are_isolated(tmp_path: Pat
     assert strategy_download.status_code == 200
     assert all(not item["standalone"] for item in visible.json()["items"])
     assert any(item["standalone"] for item in all_projects.json()["items"])
+
+
+def test_standalone_analysis_review_and_feedback_are_downloadable(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "standalone-tools.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+    monkeypatch.setenv("VAF_FEEDBACK_ROOT", str(tmp_path / "feedback"))
+
+    with TestClient(app) as client:
+        analysis = client.post(
+            "/api/v2/agents/run",
+            json={"action": "analysis", "source_text": "夜间准备奶液时等待太久，照护者需要更从容的流程。", "mock": True},
+        )
+        review = client.post(
+            "/api/v2/agents/run",
+            json={"action": "review", "source_text": "为便携恒温杯写一条安全的夜间喂养短视频脚本。", "mock": True},
+        )
+        feedback = client.post(
+            "/api/v2/agents/run",
+            json={"action": "feedback", "source_text": "减少空镜头，明确展示独立奶瓶与正确倒液方向。", "mock": True},
+        )
+
+        analysis_download = client.get(analysis.json()["download_url"])
+        review_download = client.get(review.json()["download_url"])
+        feedback_download = client.get(feedback.json()["download_url"])
+
+    assert analysis.status_code == 200, analysis.text
+    assert review.status_code == 200, review.text
+    assert feedback.status_code == 200, feedback.text
+    assert analysis.json()["artifact_name"] == "analysis_report"
+    assert review.json()["artifact_name"] == "review_report"
+    assert feedback.json()["artifact_name"] == "feedback_record"
+    assert all(response.status_code == 200 for response in (analysis_download, review_download, feedback_download))
