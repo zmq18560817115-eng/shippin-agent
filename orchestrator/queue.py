@@ -4,7 +4,7 @@ import json
 import os
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -52,11 +52,11 @@ class Task:
 
 
 def utc_now() -> str:
-    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _iso_after(seconds: int | float) -> str:
-    return (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat(
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat(
         timespec="milliseconds"
     ).replace("+00:00", "Z")
 

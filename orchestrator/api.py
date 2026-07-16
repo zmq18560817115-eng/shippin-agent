@@ -12,7 +12,7 @@ import hmac
 import time
 import zipfile
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1606,7 +1606,7 @@ def write_feedback(request: FeedbackRequest) -> dict[str, Any]:
 
     feedback_root = _feedback_root()
     feedback_root.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     path = feedback_root / f"{project_id}-{stamp}-{secrets.token_hex(2)}.json"
     payload = {
         "version": "2.0",
@@ -1790,7 +1790,7 @@ def _run_root(project_id: str) -> Path:
 
 
 def _new_project_id() -> str:
-    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return f"ref-{stamp}-{secrets.token_hex(3)}"
 
 
