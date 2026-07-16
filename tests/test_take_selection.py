@@ -38,6 +38,19 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
         output = run_root / take_b_path
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 1024))
+        reviewed = client.post(
+            "/api/v2/takes/review",
+            json={
+                "project_id": "take-demo",
+                "shot_index": 1,
+                "take_id": "B",
+                "product_identity": True,
+                "no_invented_brand": True,
+                "temperature_display": True,
+                "usage_flow": True,
+                "continuity": True,
+            },
+        )
         selected = client.post(
             "/api/v2/takes/select",
             json={"project_id": "take-demo", "shot_index": 1, "take_id": "B"},
@@ -47,6 +60,7 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
     assert take_a.status_code == 200, take_a.text
     assert take_b.status_code == 200, take_b.text
     assert rejected.status_code == 409, rejected.text
+    assert reviewed.status_code == 200, reviewed.text
     assert selected.status_code == 200, selected.text
     assert displayed.status_code == 200, displayed.text
     manifest = selected.json()["take_manifest"]

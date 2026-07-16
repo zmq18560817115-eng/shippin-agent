@@ -1196,17 +1196,24 @@ function renderProductionNode() {
     let nextTakeIndex = 0;
     while (existingTakeIds.has(String.fromCharCode(65 + nextTakeIndex))) nextTakeIndex += 1;
     const nextTakeId = String.fromCharCode(65 + nextTakeIndex);
+    const prompt = shot.seedance_prompt_zh || shot.seedance_prompt || shot.visual_prompt || "";
     const candidates = takes.map((take) => `
       <div class="takeCandidate">
         ${take.playable
           ? `<video controls preload="metadata" data-video-state src="${escapeAttr(take.media_url || runFileUrl(state.selectedId, take.path))}"></video><span class="mediaState" data-media-state>正在读取镜头预览...</span><a class="buttonLink" download href="${escapeAttr(take.media_url || runFileUrl(state.selectedId, take.path))}">下载此 Take</a>`
           : `<div class="mediaUnavailable">${escapeHtml(take.media_message || "无可播放视频：请以真实运行模式重新生成此 Take。")}</div>`}
         <span>Take ${escapeHtml(take.take_id)} · ${escapeHtml(take.status)}</span>
-        <button type="button" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}" ${take.status === "selected" || !take.playable ? "disabled" : ""}>${take.status === "selected" ? "已选用" : take.playable ? "选用此 Take" : "请重新生成"}</button>
+        <div class="actionBar takeActions">
+          <button type="button" data-review-pass-shot="${shot.number}" data-review-pass-take="${escapeAttr(take.take_id)}" ${!take.playable || take.status === "selected" ? "disabled" : ""}>通过单镜质检</button>
+          <button type="button" data-review-reject-shot="${shot.number}" data-review-reject-take="${escapeAttr(take.take_id)}" ${!take.playable || take.status === "selected" ? "disabled" : ""}>不通过并重做</button>
+          <button type="button" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}" ${take.status === "selected" || take.status !== "qa_pass" ? "disabled" : ""}>${take.status === "selected" ? "已选用" : take.status === "qa_pass" ? "选用此 Take" : "先完成单镜质检"}</button>
+        </div>
+        ${take.qa?.notes ? `<small class="takeNote">质检备注：${escapeHtml(take.qa.notes)}</small>` : ""}
       </div>
     `).join("");
     return `<section class="takeShot">
       <strong>镜头 ${shot.number} · ${shot.camera_motion?.duration_sec || 6}s</strong>
+      <label class="takePromptLabel">生成提示词（可针对本镜修改后再生成）<textarea class="promptField" data-production-prompt="${shot.number}">${escapeHtml(prompt)}</textarea></label>
       <div class="actionBar">
         <button type="button" data-run-shot="${shot.number}" data-take-id="A">生成 Take A</button>
         <button type="button" data-run-shot="${shot.number}" data-take-id="B">生成 Take B</button>
@@ -1223,6 +1230,12 @@ function renderProductionNode() {
   });
   host.querySelectorAll("[data-select-take]").forEach((button) => {
     button.addEventListener("click", () => selectTake(Number(button.dataset.selectShot), button.dataset.selectTake));
+  });
+  host.querySelectorAll("[data-review-pass-take]").forEach((button) => {
+    button.addEventListener("click", () => reviewTake(Number(button.dataset.reviewPassShot), button.dataset.reviewPassTake, true));
+  });
+  host.querySelectorAll("[data-review-reject-take]").forEach((button) => {
+    button.addEventListener("click", () => rejectAndRegenerate(Number(button.dataset.reviewRejectShot), button.dataset.reviewRejectTake));
   });
   bindVideoPreviewStates(host, "镜头预览不可播放，请重新生成该 Take 后再选用。");
 }
@@ -1305,10 +1318,18 @@ function plannedDuration() {
 async function saveShotPlan() {
   const draft = structuredClone(state.shotPlan);
   draft.shots.forEach((shot) => {
-    shot.visual_zh = $(`[data-shot="${shot.number}"][data-shot-field="visual_zh"]`).value.trim();
-    shot.seedance_prompt_zh = $(`[data-shot="${shot.number}"][data-shot-field="seedance_prompt_zh"]`).value.trim();
+    const visualField = $(`[data-shot="${shot.number}"][data-shot-field="visual_zh"]`);
+    const promptField = $(`[data-shot="${shot.number}"][data-shot-field="seedance_prompt_zh"]`);
+    const productionPromptField = $(`[data-production-prompt="${shot.number}"]`);
+    const durationField = $(`[data-shot="${shot.number}"][data-shot-field="duration"]`);
+    if (visualField) shot.visual_zh = visualField.value.trim();
+    if (promptField) shot.seedance_prompt_zh = promptField.value.trim();
+    if (productionPromptField) {
+      shot.seedance_prompt_zh = productionPromptField.value.trim();
+      shot.seedance_prompt = productionPromptField.value.trim();
+    }
     shot.camera_motion = shot.camera_motion || {};
-    shot.camera_motion.duration_sec = Number($(`[data-shot="${shot.number}"][data-shot-field="duration"]`).value || 6);
+    if (durationField) shot.camera_motion.duration_sec = Number(durationField.value || 6);
   });
   const saved = await api(`/api/v2/artifacts/${encodeURIComponent(state.selectedId)}/shot_plan`, {
     method: "PUT",
@@ -1350,6 +1371,50 @@ async function selectTake(shotIndex, takeId) {
     });
     toast(`镜头 ${shotIndex} 已选用 Take ${takeId}`);
     await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function reviewTake(shotIndex, takeId, approved, notes = "") {
+  try {
+    await api("/api/v2/takes/review", {
+      method: "POST",
+      body: JSON.stringify({
+        project_id: state.selectedId,
+        shot_index: shotIndex,
+        take_id: takeId,
+        product_identity: approved,
+        no_invented_brand: approved,
+        temperature_display: approved,
+        usage_flow: approved,
+        continuity: approved,
+        notes,
+      }),
+    });
+    toast(approved ? `镜头 ${shotIndex} Take ${takeId} 已通过单镜质检` : `镜头 ${shotIndex} Take ${takeId} 已退回重做`);
+    await refreshProjects();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function rejectAndRegenerate(shotIndex, takeId) {
+  const notes = window.prompt("请写明问题，例如：产品出现虚构 Logo；温度必须为 98°F；倒液方向不正确。")?.trim();
+  if (!notes) return;
+  const shot = state.shotPlan?.shots?.find((item) => Number(item.number) === shotIndex);
+  if (!shot) return;
+  const currentPrompt = $(`[data-production-prompt="${shotIndex}"]`)?.value?.trim() || shot.seedance_prompt_zh || shot.seedance_prompt || "";
+  const revisedPrompt = `${currentPrompt}\n返工要求：${notes}`.trim();
+  shot.seedance_prompt = revisedPrompt;
+  shot.seedance_prompt_zh = revisedPrompt;
+  try {
+    await reviewTake(shotIndex, takeId, false, notes);
+    await saveShotPlan();
+    const takeIds = new Set((state.takeManifest?.shots || []).find((item) => Number(item.number) === shotIndex)?.takes?.map((take) => String(take.take_id)) || []);
+    let index = 0;
+    while (takeIds.has(String.fromCharCode(65 + index))) index += 1;
+    await runManualStage("production", shotIndex, String.fromCharCode(65 + index));
   } catch (error) {
     toast(error.message, "error");
   }

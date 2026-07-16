@@ -168,6 +168,18 @@ class TakeSelectRequest(BaseModel):
     take_id: str
 
 
+class TakeReviewRequest(BaseModel):
+    project_id: str
+    shot_index: int
+    take_id: str
+    product_identity: bool = False
+    no_invented_brand: bool = False
+    temperature_display: bool = False
+    usage_flow: bool = False
+    continuity: bool = False
+    notes: str = ""
+
+
 class FeedbackRequest(BaseModel):
     project_id: str
     text: str
@@ -1487,11 +1499,16 @@ def select_take(request: TakeSelectRequest) -> dict[str, Any]:
     selected = next((item for item in shot_entry.get("takes", []) if item.get("take_id") == request.take_id), None)
     if selected is None:
         raise HTTPException(status_code=404, detail=f"take {request.take_id} not found")
+    if selected.get("status") != "qa_pass":
+        raise HTTPException(status_code=409, detail="该 Take 尚未通过单镜质检，不能选用或参与合成")
     if not _is_playable_take_path(root, str(selected.get("path") or "")):
         raise HTTPException(status_code=409, detail="该 Take 不是可播放的真实媒体，不能选用或参与合成")
     shot_entry["selected_take_id"] = request.take_id
     for item in shot_entry.get("takes", []):
-        item["status"] = "selected" if item.get("take_id") == request.take_id else "needs_review"
+        if item.get("take_id") == request.take_id:
+            item["status"] = "selected"
+        elif item.get("status") == "selected":
+            item["status"] = "qa_pass"
     artifacts.save_artifact(project_id, "take_manifest", manifest, run_root=root)
 
     report = _load_artifact_or_none(project_id, "shot_report") or {"version": "2.0", "project_id": project_id, "shots": []}
@@ -1509,6 +1526,43 @@ def select_take(request: TakeSelectRequest) -> dict[str, Any]:
     artifacts.save_artifact(project_id, "shot_report", report, run_root=root)
     queue.record_event(project_id=project_id, event_type="take.selected", message=f"shot{request.shot_index}:{request.take_id}", db_path=_db_path())
     return {"ok": True, "take_manifest": manifest, "shot_report": report}
+
+
+@app.post("/api/v2/takes/review")
+def review_take(request: TakeReviewRequest) -> dict[str, Any]:
+    project_id = _validate_project_id(request.project_id)
+    root = _run_root(project_id)
+    manifest = _load_artifact(project_id, "take_manifest")
+    shot_entry = next((item for item in manifest.get("shots", []) if int(item.get("number") or 0) == request.shot_index), None)
+    if shot_entry is None:
+        raise HTTPException(status_code=404, detail=f"shot {request.shot_index} has no generated takes")
+    take = next((item for item in shot_entry.get("takes", []) if item.get("take_id") == request.take_id), None)
+    if take is None:
+        raise HTTPException(status_code=404, detail=f"take {request.take_id} not found")
+    if not _is_playable_take_path(root, str(take.get("path") or "")):
+        raise HTTPException(status_code=409, detail="该 Take 没有可播放的真实媒体，不能进行质检")
+
+    checks = {
+        "product_identity": request.product_identity,
+        "no_invented_brand": request.no_invented_brand,
+        "temperature_display": request.temperature_display,
+        "usage_flow": request.usage_flow,
+        "continuity": request.continuity,
+    }
+    approved = all(checks.values())
+    take["status"] = "qa_pass" if approved else "rejected"
+    take["qa"] = {"approved": approved, "checks": checks, "notes": request.notes.strip()}
+    if not approved and shot_entry.get("selected_take_id") == request.take_id:
+        shot_entry["selected_take_id"] = None
+    artifacts.save_artifact(project_id, "take_manifest", manifest, run_root=root)
+    queue.record_event(
+        project_id=project_id,
+        event_type="take.qa_passed" if approved else "take.rejected",
+        message=f"shot{request.shot_index}:{request.take_id}",
+        meta={"checks": checks, "notes": request.notes.strip()},
+        db_path=_db_path(),
+    )
+    return {"ok": True, "approved": approved, "take_manifest": manifest}
 
 
 @app.post("/api/v2/gates/approve")
