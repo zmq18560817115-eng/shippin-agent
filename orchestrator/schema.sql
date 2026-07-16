@@ -86,3 +86,18 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_project
 ON events(project_id, created_at);
+
+CREATE TABLE IF NOT EXISTS users (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    username        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    display_name    TEXT NOT NULL DEFAULT '',
+    password_hash   TEXT NOT NULL,
+    role            TEXT NOT NULL CHECK (role IN ('operator','admin')),
+    status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
+    last_login_at   TEXT,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_role_status
+ON users(role, status, username);

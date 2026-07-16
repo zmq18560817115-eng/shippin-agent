@@ -385,6 +385,101 @@ textarea {
   min-width: 0;
 }
 
+.quickIntake {
+  grid-template-columns: minmax(230px, 0.72fr) minmax(380px, 1.55fr) minmax(150px, 180px);
+  align-items: stretch;
+  border-left: 3px solid #315fbe;
+  padding: 18px 18px 18px 20px;
+  background: #f7f9fc;
+}
+
+.quickIntakeIntro {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.quickIntakeIntro span {
+  color: #315fbe;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.quickIntakeIntro strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.quickIntakeIntro small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.quickIntake .collectLinks textarea {
+  min-height: 94px;
+}
+
+.quickIntake .formActions {
+  display: grid;
+  align-content: end;
+  gap: 8px;
+}
+
+.quickIntake .formActions button {
+  width: 100%;
+}
+
+.advancedIntake {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.advancedIntake > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 2px;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.advancedIntake > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advancedIntake > summary > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.advancedIntake > summary strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.advancedIntake > summary small {
+  font-size: 11px;
+}
+
+.advancedIntake[open] > summary > span:last-child {
+  color: #315fbe;
+}
+
+.advancedIntake .crawlForm {
+  margin-top: 0;
+  border-top: 0;
+  padding: 14px 0 4px;
+}
+
+.agentDetails > .nodeTools {
+  padding: 4px 0 10px;
+}
+
 .crawlForm {
   display: grid;
   grid-template-columns: minmax(130px, 160px) minmax(150px, 180px) minmax(240px, 1fr) minmax(100px, 120px) auto;
@@ -400,6 +495,12 @@ textarea {
   grid-template-columns: minmax(180px, 0.7fr) minmax(320px, 1.6fr) minmax(240px, 1fr);
   gap: 12px;
   margin: 12px 0;
+}
+
+.startBar > label,
+.crawlForm > label,
+.agentWorkbenchGrid > label {
+  align-content: start;
 }
 
 .agentWorkbenchGrid textarea {
@@ -1318,6 +1419,19 @@ pre {
   .collectForm,
   .crawlForm,
   .materialItem {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quickIntake {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .quickIntake .formActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .agentWorkbenchGrid {
     grid-template-columns: minmax(0, 1fr);
   }
 

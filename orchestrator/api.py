@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from libshared import artifacts, checkpoint
 from libshared.local_env import load_local_env
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
-from orchestrator import cost_tracker, engine, queue
+from orchestrator import cost_tracker, engine, queue, user_store
 from orchestrator.capabilities import capability_map
 from tools import tool_registry
 from tools.collect import manual_import, product_library, tiktok_oembed
@@ -195,9 +195,24 @@ class LoginRequest(BaseModel):
     portal: str = "operator"
 
 
+class UserCreateRequest(BaseModel):
+    username: str
+    password: str
+    role: str = "operator"
+    display_name: str = ""
+
+
+class UserUpdateRequest(BaseModel):
+    status: str | None = None
+    password: str | None = None
+    display_name: str | None = None
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     queue.init_db(db_path=_db_path())
+    if _auth_enabled():
+        user_store.seed_environment_users(db_path=_db_path())
     queue.recover_running_tasks_on_startup(db_path=_db_path())
     yield
 
@@ -248,22 +263,23 @@ def login(request: LoginRequest) -> JSONResponse:
     if role not in {"operator", "admin"}:
         raise HTTPException(status_code=400, detail="unknown portal")
     username = request.username.strip()
+    authenticated_role = role
     if _auth_enabled():
         configuration_error = _auth_configuration_error()
         if configuration_error:
             raise HTTPException(status_code=503, detail=configuration_error)
-        expected_user = os.environ.get("VAF_ADMIN_USER" if role == "admin" else "VAF_OPERATOR_USER", "")
-        expected_password = os.environ.get("VAF_ADMIN_PASSWORD" if role == "admin" else "VAF_OPERATOR_PASSWORD", "")
-        if not expected_user or not expected_password:
-            raise HTTPException(status_code=503, detail=f"{role} credentials are not configured")
-        if not hmac.compare_digest(username, expected_user) or not hmac.compare_digest(request.password, expected_password):
+        account = user_store.authenticate(username, request.password, db_path=_db_path())
+        if account is None:
             raise HTTPException(status_code=401, detail="账号或密码错误")
+        authenticated_role = str(account["role"])
+        if role == "admin" and authenticated_role != "admin":
+            raise HTTPException(status_code=403, detail="该账号没有管理员权限")
     elif not username:
         username = "local-admin" if role == "admin" else "local-operator"
-    response = JSONResponse({"ok": True, "role": role, "username": username, "redirect": "/admin" if role == "admin" else "/workbench"})
+    response = JSONResponse({"ok": True, "role": authenticated_role, "username": username, "redirect": "/admin" if role == "admin" else "/workbench"})
     response.set_cookie(
         "vaf_session",
-        _sign_session(username, role),
+        _sign_session(username, authenticated_role),
         httponly=True,
         secure=_env_bool("VAF_COOKIE_SECURE", False),
         samesite="strict",
@@ -356,6 +372,7 @@ def admin_summary() -> dict[str, Any]:
         ]
     material_index = manual_import.load_library_index(_material_library_root())
     runs_root = _runs_root()
+    users = user_store.list_users(db_path=_db_path())
     return {
         "status": "ok",
         "projects": {row["status"]: row["count"] for row in project_rows},
@@ -371,7 +388,48 @@ def admin_summary() -> dict[str, Any]:
         "recent_projects": recent,
         "recent_failures": failures,
         "runtime": runtime_status(),
+        "users": {
+            "total": len(users),
+            "active": len([user for user in users if user["status"] == "active"]),
+        },
     }
+
+
+@app.get("/api/v2/admin/users")
+def admin_users() -> dict[str, Any]:
+    return {"items": user_store.list_users(db_path=_db_path())}
+
+
+@app.post("/api/v2/admin/users")
+def create_admin_user(request: UserCreateRequest) -> dict[str, Any]:
+    try:
+        user = user_store.create_user(
+            request.username,
+            request.password,
+            role=request.role,
+            display_name=request.display_name,
+            db_path=_db_path(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True, "user": user}
+
+
+@app.patch("/api/v2/admin/users/{user_id}")
+def update_admin_user(user_id: int, request: UserUpdateRequest) -> dict[str, Any]:
+    try:
+        user = user_store.update_user(
+            user_id,
+            status=request.status,
+            password=request.password,
+            display_name=request.display_name,
+            db_path=_db_path(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="user not found") from exc
+    return {"ok": True, "user": user}
 
 
 @app.post("/api/v2/agents/run")
@@ -845,7 +903,13 @@ def _read_session(request: Request) -> dict[str, Any] | None:
             return None
         if payload.get("role") not in {"operator", "admin"}:
             return None
-        return {"username": str(payload.get("username") or ""), "role": payload["role"]}
+        username = str(payload.get("username") or "")
+        role = str(payload["role"])
+        if _auth_enabled():
+            account = user_store.get_user_by_username(username, db_path=_db_path())
+            if account is None or account.get("status") != "active" or account.get("role") != role:
+                return None
+        return {"username": username, "role": role}
     except (ValueError, TypeError, json.JSONDecodeError):
         return None
 

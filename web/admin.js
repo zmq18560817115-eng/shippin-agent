@@ -11,7 +11,7 @@ async function api(path, options = {}) {
 }
 
 async function loadAdmin() {
-  const payload = await api("/api/v2/admin/summary");
+  const [payload, users] = await Promise.all([api("/api/v2/admin/summary"), api("/api/v2/admin/users")]);
   const projectTotal = Object.values(payload.projects).reduce((sum, value) => sum + Number(value), 0);
   const failedTasks = Number(payload.tasks.failed || 0);
   const storageTotal = Object.values(payload.storage_bytes).reduce((sum, value) => sum + Number(value), 0);
@@ -21,6 +21,7 @@ async function loadAdmin() {
     ["累计成本", `¥${Number(payload.total_cost_cny).toFixed(2)}`, "模型与工具记账"],
     ["存储占用", formatBytes(storageTotal), `运行目录 ${payload.run_count} 个`],
     ["失败任务", failedTasks, failedTasks ? "需要管理员处理" : "当前无失败任务"],
+    ["成员账号", payload.users.active, `共 ${payload.users.total} 个账号`],
   ].map(([label, value, note]) => `<article><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`).join("");
   document.querySelector("#projectTotal").textContent = `${projectTotal} 个项目`;
   document.querySelector("#projectStates").innerHTML = Object.entries(payload.projects).map(([status, count]) => `<div><span>${statusNames[status] || status}</span><strong>${count}</strong><i style="--width:${projectTotal ? Math.max(3, Number(count) / projectTotal * 100) : 0}%"></i></div>`).join("") || "暂无项目";
@@ -28,9 +29,41 @@ async function loadAdmin() {
   document.querySelector("#backendStates").innerHTML = providers.map((provider) => `<div><span>${escapeHtml(providerNames[provider.id] || provider.id)}</span><strong class="${provider.ready ? "ready" : "missing"}">${provider.ready ? "可用" : "未配置"}</strong></div>`).join("");
   document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(project.updated_at)}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';
   document.querySelector("#recentFailures").innerHTML = payload.recent_failures.map((failure) => `<details><summary>${escapeHtml(failure.project_id)} · ${escapeHtml(failure.stage)} · ${escapeHtml(failure.agent)}</summary><pre>${escapeHtml(failure.error_json || "无错误详情")}</pre></details>`).join("") || '<p class="emptyMessage">当前没有失败节点</p>';
+  renderUsers(users.items || []);
+}
+
+function renderUsers(users) {
+  document.querySelector("#userRows").innerHTML = users.map((user) => `<tr><td><strong>${escapeHtml(user.username)}</strong></td><td>${escapeHtml(user.display_name || "-")}</td><td>${user.role === "admin" ? "管理员" : "操作员"}</td><td><span class="statusTag status-${user.status === "active" ? "succeeded" : "blocked"}">${user.status === "active" ? "启用" : "停用"}</span></td><td>${escapeHtml(user.last_login_at || "尚未登录")}</td><td><button type="button" class="tableAction" data-user-id="${user.id}" data-next-status="${user.status === "active" ? "disabled" : "active"}">${user.status === "active" ? "停用" : "启用"}</button></td></tr>`).join("") || '<tr><td colspan="6">暂无成员账号</td></tr>';
+  document.querySelectorAll("[data-user-id]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      await api(`/api/v2/admin/users/${button.dataset.userId}`, { method: "PATCH", body: JSON.stringify({ status: button.dataset.nextStatus }) });
+      await loadAdmin();
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }));
 }
 
 document.querySelector("#refreshAdmin").addEventListener("click", () => loadAdmin());
+const userDialog = document.querySelector("#userDialog");
+document.querySelector("#openUserDialog").addEventListener("click", () => userDialog.showModal());
+["#closeUserDialog", "#cancelUserDialog"].forEach((selector) => document.querySelector(selector).addEventListener("click", () => userDialog.close()));
+document.querySelector("#userForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const errorHost = document.querySelector("#userFormError");
+  errorHost.textContent = "";
+  try {
+    await api("/api/v2/admin/users", { method: "POST", body: JSON.stringify({ username: document.querySelector("#newUsername").value.trim(), display_name: document.querySelector("#newDisplayName").value.trim(), role: document.querySelector("#newUserRole").value, password: document.querySelector("#newUserPassword").value }) });
+    event.currentTarget.reset();
+    userDialog.close();
+    await loadAdmin();
+  } catch (error) {
+    errorHost.textContent = error.message;
+  }
+});
 document.querySelector("#logout").addEventListener("click", async () => { await api("/api/v2/auth/logout", { method: "POST" }); window.location.assign("/login"); });
 api("/api/v2/auth/session").then((session) => { document.querySelector("#adminUser").textContent = session.username || "本地管理员"; });
 loadAdmin().catch((error) => { document.querySelector("#stats").innerHTML = `<p class="loginError">${escapeHtml(error.message)}</p>`; });

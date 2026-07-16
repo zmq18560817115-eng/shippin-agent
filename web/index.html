@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260716-1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260716-2" />
   </head>
   <body>
     <header class="topbar">
@@ -87,27 +87,21 @@
           <span id="collectState"></span>
         </div>
         <div id="collectorBackendState" class="backendStrip">正在检测服务器采集后端...</div>
-        <form class="collectForm" id="collectForm">
-          <label>
-            采集方式
-            <select id="collectMode">
-              <option value="official">官方元数据</option>
-              <option value="manual">人工导入</option>
-            </select>
-          </label>
-          <label>
-            来源关键词
-            <input id="sourceKeywordInput" value="tiktok_oembed" />
-          </label>
+        <form class="collectForm quickIntake" id="collectForm">
+          <input type="hidden" id="collectMode" value="official" />
+          <input type="hidden" id="sourceKeywordInput" value="tiktok_oembed" />
+          <div class="quickIntakeIntro"><span>推荐入口</span><strong>粘贴视频链接，直接开始分析</strong><small>单条链接会下载、入库并进入脚本拆解；多条链接可先批量导入素材库。</small></div>
           <label class="collectLinks">
-            TikTok 链接
-            <textarea id="collectLinksInput" placeholder="每行一条 TikTok 链接"></textarea>
+            视频链接
+            <textarea id="collectLinksInput" placeholder="粘贴 TikTok 视频链接；批量导入时每行一条"></textarea>
           </label>
           <div class="formActions">
-            <button type="submit" value="import">仅导入</button>
-            <button type="submit" value="analyze" class="primary">采集并分析</button>
+            <button type="submit" value="analyze" class="primary">下载、采集并分析</button>
+            <button type="submit" value="import">仅存入素材库</button>
           </div>
         </form>
+        <details class="advancedIntake">
+          <summary><span><strong>主动发现素材</strong><small>按关键词、账号或话题批量发现</small></span><span>展开</span></summary>
         <form class="crawlForm" id="crawlForm">
           <div class="nodeToolHead">
             <div><strong>主动爬取任务</strong><span>按关键词或账号发现视频，下载入库并批量运行分析</span></div>
@@ -141,6 +135,7 @@
           </label>
           <button type="submit" class="primary">开始爬取并分析</button>
         </form>
+        </details>
         <div id="materialLibrary" class="emptyState">暂无参考素材</div>
         <div class="nodeTools" id="researchNode">
           <div class="nodeToolHead">
@@ -153,6 +148,7 @@
           </label>
         <div id="researchResult" class="nodeResult">从素材卡发起项目后，可在此独立重跑研究分析</div>
       </div>
+      <details class="advancedIntake agentDetails"><summary><span><strong>采集 Agent 独立工作台</strong><small>高级采集参数与独立任务</small></span><span>展开</span></summary>
       <div class="nodeTools" id="independentAgentWorkbench">
         <div class="nodeToolHead">
           <div><strong>采集 Agent 独立工作台</strong><span>按关键词抓取、下载入库并自动进入参考视频拆解</span></div>
@@ -174,6 +170,7 @@
         <button type="button" id="runIndependentAgent" class="primary">运行独立 Agent</button>
         <div id="independentAgentResult" class="nodeResult">结果会在这里展示，可继续保存到项目。</div>
       </div>
+      </details>
       </section>
 
       <section class="band" id="projectQueue" data-view-section="projects">
@@ -285,6 +282,6 @@
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js?v=20260716-1"></script>
+    <script src="/static/app.js?v=20260716-2"></script>
   </body>
 </html>

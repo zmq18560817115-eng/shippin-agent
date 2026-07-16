@@ -19,7 +19,7 @@ async function loadSession() {
   const session = await response.json();
   portalState.authEnabled = Boolean(session.auth_enabled);
   document.querySelector("#authHint").textContent = portalState.authEnabled
-    ? "请输入服务器配置的内网账号与密码。"
+    ? "请输入管理员为你创建的内网账号与密码。"
     : "当前为本地开发模式，填写任意账号即可进入。";
 }
 

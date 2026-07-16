@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂 · 管理后台</title>
-    <link rel="stylesheet" href="/static/portal.css?v=20260716-1" />
+    <link rel="stylesheet" href="/static/portal.css?v=20260716-2" />
   </head>
   <body class="adminPage">
     <header class="adminTopbar">
@@ -18,9 +18,24 @@
         <div class="adminPanel"><div class="panelHead"><h3>项目状态</h3><span id="projectTotal"></span></div><div id="projectStates" class="stateBars"></div></div>
         <div class="adminPanel"><div class="panelHead"><h3>采集与模型后端</h3><span>实时配置状态</span></div><div id="backendStates" class="backendList"></div></div>
       </section>
+      <section class="adminPanel userPanel">
+        <div class="panelHead"><div><h3>成员账号</h3><span>管理员创建账号，密码只保存加密摘要</span></div><button id="openUserDialog" class="primaryAdmin">新增成员</button></div>
+        <div class="tableScroll"><table><thead><tr><th>账号</th><th>姓名</th><th>角色</th><th>状态</th><th>最近登录</th><th>操作</th></tr></thead><tbody id="userRows"></tbody></table></div>
+      </section>
       <section class="adminPanel"><div class="panelHead"><h3>近期项目</h3><span>最近更新 12 条</span></div><div class="tableScroll"><table><thead><tr><th>项目编号</th><th>产品</th><th>状态</th><th>更新时间</th><th>入口</th></tr></thead><tbody id="recentProjects"></tbody></table></div></section>
       <section class="adminPanel"><div class="panelHead"><h3>近期失败节点</h3><span>用于定位供应商、素材和流程问题</span></div><div id="recentFailures" class="failureList"></div></section>
     </main>
-    <script src="/static/admin.js?v=20260716-1"></script>
+    <dialog id="userDialog">
+      <form id="userForm" class="userForm">
+        <div class="dialogHead"><div><span>MEMBER</span><h2>新增成员账号</h2></div><button type="button" id="closeUserDialog" aria-label="关闭">×</button></div>
+        <label>登录账号<input id="newUsername" required maxlength="64" autocomplete="off" placeholder="例如 content-editor" /></label>
+        <label>成员姓名<input id="newDisplayName" maxlength="80" autocomplete="off" placeholder="例如 张三" /></label>
+        <label>账号角色<select id="newUserRole"><option value="operator">内容操作员</option><option value="admin">系统管理员</option></select></label>
+        <label>初始密码<input id="newUserPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="至少 8 位" /></label>
+        <p id="userFormError" class="loginError"></p>
+        <div class="dialogActions"><button type="button" id="cancelUserDialog">取消</button><button type="submit" class="primaryAdmin">创建账号</button></div>
+      </form>
+    </dialog>
+    <script src="/static/admin.js?v=20260716-2"></script>
   </body>
 </html>
