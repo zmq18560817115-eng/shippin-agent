@@ -161,3 +161,34 @@ def test_standalone_analysis_review_and_feedback_are_downloadable(tmp_path: Path
     assert review.json()["artifact_name"] == "review_report"
     assert feedback.json()["artifact_name"] == "feedback_record"
     assert all(response.status_code == 200 for response in (analysis_download, review_download, feedback_download))
+
+
+def test_standalone_script_promotes_to_a_gated_production_project(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "promotion.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        standalone = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "script",
+                "product_id": "便携恒温杯",
+                "source_text": "为夜间喂养场景制作便携恒温杯的 30 秒产品短视频。",
+                "mock": True,
+            },
+        )
+        promoted = client.post(
+            "/api/v2/agents/promote",
+            json={
+                "source_project_id": standalone.json()["project_id"],
+                "artifact_name": "script_copy",
+                "mock": True,
+            },
+        )
+
+    assert standalone.status_code == 200, standalone.text
+    assert promoted.status_code == 200, promoted.text
+    assert promoted.json()["project_id"].startswith("ref-")
+    assert promoted.json()["project"]["standalone"] is False
+    assert promoted.json()["project"]["current_stage"] == "script_gate"
+    assert promoted.json()["engine"]["status"] == "awaiting_human"

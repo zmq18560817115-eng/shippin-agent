@@ -124,9 +124,14 @@ function renderAgentResult(host, payload) {
   const download = payload.download_url
     ? `<a class="buttonLink" href="${escapeAttr(payload.download_url)}">下载本节点 JSON</a>`
     : "";
+  const promotable = payload.project_id && payload.project_id.startsWith("scratch-")
+    && ["analysis_report", "script_copy", "shot_plan"].includes(payload.artifact_name);
+  const promote = promotable
+    ? `<button type="button" class="promoteStandalone" data-project-id="${escapeAttr(payload.project_id)}" data-artifact-name="${escapeAttr(payload.artifact_name)}">用此产物创建生产项目</button>`
+    : "";
   host.className = "nodeResult complete";
   host.innerHTML = `
-    <div class="resultHead"><strong>${escapeHtml(payload.artifact_name)}</strong>${download}</div>
+    <div class="resultHead"><strong>${escapeHtml(payload.artifact_name)}</strong>${download}${promote}</div>
     ${payload.project_id && payload.project_id.startsWith("scratch-") ? "<p>独立工作区产物已保存，不会出现在生产项目列表中。</p>" : ""}
     <pre>${escapeHtml(JSON.stringify(payload.artifact, null, 2))}</pre>
   `;
@@ -256,6 +261,10 @@ function bindEvents() {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".promoteStandalone");
+    if (button) promoteStandaloneArtifact(button);
+  });
   $("#continueProject").addEventListener("click", continueCurrentProject);
   window.addEventListener("hashchange", () => {
     const view = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
@@ -347,6 +356,31 @@ async function runIndependentAgent() {
     toast(error.message, "error");
   } finally {
     button.disabled = false;
+    endOperation();
+  }
+}
+
+async function promoteStandaloneArtifact(button) {
+  button.disabled = true;
+  beginOperation("正在创建生产项目", 20);
+  try {
+    const payload = await api("/api/v2/agents/promote", {
+      method: "POST",
+      body: JSON.stringify({
+        source_project_id: button.dataset.projectId,
+        artifact_name: button.dataset.artifactName,
+        product_id: $("#productSelect").value || "便携恒温杯",
+        mock: $("#runtimeMode").value !== "real",
+      }),
+    });
+    await refreshProjects({ silent: true });
+    await loadSelectedProject(payload.project_id);
+    showView(viewForStage(payload.project.current_stage || payload.engine.stage));
+    toast("生产项目已创建，已保留后续人工闸门");
+  } catch (error) {
+    toast(error.message, "error");
+    button.disabled = false;
+  } finally {
     endOperation();
   }
 }

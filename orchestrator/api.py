@@ -222,6 +222,14 @@ class AgentRunRequest(BaseModel):
     mock: bool = True
 
 
+class StandalonePromoteRequest(BaseModel):
+    source_project_id: str
+    artifact_name: str
+    project_id: str | None = None
+    product_id: str | None = None
+    mock: bool = True
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str = ""
@@ -1745,6 +1753,68 @@ def review_take(request: TakeReviewRequest) -> dict[str, Any]:
     return {"ok": True, "approved": approved, "take_manifest": manifest}
 
 
+@app.post("/api/v2/agents/promote")
+def promote_standalone_artifact(request: StandalonePromoteRequest) -> dict[str, Any]:
+    source_project_id = _validate_project_id(request.source_project_id)
+    artifact_name = _validate_artifact_name(request.artifact_name)
+    source_row = _project_row_or_none(source_project_id)
+    if source_row is None or not _is_standalone_project(source_row):
+        raise HTTPException(status_code=409, detail="只能将独立工作区产物转为生产项目")
+    if artifact_name not in {"analysis_report", "script_copy", "shot_plan"}:
+        raise HTTPException(status_code=400, detail="当前仅支持将分析、脚本或分镜转为生产项目")
+
+    source_root = _run_root(source_project_id)
+    artifact = _load_artifact_from_root(source_root, artifact_name)
+    project_id = _validate_project_id(request.project_id or _new_project_id())
+    product_id = request.product_id or str(artifact.get("product_id") or source_row["product_id"] or "便携恒温杯")
+    root = _runs_root() / project_id
+    root.mkdir(parents=True, exist_ok=True)
+    queue.ensure_project(
+        project_id,
+        product_id=product_id,
+        payload={
+            "mock": request.mock,
+            "run_root": root.as_posix(),
+            "promoted_from": {"project_id": source_project_id, "artifact_name": artifact_name},
+        },
+        db_path=_db_path(),
+    )
+
+    if artifact_name == "analysis_report":
+        analysis = _with_project_id(artifact, project_id)
+        artifacts.save_artifact(project_id, "analysis_report", analysis, run_root=root)
+        start_stage, agent = "research", "analysis"
+    else:
+        script = _load_artifact_from_root(source_root, "script_copy") if artifact_name == "shot_plan" else artifact
+        script = _with_project_id(script, project_id)
+        artifacts.save_artifact(project_id, "script_copy", script, run_root=root)
+        analysis = _analysis_from_script(script, project_id)
+        artifacts.save_artifact(project_id, "analysis_report", analysis, run_root=root)
+        if artifact_name == "script_copy":
+            start_stage, agent = "script_breakdown", "script"
+        else:
+            plan = _with_project_id(artifact, project_id)
+            plan["script_copy_ref"] = "artifacts/script_copy.json"
+            artifacts.save_artifact(project_id, "shot_plan", plan, run_root=root, script_copy=script)
+            start_stage, agent = "asset", "asset"
+
+    queue.enqueue_task(
+        project_id=project_id,
+        stage=start_stage,
+        agent=agent,
+        payload={"run_root": root.as_posix(), "promoted_from": source_project_id},
+        db_path=_db_path(),
+    )
+    status = engine.run_until_blocked(project_id, db_path=_db_path(), run_root=root, mock=request.mock)
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "promoted_from": {"project_id": source_project_id, "artifact_name": artifact_name},
+        "engine": _engine_status(status),
+        "project": _project_summary(project_id),
+    }
+
+
 @app.post("/api/v2/gates/approve")
 def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
     project_id = _validate_project_id(request.project_id)
@@ -2189,6 +2259,65 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
 
 def _is_standalone_project(row: Any) -> bool:
     return bool(_loads_json(row["payload_json"]).get("standalone"))
+
+
+def _load_artifact_from_root(root: Path, artifact_name: str) -> dict[str, Any]:
+    path = root / "artifacts" / f"{artifact_name}.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"{artifact_name} not found")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail=f"{artifact_name} is unreadable") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail=f"{artifact_name} is invalid")
+    return payload
+
+
+def _with_project_id(payload: dict[str, Any], project_id: str) -> dict[str, Any]:
+    copied = json.loads(json.dumps(payload, ensure_ascii=False))
+    copied["project_id"] = project_id
+    return copied
+
+
+def _analysis_from_script(script: dict[str, Any], project_id: str) -> dict[str, Any]:
+    sections = script.get("sections") if isinstance(script.get("sections"), list) else []
+    pacing: list[dict[str, Any]] = []
+    breakdown: list[dict[str, Any]] = []
+    voiceover: list[str] = []
+    for index, section in enumerate(sections):
+        if not isinstance(section, dict):
+            continue
+        timing = str(section.get("timing") or f"{index * 6}-{(index + 1) * 6}s")
+        matched = re.fullmatch(r"(\d+)-(\d+)s", timing)
+        start, end = (int(matched.group(1)), int(matched.group(2))) if matched else (index * 6, (index + 1) * 6)
+        role = str(section.get("role") or "镜头")
+        spoken = str(section.get("voiceover_en") or section.get("voiceover_zh") or "")
+        voiceover.append(spoken)
+        pacing.append({"start_s": start, "end_s": end, "role": role})
+        breakdown.append(
+            {
+                "number": index + 1,
+                "timing": timing,
+                "visual": str(section.get("scene_zh") or "产品安全画面"),
+                "action": str(section.get("action_zh") or "按脚本完成可见动作"),
+                "purpose": role,
+                "transition": str(section.get("story_beat_zh") or "自然承接上一镜"),
+            }
+        )
+    return {
+        "version": "2.0",
+        "project_id": project_id,
+        "source_link_id": None,
+        "material_meta_ref": "promoted standalone script",
+        "hook_3s": voiceover[0] if voiceover else "独立脚本已导入，等待人工审核。",
+        "structure": [str(item.get("role") or "镜头") for item in sections if isinstance(item, dict)],
+        "voiceover_text": " ".join(value for value in voiceover if value),
+        "pacing": pacing,
+        "keyframes": [],
+        "shot_breakdown": breakdown,
+        "fingerprint": "promoted-standalone-script",
+    }
 
 
 def _is_playable_delivery_file(path: Path) -> bool:
