@@ -1796,10 +1796,10 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
         db_path=_db_path(),
     )
     if stage in {"production", "compose"}:
-        status = engine.run_task(task_id, db_path=_db_path(), run_root=root, mock=request.mock)
+        status = engine.run_task(task_id, db_path=_db_path(), run_root=root, mock=_project_mock(project_id, default=request.mock))
     else:
         status = engine.run_until_blocked(
-            project_id, db_path=_db_path(), run_root=root, mock=request.mock
+            project_id, db_path=_db_path(), run_root=root, mock=_project_mock(project_id, default=request.mock)
         )
     if status.status == "failed":
         raise HTTPException(
@@ -1994,7 +1994,7 @@ def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
             project_id,
             db_path=_db_path(),
             run_root=_run_root(project_id),
-            mock=request.mock,
+            mock=_project_mock(project_id, default=request.mock),
         )
     except checkpoint.GateApprovalError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -2047,7 +2047,7 @@ def rewrite_gate(request: GateRewriteRequest) -> dict[str, Any]:
         project_id,
         db_path=_db_path(),
         run_root=root,
-        mock=request.mock,
+        mock=_project_mock(project_id, default=request.mock),
     )
     return {"engine": _engine_status(status), "project": _project_summary(project_id)}
 
@@ -2091,7 +2091,7 @@ def retry_task(request: TaskRetryRequest) -> dict[str, Any]:
                 project_id,
                 db_path=_db_path(),
                 run_root=_run_root(project_id),
-                mock=request.mock,
+                mock=_project_mock(project_id, default=request.mock),
             )
         elif request.shot_index is not None:
             status = engine.retry_failed_shot(
@@ -2099,7 +2099,7 @@ def retry_task(request: TaskRetryRequest) -> dict[str, Any]:
                 request.shot_index,
                 db_path=_db_path(),
                 run_root=_run_root(project_id),
-                mock=request.mock,
+                mock=_project_mock(project_id, default=request.mock),
             )
         else:
             raise ValueError("task_id or shot_index is required")
@@ -2108,7 +2108,7 @@ def retry_task(request: TaskRetryRequest) -> dict[str, Any]:
                 project_id,
                 db_path=_db_path(),
                 run_root=_run_root(project_id),
-                mock=request.mock,
+                mock=_project_mock(project_id, default=request.mock),
             )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -2364,6 +2364,21 @@ def _normalize_source_link_id(source_link_id: int | None, link_id: str | int | N
 def _project_row_or_none(project_id: str):
     with queue.get_conn(_db_path()) as conn:
         return conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+
+
+def _project_mock(project_id: str, default: bool = True) -> bool:
+    """Resolve a project's run mode from what was persisted at creation.
+
+    A real project must keep generating with real providers when it is resumed
+    at a human gate; otherwise it would silently fall back to mock placeholder
+    media. Resume endpoints read this instead of trusting a per-request flag.
+    """
+    row = _project_row_or_none(project_id)
+    if row is None:
+        return default
+    payload = _loads_json(row["payload_json"])
+    value = payload.get("mock")
+    return bool(value) if isinstance(value, bool) else default
 
 
 def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, Any]:
