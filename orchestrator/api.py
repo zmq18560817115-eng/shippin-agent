@@ -446,7 +446,7 @@ def runtime_status() -> dict[str, Any]:
             {"id": "manual_url", "ready": yt_dlp_ready, "supports": ["direct_url"]},
         ],
         "budget_mode": "observe",
-        "pricing_calibrated": False,
+        "pricing_calibrated": _pricing_calibrated(),
     }
 
 
@@ -2224,6 +2224,17 @@ def _runs_root() -> Path:
     return RUNS_ROOT
 
 
+_PRICING_TOOLS = ("doubao_analyze", "doubao_script", "doubao_shotplan", "doubao_review", "seedance_shot", "ffmpeg_compose")
+
+
+def _pricing_calibrated() -> bool:
+    """True once every metered tool has a numeric price configured."""
+    from tools.base_tool import load_config
+
+    pricing = (load_config().get("pricing") or {})
+    return all(isinstance(pricing.get(name), (int, float)) for name in _PRICING_TOOLS)
+
+
 def _material_library_root() -> Path:
     configured = os.environ.get("VAF_MATERIAL_LIBRARY_ROOT")
     if configured:
@@ -2541,7 +2552,7 @@ def _run_report(project_id: str) -> dict[str, Any]:
         "finished_at": finished,
         "elapsed_s": _duration_seconds(started, finished),
         "budget_mode": project["budget_mode"],
-        "pricing_calibrated": False,
+        "pricing_calibrated": _pricing_calibrated(),
         "cost": project["cost"],
         "tasks": task_rows,
         "providers": providers,

@@ -17,10 +17,18 @@ runtime:
   budget_mode: "observe"
 
 pricing:
-  # Fill after block 4 real-key smoke tests.
-  doubao_analyze: null
-  doubao_script: null
-  doubao_shotplan: null
-  doubao_review: null
-  seedance_shot: null
-  ffmpeg_compose: null
+  # CNY per call. Calibrated from the Volcengine Ark price sheet using the
+  # doubao-seed-2.0-pro text rates (input 9.6, output 48.0 元/百万token, input
+  # length [0,32]k) and measured token usage, plus doubao-seedance-2.0 720p at
+  # 46 元/百万token for image-referenced (non-video) input.
+  #   text call ≈ (prompt_tokens*9.6 + completion_tokens*48)/1e6
+  #   seedance 720p/6s ≈ 720*1280/1024 * 24fps * 6s = 129,600 tokens * 46/1e6
+  # doubao_review is from a real run (1922 prompt / 293 completion tokens); the
+  # other text values are typical-usage estimates. Confirm seedance against a
+  # real invoice and adjust the single number if the fast model differs.
+  doubao_analyze: 0.093
+  doubao_script: 0.119
+  doubao_shotplan: 0.082
+  doubao_review: 0.033
+  seedance_shot: 5.96
+  ffmpeg_compose: 0.0  # local FFmpeg, no provider cost
