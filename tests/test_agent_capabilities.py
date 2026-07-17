@@ -61,9 +61,7 @@ def test_agent_map_and_independent_research_strategy_breakdown(tmp_path: Path, m
     assert research.status_code == 200
     assert research.json()["artifact_name"] == "research_brief"
     assert strategy.status_code == 200
-    guardrails = strategy.json()["artifact"]["product_guardrails"]
-    assert isinstance(guardrails, dict)
-    assert guardrails["display"]["approved_value"] == "98°F"
+    assert strategy.json()["artifact"]["product_guardrails"]["display"]["approved_value"] == "98°F"
     assert breakdown.status_code == 200
     assert len(breakdown.json()["artifact"]["beats"]) == 5
     assert (run_root / "artifacts" / "research_brief.json").is_file()

@@ -12,6 +12,9 @@
     "hook_options": {"type": "array", "items": {"type": "string"}},
     "cta_options": {"type": "array", "items": {"type": "string"}},
     "forbidden_claims": {"type": "array", "items": {"type": "string"}},
-    "product_guardrails": {"type": "object"}
+    "product_guardrails": {
+      "description": "Structured product safety rules. String is accepted only for historical artifacts.",
+      "oneOf": [{"type": "object"}, {"type": "string"}]
+    }
   }
 }

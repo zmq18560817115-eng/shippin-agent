@@ -163,6 +163,10 @@ textarea {
   color: var(--blue);
 }
 
+.mobileLabel {
+  display: none;
+}
+
 .quietButton {
   min-height: 32px;
   border-color: transparent;
@@ -221,7 +225,7 @@ textarea {
 
 .workflowNav button small {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .workflowNav button:hover,
@@ -362,17 +366,16 @@ textarea {
 
 .startBar {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(190px, 220px) minmax(160px, 1fr) auto;
+  grid-template-columns: minmax(180px, 240px) minmax(180px, 220px) minmax(160px, 1fr) auto;
   gap: 12px;
   align-items: end;
   min-width: 0;
 }
 
-.startBar .startBarHint {
+.runtimeModeHint {
   grid-column: 1 / -1;
-  margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .startBar label,
@@ -1043,6 +1046,13 @@ pre {
   background: #fbfcfb;
 }
 
+[data-view-section="projects"] .emptyState {
+  min-height: 220px;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
 .pipelineProgress,
 .emptyGuide {
   display: grid;
@@ -1438,6 +1448,7 @@ pre {
 
 .muted {
   color: var(--muted);
+  font-size: 13px;
 }
 
 .nodeTools {
@@ -1599,9 +1610,25 @@ pre {
   }
 
   .continueButton {
-    min-height: 34px;
+    min-height: 44px;
     padding: 6px 9px;
     font-size: 12px;
+  }
+
+  .topActions {
+    gap: 6px;
+  }
+
+  .topActions .health {
+    display: none;
+  }
+
+  .desktopLabel {
+    display: none;
+  }
+
+  .mobileLabel {
+    display: inline;
   }
 
   .workflowNav {
@@ -1618,7 +1645,7 @@ pre {
 
   .workflowNav button {
     flex: 0 0 auto;
-    min-height: 36px;
+    min-height: 44px;
     display: block;
     padding: 7px 11px;
   }
@@ -1673,6 +1700,12 @@ pre {
 
   .startBar {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  button,
+  select,
+  .workflowNav button {
+    min-height: 44px;
   }
 
   .collectForm,

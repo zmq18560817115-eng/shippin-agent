@@ -29,6 +29,10 @@ flowchart LR
 
 人工闸门依次为 `script_gate`、`hero_gate`、`take_gate` 和成片人工视觉验收。任何一项未完成，系统不会自动进入交付。
 
+脚本新产物统一使用 `voiceover_zh`；读取历史项目时仍兼容 `voiceover_en`。`strategy_brief.product_guardrails` 为可直接消费的嵌套 JSON 对象，不再把 JSON 二次转义成字符串。研究、策略、脚本和分镜面向操作员的内容均要求简体中文，30 秒节奏统一为五个 6 秒段。
+
+闸门放行接口 `POST /api/v2/gates/approve` 的标准字段为 `gate`（如 `script_gate`）；旧客户端的 `stage` 字段暂时保持兼容。缺少或传入未知闸门时，接口返回中文 422 提示。
+
 ## 两种运行模式
 
 | 模式 | 用途 | 模型调用 | 结果 |

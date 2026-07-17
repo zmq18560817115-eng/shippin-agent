@@ -41,8 +41,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "system",
                 "content": (
-                    "You write brand-safe TikTok scripts for baby product overseas localization. "
-                    "Return strict JSON only. Avoid medical, guarantee, best, pain-free, and competitor claims."
+                    "你为母婴产品海外短视频撰写品牌安全脚本。严格返回 JSON，面向操作员的内容全部使用简体中文。"
+                    "避免医疗效果、保证性、最好、无痛和竞品比较等宣称。"
                 ),
             },
             {
@@ -50,7 +50,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "content": (
                     "Create script_copy JSON for product_id "
                     f"{product_id}. Use exactly 5 sections with roles 钩子, 痛点, 方案, 证明, 行动号召 and continuous timings "
-                    "0-6s, 6-12s, 12-18s, 18-24s, 24-30s. For every section return voiceover_en plus these Chinese operator fields: voiceover_zh, scene_zh (environment, lighting, props, character state), action_zh (visible action and product-use step), and story_beat_zh (what changes from the previous beat and why it advances the story). "
+                    "0-6s, 6-12s, 12-18s, 18-24s, 24-30s。每段返回 voiceover_zh、scene_zh（环境、灯光、道具、人物状态）、action_zh（可见动作与产品使用步骤）和 story_beat_zh（相对上一段发生的变化及其叙事作用）。"
                     "The five sections must create one continuous, filmable story. Beat 1 establishes the scene; beat 2 shows the waiting problem; "
                     "beat 3 only pours an approved milk source into the warming cup; beat 4 only pours from the warming cup through its round spout into a separate clean baby bottle; beat 5 closes with a CTA. "
                     "Do not combine the two pouring directions in one beat. Product fact: portable warming cup is separate from baby bottle. "
@@ -86,29 +86,27 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
 
 def _normalize_sections(value: Any) -> list[dict[str, Any]]:
     defaults = [
-        ("钩子", "0-6s", "Bottle prep should not take over your night."),
-        ("痛点", "6-12s", "Cold milk and long waits can make late feeds harder."),
-        ("方案", "12-18s", "Pour milk from the approved source into the warming cup."),
-        ("证明", "18-24s", "When ready, pour through the round spout into a separate clean bottle."),
-        ("行动号召", "24-30s", "Save this for calmer feeds at home or on the go."),
+        ("钩子", "0-6s", "夜间准备，不必占满你的休息时间。"),
+        ("痛点", "6-12s", "奶液变冷和等待，会让夜间准备更困难。"),
+        ("方案", "12-18s", "将允许的奶液来源倒入恒温杯。"),
+        ("证明", "18-24s", "准备完成后，经圆形出液口倒入独立的干净奶瓶。"),
+        ("行动号召", "24-30s", "收藏这套更从容的夜间准备方法。"),
     ]
     raw = value if isinstance(value, list) else []
     sections: list[dict[str, Any]] = []
     for index, (role, timing, voiceover) in enumerate(defaults, start=1):
         item = raw[index - 1] if index - 1 < len(raw) and isinstance(raw[index - 1], dict) else {}
-        line = _clean_voiceover(str(item.get("voiceover_en") or item.get("subtitle_en") or voiceover))
-        chinese_line = str(item.get("voiceover_zh") or "").strip()
+        chinese_line = _clean_voiceover(str(item.get("voiceover_zh") or item.get("voiceover_en") or voiceover))
         sections.append(
             {
                 "number": index,
                 "role": role,
                 "timing": timing,
-                "voiceover_en": line,
                 "voiceover_zh": chinese_line or _default_chinese_voiceover(index),
                 "scene_zh": str(item.get("scene_zh") or _default_scene(index)),
                 "action_zh": _default_action(index) if index in {3, 4} else str(item.get("action_zh") or _default_action(index)),
                 "story_beat_zh": str(item.get("story_beat_zh") or _default_story_beat(index)),
-                "subtitle_en": line,
+                "subtitle_zh": chinese_line or _default_chinese_voiceover(index),
                 "selling_points": _string_list(item.get("selling_points"), []),
             }
         )

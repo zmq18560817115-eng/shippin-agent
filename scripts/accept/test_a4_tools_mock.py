@@ -4,6 +4,7 @@ from pathlib import Path
 
 from libshared import artifacts
 from tools import tool_registry
+from tools.base_tool import ToolContext
 
 
 WHITE_HERO = "data/01_素材库/产品资料/便携恒温杯/listing-0602-nw/主图/白底主图.png"
@@ -121,3 +122,9 @@ def test_a4_real_tool_without_key_reports_not_configured() -> None:
 
     assert not result.ok
     assert result.error["category"] == "not_configured"
+
+
+def test_a4_explicit_empty_environment_does_not_inherit_process_secrets() -> None:
+    context = ToolContext.from_mapping({"mock": False, "env": {}})
+
+    assert context.env == {}

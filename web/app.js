@@ -18,6 +18,7 @@ const state = {
   refreshing: false,
   operation: null,
   currentView: "projects",
+  selectedRevision: "",
   showAllProjects: false,
 };
 
@@ -245,7 +246,9 @@ async function boot() {
   await loadProducts();
   await loadAutoCollector();
   await refreshProjects();
-  window.setInterval(() => refreshProjects({ silent: true }), 3000);
+  window.setInterval(() => {
+    if (!document.hidden) refreshProjects({ silent: true });
+  }, 10000);
   window.setInterval(() => loadAutoCollector(), 15000);
 }
 
@@ -485,6 +488,8 @@ function showView(view, { updateUrl = true } = {}) {
   $("#viewTitle").textContent = meta.title;
   $("#viewDescription").textContent = meta.description;
   if (updateUrl) history.replaceState(null, "", `#view=${next}`);
+  renderPanels();
+  if (next === "assets") loadMaterials();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -623,6 +628,10 @@ function renderProductItem(product) {
       <p>${escapeHtml(issueText)}</p>
     </article>
   `;
+}
+
+function severityLabel(severity) {
+  return ({ BLOCKED: "阻断", WARNING: "提醒", INFO: "信息" })[severity] || "提示";
 }
 
 function formatCounts(counts) {
@@ -882,7 +891,7 @@ async function startFromMaterial(materialId) {
   }
 }
 
-async function refreshProjects({ silent = false } = {}) {
+async function refreshProjects({ silent = false, force = false } = {}) {
   if (state.refreshing) return;
   state.refreshing = true;
   try {
@@ -893,17 +902,27 @@ async function refreshProjects({ silent = false } = {}) {
     }
     renderProjectRows();
     const activeEditor = document.activeElement?.matches("input, textarea, select");
-    if (state.selectedId && !(silent && activeEditor)) {
+    const summary = state.projects.find((item) => item.project_id === state.selectedId);
+    const revision = projectRevision(summary);
+    if (state.selectedId && !(silent && activeEditor) && (force || !silent || revision !== state.selectedRevision)) {
       await loadSelectedProject(state.selectedId);
     } else if (!state.selectedId) {
       renderPanels();
     }
-    if (!(silent && activeEditor)) await loadMaterials();
+    if (state.currentView === "assets" && !(silent && activeEditor)) await loadMaterials();
   } catch (error) {
     if (!silent) toast(error.message, "error");
   } finally {
     state.refreshing = false;
   }
+}
+
+function projectRevision(project) {
+  if (!project) return "";
+  return JSON.stringify([
+    project.status, project.current_stage, project.current_gate, project.updated_at,
+    project.artifacts, (project.tasks || []).map((task) => [task.id, task.status, task.updated_at]),
+  ]);
 }
 
 function renderMaterialLibrary() {
@@ -1054,6 +1073,7 @@ async function saveMaterialTranscript(panel, materialId) {
 
 async function loadSelectedProject(projectId) {
   state.selected = await api(`/api/v2/pipeline/${encodeURIComponent(projectId)}`);
+  state.selectedRevision = projectRevision(state.selected);
   state.scriptCopy = null;
   state.scriptBreakdown = null;
   state.reviewReport = null;
@@ -1063,14 +1083,13 @@ async function loadSelectedProject(projectId) {
   state.renderReport = null;
   state.runReport = null;
 
-  state.scriptCopy = await safeArtifact(projectId, "script_copy");
-  state.scriptBreakdown = await safeArtifact(projectId, "script_breakdown");
-  state.reviewReport = await safeArtifact(projectId, "review_report");
-  state.shotPlan = await safeArtifact(projectId, "shot_plan");
-  state.assetManifest = await safeArtifact(projectId, "asset_manifest");
-  state.takeManifest = await safeArtifact(projectId, "take_manifest");
-  state.renderReport = await safeArtifact(projectId, "render_report");
-  state.runReport = await safeRunReport(projectId);
+  [state.scriptCopy, state.scriptBreakdown, state.reviewReport, state.shotPlan,
+    state.assetManifest, state.takeManifest, state.renderReport, state.runReport] = await Promise.all([
+    safeArtifact(projectId, "script_copy"), safeArtifact(projectId, "script_breakdown"),
+    safeArtifact(projectId, "review_report"), safeArtifact(projectId, "shot_plan"),
+    safeArtifact(projectId, "asset_manifest"), safeArtifact(projectId, "take_manifest"),
+    safeArtifact(projectId, "render_report"), safeRunReport(projectId),
+  ]);
   renderPanels();
 }
 
@@ -1235,21 +1254,26 @@ function explainTaskError(error) {
 }
 
 function renderPanels() {
+  const stage = state.selected?.current_stage || state.selected?.status;
   const label = state.selected
-    ? `${state.selected.project_id} · ${state.selected.current_stage || state.selected.status}`
+    ? `${state.selected.project_id} · ${stageLabels[stage] || stage}`
     : "未选择项目";
   $("#activeProject").textContent = label;
   const continueButton = $("#continueProject");
   continueButton.disabled = !state.selected;
   $("#currentStage").textContent = state.selected
-    ? `当前节点：${state.selected.current_stage || state.selected.status}`
+    ? `当前节点：${stageLabels[stage] || stage}`
     : "暂无在制项目";
-  renderScriptGate();
-  renderHeroGate();
-  renderStoryboardNode();
-  renderProductionNode();
-  renderComposeNode();
-  renderDelivery();
+  if (state.currentView === "script") renderScriptGate();
+  if (state.currentView === "storyboard") {
+    renderStoryboardNode();
+    renderHeroGate();
+  }
+  if (state.currentView === "production") {
+    renderProductionNode();
+    renderComposeNode();
+  }
+  if (state.currentView === "delivery") renderDelivery();
 }
 
 function renderScriptGate() {
@@ -1365,7 +1389,7 @@ async function approveScriptGate() {
     await saveScript();
     const payload = await api("/api/v2/gates/approve", {
       method: "POST",
-      body: JSON.stringify({ project_id: state.selectedId, stage: "script_gate", approver: "operator" }),
+      body: JSON.stringify({ project_id: state.selectedId, gate: "script_gate", approver: "operator" }),
     });
     toast(`已进入 ${payload.engine.stage}`);
     await refreshProjects();
@@ -1743,7 +1767,7 @@ async function approveHeroGate() {
   try {
     const payload = await api("/api/v2/gates/approve", {
       method: "POST",
-      body: JSON.stringify({ project_id: state.selectedId, stage: "hero_gate", approver: "operator" }),
+      body: JSON.stringify({ project_id: state.selectedId, gate: "hero_gate", approver: "operator" }),
     });
     toast(`已完成到 ${payload.engine.stage}`);
     await refreshProjects();

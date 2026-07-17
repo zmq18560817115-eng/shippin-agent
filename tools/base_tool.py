@@ -25,10 +25,11 @@ class ToolContext:
         raw = dict(value or {})
         config = raw.get("config") or load_config()
         run_root = raw.get("run_root")
+        env = raw["env"] if "env" in raw else os.environ
         return cls(
             mock=bool(raw.get("mock", False)),
             run_root=Path(run_root) if run_root else None,
-            env=raw.get("env") or os.environ,
+            env=env,
             config=config,
         )
 

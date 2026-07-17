@@ -4,6 +4,8 @@ import os
 import shutil
 import subprocess
 import re
+import tempfile
+import os
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +31,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / "final-video.mp4"
     if context.mock:
-        _compose_mock(output, _duration_from_shots(shot_report))
+        write_mock_video(output, _duration_from_shots(shot_report))
         ffprobe = {
             "duration": _duration_from_shots(shot_report),
             "resolution": "720x1280",
@@ -71,20 +73,28 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     )
 
 
-def _compose_mock(output: Path, duration_sec: float) -> None:
+def write_mock_video(output: Path, duration_sec: float) -> None:
     """Produce a structurally playable mock delivery so final QA remains strict."""
     ffmpeg = _find_ffmpeg()
     if not ffmpeg:
         raise ToolNotConfiguredError("ffmpeg executable not found for mock delivery")
     output.parent.mkdir(parents=True, exist_ok=True)
+    cache = Path(tempfile.gettempdir()) / f"vaf-mock-720x1280-{max(1, int(round(duration_sec)))}s.mp4"
+    if cache.is_file() and cache.stat().st_size > 10_000:
+        shutil.copy2(cache, output)
+        return
+    target = cache.with_suffix(f".{os.getpid()}.tmp.mp4")
     command = [
-        ffmpeg, "-y", "-f", "lavfi", "-i", "color=c=black:s=720x1280:r=30",
+        ffmpeg, "-y", "-f", "lavfi", "-i", "color=c=0x182033:s=720x1280:r=30",
         "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", str(max(1, duration_sec)),
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", output.as_posix(),
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac",
+        "-movflags", "+faststart", "-shortest", target.as_posix(),
     ]
     completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if completed.returncode != 0 or not output.is_file():
+    if completed.returncode != 0 or not target.is_file():
         raise RuntimeError(f"mock compose failed: {completed.stderr[-1200:]}")
+    target.replace(cache)
+    shutil.copy2(cache, output)
 
 
 def _find_ffmpeg() -> str | None:
