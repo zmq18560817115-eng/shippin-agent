@@ -1671,6 +1671,13 @@ def put_artifact(
         raise HTTPException(status_code=400, detail="artifact project_id does not match URL")
 
     old_payload = _load_artifact_or_none(project_id, artifact_name)
+    if artifact_name == "shot_plan":
+        # Re-apply the deterministic product-identity lock so an edited or
+        # older shot plan can never be saved without it (which would deadlock
+        # the hero gate on the "white-background hero" safety check).
+        from tools.llm.doubao_shotplan import ensure_shot_locks
+
+        ensure_shot_locks(payload, _load_artifact_or_none(project_id, "script_copy"))
     stale_sections = (
         _changed_script_sections(old_payload, payload)
         if artifact_name == "script_copy"
