@@ -138,10 +138,14 @@ class ProductLibraryRefreshRequest(BaseModel):
 
 class GateApproveRequest(BaseModel):
     project_id: str
-    stage: str
+    stage: str | None = None
+    gate: str | None = None  # accepted as an alias for `stage` (pipeline surfaces current_gate)
     approver: str = "operator"
     notes: str | None = None
     mock: bool = True
+
+    def resolved_stage(self) -> str:
+        return (self.stage or self.gate or "").strip()
 
 
 class GateRewriteRequest(BaseModel):
@@ -806,10 +810,13 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             "created_at": queue.utc_now(),
         }
         artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
-        feedback_root = _feedback_root()
-        feedback_root.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        _atomic_write_json(feedback_root / f"{project_id}-{stamp}-{secrets.token_hex(2)}.json", artifact)
+        # Standalone (scratch) runs stay isolated in their own run root and must not
+        # pollute the shared production feedback library.
+        if not standalone:
+            feedback_root = _feedback_root()
+            feedback_root.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+            _atomic_write_json(feedback_root / f"{project_id}-{stamp}-{secrets.token_hex(2)}.json", artifact)
         queue.record_event(
             project_id=project_id,
             event_type="feedback.created",
@@ -1957,16 +1964,19 @@ def _manual_stage_label(stage: str) -> str:
 @app.post("/api/v2/gates/approve")
 def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
     project_id = _validate_project_id(request.project_id)
-    if request.stage not in GATE_STAGES:
-        raise HTTPException(status_code=400, detail=f"unknown gate stage: {request.stage}")
-    if request.stage == "hero_gate":
+    stage = request.resolved_stage()
+    if not stage:
+        raise HTTPException(status_code=422, detail=f"缺少闸门标识：请传入 stage（或别名 gate），可选值：{', '.join(GATE_STAGES)}")
+    if stage not in GATE_STAGES:
+        raise HTTPException(status_code=400, detail=f"未知闸门 {stage}，可选值：{', '.join(GATE_STAGES)}")
+    if stage == "hero_gate":
         preflight_errors = _storyboard_preflight_errors(project_id)
         if preflight_errors:
             raise HTTPException(
                 status_code=409,
                 detail={"message": "分镜安全预检未通过", "errors": preflight_errors},
             )
-    if request.stage == "take_gate":
+    if stage == "take_gate":
         try:
             _require_selected_playable_takes(project_id, _run_root(project_id))
         except HTTPException:
@@ -1974,7 +1984,7 @@ def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
     try:
         approved = engine.approve_gate(
             project_id,
-            request.stage,
+            stage,
             approver=request.approver,
             notes=request.notes,
             db_path=_db_path(),
