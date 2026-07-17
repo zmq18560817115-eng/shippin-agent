@@ -10,6 +10,8 @@ from tools.base_tool import ToolContext, ToolResult, require_env
 from tools.providers import ark
 from tools.collect import product_library
 from tools.tool_registry import register_tool
+from tools.video.ffmpeg_compose import write_mock_video
+from tools.video.media_validation import is_playable_mp4
 
 
 @register_tool("seedance_shot")
@@ -37,12 +39,13 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     suffix = f"-take-{take_id.casefold()}" if take_id else ""
     output = shots_dir / f"shot-{number:03d}{suffix}.mp4"
     reference_path = Path(str(shot.get("reference_path") or ""))
-    if reference_path.is_file():
+    if not context.mock and is_playable_mp4(output):
+        provider_meta = {"provider": "existing_media_recovery", "reused_path": output.as_posix()}
+    elif reference_path.is_file():
         output = reference_path
         provider_meta = {"provider": "reference_video", "reference_path": reference_path.as_posix()}
     elif context.mock:
-        # The mock is deliberately a media-shaped file so selection checks stay enabled.
-        output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 2048))
+        write_mock_video(output, _duration_sec(shot))
         provider_meta = {"provider": "mock"}
     else:
         provider_meta = ark.create_seedance_video(

@@ -36,8 +36,7 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
         manifest = json.loads((run_root / "artifacts" / "take_manifest.json").read_text(encoding="utf-8"))
         take_b_path = next(item for item in manifest["shots"][0]["takes"] if item["take_id"] == "B")["path"]
         output = run_root / take_b_path
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 1024))
+        assert output.is_file()
         reviewed = client.post(
             "/api/v2/takes/review",
             json={

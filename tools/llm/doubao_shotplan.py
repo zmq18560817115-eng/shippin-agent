@@ -116,7 +116,7 @@ def _normalize_shots(
         prompt = visual_prompt if safety_fallback else _clean_temperature_text(str(item.get("seedance_prompt") or visual_prompt or visual))
         prompt = _lock_prompt(
             prompt,
-            str(section.get("voiceover_en") or ""),
+            str(section.get("voiceover_zh") or section.get("voiceover_en") or ""),
             shot_index=index,
             scene_continuity=scene_continuity,
             character_continuity=character_continuity,

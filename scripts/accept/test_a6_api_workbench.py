@@ -31,7 +31,7 @@ def test_a6_api_workbench_two_gate_flow_and_polling(tmp_path: Path, monkeypatch)
         script_response = client.get("/api/v2/artifacts/ref-a6/script_copy")
         assert script_response.status_code == 200
         script_copy = script_response.json()
-        script_copy["sections"][0]["voiceover_en"] = "Night feeds should feel calmer."
+        script_copy["sections"][0]["voiceover_zh"] = "夜间准备，可以更从容。"
         saved = client.put("/api/v2/artifacts/ref-a6/script_copy", json=script_copy)
         assert saved.status_code == 200
         assert saved.json()["stale_sections"] == [1]

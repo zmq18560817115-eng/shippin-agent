@@ -152,12 +152,12 @@ def _validate_script_copy(payload: dict[str, Any]) -> list[ArtifactValidationIss
                     )
                 expected_start = end
 
-        voiceover = str(section.get("voiceover_en") or "")
+        voiceover = str(section.get("voiceover_zh") or section.get("voiceover_en") or "")
         forbidden = _find_forbidden_term(voiceover)
         if forbidden:
             issues.append(
                 ArtifactValidationIssue(
-                    f"/sections/{index}/voiceover_en",
+                    f"/sections/{index}/voiceover_zh",
                     f"forbidden compliance term: {forbidden}",
                 )
             )

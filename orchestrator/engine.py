@@ -699,15 +699,9 @@ def _approved_visual_review(review: dict[str, Any] | None) -> bool:
 
 
 def _is_playable_mp4(path: Path) -> bool:
-    """Reject mock placeholders before they can be shown as a finished delivery."""
-    if not path.is_file() or path.stat().st_size < 1024:
-        return False
-    try:
-        with path.open("rb") as handle:
-            header = handle.read(12)
-    except OSError:
-        return False
-    return len(header) >= 8 and header[4:8] == b"ftyp"
+    from tools.video.media_validation import is_playable_mp4
+
+    return is_playable_mp4(path)
 
 
 def _source_clips_vertical(render_report: dict[str, Any]) -> bool:

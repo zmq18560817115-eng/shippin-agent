@@ -3,11 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from orchestrator.engine import _build_final_qa_report
+from tools.video.ffmpeg_compose import write_mock_video
 
 
 def _inputs(tmp_path: Path, resolution: str = "720x1280") -> tuple[dict, dict, dict]:
     output = tmp_path / "final-video.mp4"
-    output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 1024))
+    write_mock_video(output, 30)
     render = {
         "output_path": output.as_posix(),
         "ffprobe": {"duration": 30.0, "resolution": resolution, "fps": 30, "audio_streams": 1},
@@ -58,7 +59,7 @@ def test_final_qa_accepts_existing_workspace_relative_output(tmp_path: Path, mon
     monkeypatch.chdir(tmp_path)
     output = Path("data/runs/demo/artifacts/final-video.mp4")
     output.parent.mkdir(parents=True)
-    output.write_bytes(b"\x00\x00\x00\x18ftypmp42" + (b"\x00" * 1024))
+    write_mock_video(output, 30)
     render = {
         "output_path": output.as_posix(),
         "ffprobe": {"duration": 30, "resolution": "720x1280", "fps": 30, "audio_streams": 1},

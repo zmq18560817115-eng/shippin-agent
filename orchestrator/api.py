@@ -138,7 +138,8 @@ class ProductLibraryRefreshRequest(BaseModel):
 
 class GateApproveRequest(BaseModel):
     project_id: str
-    stage: str
+    gate: str | None = None
+    stage: str | None = None
     approver: str = "operator"
     notes: str | None = None
     mock: bool = True
@@ -222,6 +223,11 @@ class AgentRunRequest(BaseModel):
     mock: bool = True
 
 
+class PipelineResumeRequest(BaseModel):
+    project_id: str
+    mock: bool = True
+
+
 class MaterialTranscriptRequest(BaseModel):
     transcript_text: str
 
@@ -268,7 +274,9 @@ async def lifespan(_: FastAPI):
     queue.init_db(db_path=_db_path())
     if _auth_enabled():
         user_store.seed_environment_users(db_path=_db_path())
-    queue.recover_running_tasks_on_startup(db_path=_db_path())
+    # Multiple API/worker processes may share this database. A new process must
+    # never reclaim another live process's lease; only expired leases are safe.
+    queue.recover_expired_leases(db_path=_db_path())
     _ensure_auto_collector_settings()
     _recover_auto_collector_on_startup()
     scheduler = asyncio.create_task(_auto_collector_loop())
@@ -285,6 +293,11 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="video-agent-factory", version="0.0.0", lifespan=lifespan)
 if WEB_ROOT.exists():
     app.mount("/static", StaticFiles(directory=WEB_ROOT), name="static")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> RedirectResponse:
+    return RedirectResponse("/static/favicon.svg", status_code=307)
 
 
 @app.middleware("http")
@@ -1862,6 +1875,7 @@ def review_take(request: TakeReviewRequest) -> dict[str, Any]:
         "usage_flow": request.usage_flow,
         "continuity": request.continuity,
     }
+
     approved = all(checks.values())
     take["status"] = "qa_pass" if approved else "rejected"
     take["qa"] = {"approved": approved, "checks": checks, "notes": request.notes.strip()}
@@ -1876,6 +1890,19 @@ def review_take(request: TakeReviewRequest) -> dict[str, Any]:
         db_path=_db_path(),
     )
     return {"ok": True, "approved": approved, "take_manifest": manifest}
+
+
+@app.post("/api/v2/pipeline/resume")
+def resume_pipeline(request: PipelineResumeRequest) -> dict[str, Any]:
+    """Resume queued work after a process restart without recreating the project."""
+    project_id = _validate_project_id(request.project_id)
+    status = engine.run_until_blocked(
+        project_id,
+        db_path=_db_path(),
+        run_root=_run_root(project_id),
+        mock=request.mock,
+    )
+    return {"engine": _engine_status(status), "project": _project_summary(project_id)}
 
 
 @app.post("/api/v2/agents/promote")
@@ -1952,16 +1979,19 @@ def _manual_stage_label(stage: str) -> str:
 @app.post("/api/v2/gates/approve")
 def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
     project_id = _validate_project_id(request.project_id)
-    if request.stage not in GATE_STAGES:
-        raise HTTPException(status_code=400, detail=f"unknown gate stage: {request.stage}")
-    if request.stage == "hero_gate":
+    gate = str(request.gate or request.stage or "").strip()
+    if not gate:
+        raise HTTPException(status_code=422, detail="缺少 gate 字段，请填写当前待放行闸门名称")
+    if gate not in GATE_STAGES:
+        raise HTTPException(status_code=422, detail=f"未知闸门：{gate}")
+    if gate == "hero_gate":
         preflight_errors = _storyboard_preflight_errors(project_id)
         if preflight_errors:
             raise HTTPException(
                 status_code=409,
                 detail={"message": "分镜安全预检未通过", "errors": preflight_errors},
             )
-    if request.stage == "take_gate":
+    if gate == "take_gate":
         try:
             _require_selected_playable_takes(project_id, _run_root(project_id))
         except HTTPException:
@@ -1969,7 +1999,7 @@ def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
     try:
         approved = engine.approve_gate(
             project_id,
-            request.stage,
+            gate,
             approver=request.approver,
             notes=request.notes,
             db_path=_db_path(),
@@ -2297,7 +2327,9 @@ def _storyboard_preflight_errors(project_id: str) -> list[dict[str, Any]]:
                 visible_action = " ".join(
                     str(shot.get(key) or "") for key in ("visual", "visual_prompt")
                 ).casefold()
-                if not all(token in visible_action for token in ("pour", "spout", "baby bottle")):
+                english_action = all(token in visible_action for token in ("pour", "spout", "baby bottle"))
+                chinese_action = all(token in visible_action for token in ("恒温杯", "出液口", "奶瓶")) and "倒" in visible_action
+                if not (english_action or chinese_action):
                     missing.append("第4镜倒液动作一致性")
         if missing:
             errors.append({"shot_index": number, "missing": missing})
@@ -2426,7 +2458,7 @@ def _analysis_from_script(script: dict[str, Any], project_id: str) -> dict[str, 
         matched = re.fullmatch(r"(\d+)-(\d+)s", timing)
         start, end = (int(matched.group(1)), int(matched.group(2))) if matched else (index * 6, (index + 1) * 6)
         role = str(section.get("role") or "镜头")
-        spoken = str(section.get("voiceover_en") or section.get("voiceover_zh") or "")
+        spoken = str(section.get("voiceover_zh") or section.get("voiceover_en") or "")
         voiceover.append(spoken)
         pacing.append({"start_s": start, "end_s": end, "role": role})
         breakdown.append(
@@ -2455,14 +2487,9 @@ def _analysis_from_script(script: dict[str, Any], project_id: str) -> dict[str, 
 
 
 def _is_playable_delivery_file(path: Path) -> bool:
-    if not path.is_file() or path.stat().st_size < 1024:
-        return False
-    try:
-        with path.open("rb") as handle:
-            header = handle.read(12)
-    except OSError:
-        return False
-    return len(header) >= 8 and header[4:8] == b"ftyp"
+    from tools.video.media_validation import is_playable_mp4
+
+    return is_playable_mp4(path)
 
 
 def _run_report(project_id: str) -> dict[str, Any]:
@@ -2721,7 +2748,8 @@ def _changed_script_sections(
             changed.append(number)
             continue
         if (
-            old_section.get("voiceover_en") != section.get("voiceover_en")
+            old_section.get("voiceover_zh", old_section.get("voiceover_en"))
+            != section.get("voiceover_zh", section.get("voiceover_en"))
             or old_section.get("timing") != section.get("timing")
         ):
             changed.append(number)
