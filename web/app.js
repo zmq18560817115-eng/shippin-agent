@@ -600,6 +600,10 @@ function renderProductLibrary() {
   host.innerHTML = state.productLibrary.map(renderProductItem).join("");
 }
 
+function severityLabel(severity) {
+  return { BLOCKED: "⛔ 阻断", WARNING: "⚠ 提醒", INFO: "提示" }[String(severity || "").toUpperCase()] || String(severity || "提示");
+}
+
 function renderProductItem(product) {
   const issues = product.issues || [];
   const counts = formatCounts(product.counts || {});

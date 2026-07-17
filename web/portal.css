@@ -158,4 +158,5 @@ dialog::backdrop { background: rgba(17, 26, 47, .62); }
   .statsGrid { grid-template-columns: repeat(2, 1fr); }
   .statsGrid article { border-bottom: 1px solid var(--line); }
   .adminColumns { grid-template-columns: 1fr; }
+  .backendList { grid-template-columns: 1fr; }
 }

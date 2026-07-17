@@ -52,16 +52,16 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "system",
                 "content": (
-                    "You analyze short-video structure for brand-safe overseas localization. "
-                    "Return strict JSON only. Do not copy competitor wording or unsupported claims."
+                    "你为品牌安全的海外本地化分析短视频结构。只返回严格 JSON，不复制竞品文案或无依据的声明。"
+                    "所有文本字段一律使用简体中文。"
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    "Create an analysis_report JSON object with fields: hook_3s, structure, voiceover_text, pacing, keyframes, shot_breakdown, fingerprint for a 30-second video. "
-                    "shot_breakdown must contain 5 objects with number, timing, visual, action, purpose, transition. Product: portable warming cup. "
-                    "Use only generic structure insights from the source. Source text/link: "
+                    "请创建 analysis_report JSON 对象，字段包括：hook_3s、structure、voiceover_text、pacing、keyframes、shot_breakdown、fingerprint，面向一条 30 秒视频。"
+                    "shot_breakdown 必须包含 5 个对象，每个含 number、timing、visual、action、purpose、transition。产品：便携恒温杯。"
+                    "只从素材中提炼通用结构洞察。所有文本字段必须使用简体中文。素材文本/链接："
                     f"{transcript[:1500]}"
                 ),
             },
@@ -72,7 +72,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "project_id": project_id,
         "source_link_id": payload.get("source_link_id"),
         "material_meta_ref": str(payload.get("source_material_id") or payload.get("source_url") or ""),
-        "hook_3s": _string(response.get("hook_3s"), "Bottle prep without the long wait."),
+        "hook_3s": _string(response.get("hook_3s"), "夜间喂养准备，也可以更轻松。"),
         "structure": _string_list(response.get("structure"), ["钩子", "痛点", "方案", "行动号召"]),
         "voiceover_text": _string(response.get("voiceover_text"), transcript),
         "pacing": _normalize_pacing(response.get("pacing")),

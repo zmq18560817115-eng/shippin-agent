@@ -320,6 +320,11 @@ def home() -> RedirectResponse:
     return RedirectResponse("/login", status_code=303)
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(WEB_ROOT / "favicon.svg", media_type="image/svg+xml")
+
+
 @app.get("/login", include_in_schema=False)
 def login_page() -> FileResponse:
     return FileResponse(WEB_ROOT / "login.html", headers={"Cache-Control": "no-store"})
@@ -450,7 +455,7 @@ def runtime_status() -> dict[str, Any]:
             {"id": "manual_url", "ready": yt_dlp_ready, "supports": ["direct_url"]},
         ],
         "budget_mode": "observe",
-        "pricing_calibrated": False,
+        "pricing_calibrated": _pricing_calibrated(),
     }
 
 
@@ -814,10 +819,13 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             "created_at": queue.utc_now(),
         }
         artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
-        feedback_root = _feedback_root()
-        feedback_root.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        _atomic_write_json(feedback_root / f"{project_id}-{stamp}-{secrets.token_hex(2)}.json", artifact)
+        # Standalone (scratch) runs stay isolated in their own run root and must not
+        # pollute the shared production feedback library.
+        if not standalone:
+            feedback_root = _feedback_root()
+            feedback_root.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+            _atomic_write_json(feedback_root / f"{project_id}-{stamp}-{secrets.token_hex(2)}.json", artifact)
         queue.record_event(
             project_id=project_id,
             event_type="feedback.created",
@@ -1672,11 +1680,20 @@ def put_artifact(
         raise HTTPException(status_code=400, detail="artifact project_id does not match URL")
 
     old_payload = _load_artifact_or_none(project_id, artifact_name)
+    # Compute staleness from the user's actual edits first, before any
+    # normalization, so the deterministic re-lock below is not mistaken for edits.
     stale_sections = (
         _changed_script_sections(old_payload, payload)
         if artifact_name == "script_copy"
         else _changed_shots(old_payload, payload)
     )
+    if artifact_name == "shot_plan":
+        # Re-apply the deterministic product-identity lock so an edited or
+        # older shot plan can never be saved without it (which would deadlock
+        # the hero gate on the "white-background hero" safety check).
+        from tools.llm.doubao_shotplan import ensure_shot_locks
+
+        ensure_shot_locks(payload, _load_artifact_or_none(project_id, "script_copy"))
     try:
         artifacts.save_artifact(
             project_id,
@@ -1797,10 +1814,10 @@ def run_manual_stage(request: ManualStageRunRequest) -> dict[str, Any]:
         db_path=_db_path(),
     )
     if stage in {"production", "compose"}:
-        status = engine.run_task(task_id, db_path=_db_path(), run_root=root, mock=request.mock)
+        status = engine.run_task(task_id, db_path=_db_path(), run_root=root, mock=_project_mock(project_id, default=request.mock))
     else:
         status = engine.run_until_blocked(
-            project_id, db_path=_db_path(), run_root=root, mock=request.mock
+            project_id, db_path=_db_path(), run_root=root, mock=_project_mock(project_id, default=request.mock)
         )
     if status.status == "failed":
         raise HTTPException(
@@ -2009,7 +2026,7 @@ def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
             project_id,
             db_path=_db_path(),
             run_root=_run_root(project_id),
-            mock=request.mock,
+            mock=_project_mock(project_id, default=request.mock),
         )
     except checkpoint.GateApprovalError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -2062,7 +2079,7 @@ def rewrite_gate(request: GateRewriteRequest) -> dict[str, Any]:
         project_id,
         db_path=_db_path(),
         run_root=root,
-        mock=request.mock,
+        mock=_project_mock(project_id, default=request.mock),
     )
     return {"engine": _engine_status(status), "project": _project_summary(project_id)}
 
@@ -2106,7 +2123,7 @@ def retry_task(request: TaskRetryRequest) -> dict[str, Any]:
                 project_id,
                 db_path=_db_path(),
                 run_root=_run_root(project_id),
-                mock=request.mock,
+                mock=_project_mock(project_id, default=request.mock),
             )
         elif request.shot_index is not None:
             status = engine.retry_failed_shot(
@@ -2114,7 +2131,7 @@ def retry_task(request: TaskRetryRequest) -> dict[str, Any]:
                 request.shot_index,
                 db_path=_db_path(),
                 run_root=_run_root(project_id),
-                mock=request.mock,
+                mock=_project_mock(project_id, default=request.mock),
             )
         else:
             raise ValueError("task_id or shot_index is required")
@@ -2123,7 +2140,7 @@ def retry_task(request: TaskRetryRequest) -> dict[str, Any]:
                 project_id,
                 db_path=_db_path(),
                 run_root=_run_root(project_id),
-                mock=request.mock,
+                mock=_project_mock(project_id, default=request.mock),
             )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -2237,6 +2254,17 @@ def _runs_root() -> Path:
         path = Path(configured)
         return path if path.is_absolute() else ROOT / path
     return RUNS_ROOT
+
+
+_PRICING_TOOLS = ("doubao_analyze", "doubao_script", "doubao_shotplan", "doubao_review", "seedance_shot", "ffmpeg_compose")
+
+
+def _pricing_calibrated() -> bool:
+    """True once every metered tool has a numeric price configured."""
+    from tools.base_tool import load_config
+
+    pricing = (load_config().get("pricing") or {})
+    return all(isinstance(pricing.get(name), (int, float)) for name in _PRICING_TOOLS)
 
 
 def _material_library_root() -> Path:
@@ -2381,6 +2409,21 @@ def _normalize_source_link_id(source_link_id: int | None, link_id: str | int | N
 def _project_row_or_none(project_id: str):
     with queue.get_conn(_db_path()) as conn:
         return conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+
+
+def _project_mock(project_id: str, default: bool = True) -> bool:
+    """Resolve a project's run mode from what was persisted at creation.
+
+    A real project must keep generating with real providers when it is resumed
+    at a human gate; otherwise it would silently fall back to mock placeholder
+    media. Resume endpoints read this instead of trusting a per-request flag.
+    """
+    row = _project_row_or_none(project_id)
+    if row is None:
+        return default
+    payload = _loads_json(row["payload_json"])
+    value = payload.get("mock")
+    return bool(value) if isinstance(value, bool) else default
 
 
 def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, Any]:
@@ -2538,7 +2581,7 @@ def _run_report(project_id: str) -> dict[str, Any]:
         "finished_at": finished,
         "elapsed_s": _duration_seconds(started, finished),
         "budget_mode": project["budget_mode"],
-        "pricing_calibrated": False,
+        "pricing_calibrated": _pricing_calibrated(),
         "cost": project["cost"],
         "tasks": task_rows,
         "providers": providers,

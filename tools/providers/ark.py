@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import os
 import time
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -16,6 +17,19 @@ from tools.base_tool import ToolContext, ToolNotConfiguredError
 CHAT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 DEFAULT_DOUBAO_MODEL = "doubao-seed-1-8-251228"
 DEFAULT_SEEDANCE_MODEL = "doubao-seedance-2-0-fast-260128"
+
+
+def _verify() -> str | bool:
+    """Trust a deployment-provided CA bundle when configured (e.g. a corporate
+    or egress proxy that terminates TLS). Falls back to the default trust store.
+    We keep trust_env=False on the clients so proxies are never picked up
+    implicitly, but still honour an explicit CA bundle so verification stays on.
+    """
+    for name in ("ARK_CA_BUNDLE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"):
+        path = str(os.environ.get(name) or "").strip()
+        if path and Path(path).is_file():
+            return path
+    return True
 
 
 class ArkProviderError(RuntimeError):
@@ -41,7 +55,7 @@ def chat_json(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     api_key = env_value(context, *api_key_names)
     model = str(context.env.get(model_env) or context.env.get("ARK_DOUBAO_MODEL") or default_model).strip()
-    timeout_s = float(context.env.get("ARK_TIMEOUT_S") or 120)
+    timeout_s = float(context.env.get("ARK_TIMEOUT_S") or 240)
     body = {
         "model": model,
         "messages": messages,
@@ -77,7 +91,7 @@ def create_seedance_video(
     api_key = env_value(context, "SEEDANCE_API_KEY", "ARK_SEEDANCE_API_KEY", "ARK_API_KEY")
     model = str(context.env.get("SEEDANCE_MODEL") or context.env.get("ARK_SEEDANCE_MODEL") or DEFAULT_SEEDANCE_MODEL).strip()
     base_url = _chat_base_url(context)
-    timeout_s = float(context.env.get("ARK_TIMEOUT_S") or 120)
+    timeout_s = float(context.env.get("ARK_TIMEOUT_S") or 240)
     poll_s = float(context.env.get("SEEDANCE_POLL_INTERVAL_S") or 5)
     max_wait_s = float(context.env.get("SEEDANCE_MAX_WAIT_S") or 900)
     requested_paths = [image_path, *(image_paths or [])]
@@ -146,13 +160,13 @@ def _chat_base_url(context: ToolContext) -> str:
 
 
 def _post_json(url: str, *, api_key: str, body: dict[str, Any], timeout_s: float) -> dict[str, Any]:
-    with httpx.Client(timeout=timeout_s, trust_env=False) as client:
+    with httpx.Client(timeout=timeout_s, trust_env=False, verify=_verify()) as client:
         response = client.post(url, headers=_headers(api_key), json=body)
     return _response_json(response)
 
 
 def _get_json(url: str, *, api_key: str, timeout_s: float) -> dict[str, Any]:
-    with httpx.Client(timeout=timeout_s, trust_env=False) as client:
+    with httpx.Client(timeout=timeout_s, trust_env=False, verify=_verify()) as client:
         response = client.get(url, headers=_headers(api_key))
     return _response_json(response)
 
@@ -268,7 +282,7 @@ def _looks_like_video_url(url: str) -> bool:
 
 def _download(url: str, output_path: Path, *, timeout_s: float) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with httpx.Client(timeout=timeout_s, follow_redirects=True, trust_env=False) as client:
+    with httpx.Client(timeout=timeout_s, follow_redirects=True, trust_env=False, verify=_verify()) as client:
         response = client.get(url)
     if response.status_code >= 400:
         raise ArkProviderError(f"download HTTP {response.status_code}")
