@@ -7,6 +7,15 @@ from tools.providers import ark
 from tools.video import seedance_shot
 
 
+def test_seedance_prompt_has_shot_specific_action_contract() -> None:
+    manifest = {"product_id": "便携恒温杯", "seedance_source": "白底主图.png"}
+    intro = seedance_shot._shot_prompt({"number": 1, "visual_zh": "床头建立镜头"}, manifest)
+    pour = seedance_shot._shot_prompt({"number": 4, "visual_zh": "闭盖后向奶瓶倒液"}, manifest)
+    assert "must not contain pouring" in intro
+    assert "main lid visibly closed" in pour
+    assert "approved round spout" in pour
+
+
 def test_seedance_shot_forwards_additional_reference_paths(tmp_path: Path, monkeypatch) -> None:
     captured = {}
 
@@ -37,7 +46,7 @@ def test_seedance_shot_forwards_additional_reference_paths(tmp_path: Path, monke
     assert captured["image_paths"] == ["usage.png"]
 
 
-def test_seedance_shot_uses_manifest_references_when_shot_has_none(tmp_path: Path, monkeypatch) -> None:
+def test_seedance_shot_does_not_leak_action_reference_to_unrelated_shot(tmp_path: Path, monkeypatch) -> None:
     captured = {}
 
     def fake_create(context, **kwargs):
@@ -57,6 +66,36 @@ def test_seedance_shot_uses_manifest_references_when_shot_has_none(tmp_path: Pat
                 "seedance_source": "白底主图.png",
                 "reference_paths": ["倒出口参考.png"],
                 "hero_frames": [{"number": 1, "path": "hero.png"}],
+            },
+        },
+        ToolContext.from_mapping(
+            {"mock": False, "run_root": str(tmp_path), "env": {"SEEDANCE_API_KEY": "configured"}}
+        ),
+    )
+    assert result.ok
+    assert captured["image_paths"] == []
+
+
+def test_seedance_shot_routes_pour_reference_to_matching_shot(tmp_path: Path, monkeypatch) -> None:
+    captured = {}
+
+    def fake_create(context, **kwargs):
+        captured.update(kwargs)
+        Path(kwargs["output_path"]).write_bytes(b"video")
+        return {"provider": "ark", "task_id": "task-3", "reference_count": 2}
+
+    monkeypatch.setattr(seedance_shot.ark, "create_seedance_video", fake_create)
+    result = seedance_shot.execute(
+        {
+            "project_id": "pour-refs",
+            "shot": {"number": 4, "visual_zh": "恒温杯从出液口向独立奶瓶倒液"},
+            "asset_manifest": {
+                "version": "2.0",
+                "project_id": "pour-refs",
+                "product_id": "便携恒温杯",
+                "seedance_source": "白底主图.png",
+                "reference_paths": ["倒出口参考.png"],
+                "hero_frames": [{"number": 4, "path": "hero.png"}],
             },
         },
         ToolContext.from_mapping(

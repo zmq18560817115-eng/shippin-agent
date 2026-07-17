@@ -48,13 +48,14 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         write_mock_video(output, _duration_sec(shot))
         provider_meta = {"provider": "mock"}
     else:
+        reference_paths = _reference_paths_for_shot(shot, asset_manifest)
         provider_meta = ark.create_seedance_video(
             context,
             prompt=_shot_prompt(shot, asset_manifest),
             image_path=str(asset_manifest.get("seedance_source") or ""),
             image_paths=[
                 str(path)
-                for path in (shot.get("reference_paths") or asset_manifest.get("reference_paths") or [])
+                for path in reference_paths
                 if str(path)
             ],
             output_path=output,
@@ -86,7 +87,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "shot_index": number,
             "take_id": take_id or None,
             "seedance_source": asset_manifest.get("seedance_source"),
-            "reference_paths": shot.get("reference_paths") or asset_manifest.get("reference_paths") or [],
+            "reference_paths": _reference_paths_for_shot(shot, asset_manifest),
             **provider_meta,
         },
     )
@@ -94,6 +95,23 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
 
 def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
     product_facts = product_library.product_guardrail_text(str(asset_manifest.get("product_id") or ""))
+    number = int(shot.get("number") or 0)
+    if number == 3:
+        action_rule = (
+            "Shot 3 action only: open the warming cup and pour liquid from an approved source into the cup interior. "
+            "Do not pour from the cup into a baby bottle in this shot. Do not show the final dispensing action."
+        )
+    elif number == 4:
+        action_rule = (
+            "Shot 4 action only: close and lock the main lid before pouring. Keep the main lid visibly closed for the entire shot. "
+            "Tilt the warming cup and show one continuous liquid stream leaving only through the approved round spout and entering a separate clean baby bottle. "
+            "Never pour through the open main mouth, never reverse the direction, and never place the bottle inside the cup."
+        )
+    else:
+        action_rule = (
+            f"Shot {number} must not contain pouring, flowing liquid, an open main lid, or a bottle inserted into the cup. "
+            "Keep the product closed and perform only the single scene action described for this shot."
+        )
     return " ".join(
         part
         for part in (
@@ -102,7 +120,7 @@ def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
             f"Approved product facts and hard constraints: {product_facts}" if product_facts else "",
             "Use only the approved product identity from the reference image. Do not add any invented brand name, logo, watermark, label, or readable text. Do not replace the product with a generic bottle or another brand.",
             "For a warming-cup pouring shot: pour liquid from the warming cup spout into a separate clean baby bottle; never place the baby bottle inside the warming cup and never pour in the reverse direction.",
-            "The single required action must visibly complete on camera: keep the main lid closed, tilt the warming cup, show one continuous liquid stream leaving the approved round spout, and show that stream entering the separate baby bottle. Do not open the main lid, do not merely place the products side by side, and do not end before the pour is visible.",
+            action_rule,
             "If the display is visible, show exactly 98°F with the Fahrenheit symbol; never show Celsius or 98°C.",
         )
         if part
@@ -115,3 +133,25 @@ def _duration_sec(shot: dict[str, Any]) -> int:
         return max(3, min(10, int(float(camera.get("duration_sec") or 5))))
     except (TypeError, ValueError):
         return 5
+
+
+def _reference_paths_for_shot(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> list[str]:
+    explicit = [str(path) for path in shot.get("reference_paths") or [] if str(path)]
+    if explicit:
+        return explicit
+    shot_text = " ".join(
+        str(shot.get(key) or "")
+        for key in ("visual", "visual_zh", "visual_prompt", "seedance_prompt", "seedance_prompt_zh")
+    ).casefold()
+    selected: list[str] = []
+    for path in asset_manifest.get("reference_paths") or []:
+        path_text = str(path)
+        name = Path(path_text).stem.casefold()
+        is_pour_reference = any(token in name for token in ("倒出", "出液", "pour", "spout"))
+        shot_has_pour = (
+            any(token in shot_text for token in ("倒入", "倒液", "出液口", "pour", "spout"))
+            and any(token in shot_text for token in ("奶瓶", "baby bottle"))
+        )
+        if is_pour_reference and shot_has_pour:
+            selected.append(path_text)
+    return selected
