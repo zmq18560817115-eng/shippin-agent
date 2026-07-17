@@ -41,7 +41,11 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "content": (
                     "You create concise, continuous AI video shot plans. Return strict JSON only. "
                     "Keep one stable scene and one stable caregiver profile across all shots. "
-                    "Do not repeat product safety locks: the production system adds them deterministically."
+                    "Shots are generated independently and hard to match, so make transitions smooth: "
+                    "each shot must OPEN on framing, subject position and lighting that continue the PREVIOUS shot's "
+                    "closing frame, and camera moves must stay slow and in a consistent direction so cuts do not jump. "
+                    "Do not repeat product safety locks: the production system adds them deterministically. "
+                    "All Chinese fields (visual_zh, seedance_prompt_zh) must be written in Simplified Chinese."
                 ),
             },
             {
@@ -49,6 +53,9 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "content": (
                     "Create a compact JSON object with scene_continuity, character_continuity, and exactly five shots in vertical 9:16. "
                     "For every shot return only visual, visual_zh, seedance_prompt, seedance_prompt_zh, and camera_motion.type. "
+                    "In each shot's seedance_prompt, briefly state the opening frame so it matches the previous shot's ending "
+                    "(same subject placement and camera angle) for a seamless transition. Prefer gentle camera moves "
+                    "(slow push-in or slow pan) over static-to-moving jumps. "
                     "Keep every text field below 45 words; do not restate global continuity or product rules inside each shot. "
                     "Use this five-beat sequence: establish feeding-prep scene, show the pain, introduce the separate warming cup, "
                     "demonstrate the pour, then finish with a product CTA. Script sections: "

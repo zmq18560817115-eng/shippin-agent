@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import re
@@ -110,23 +111,65 @@ def _compose_real(paths: list[Path], output: Path, ffmpeg: str | None, shot_repo
         _normalize_shot(path, normalized_dir / f"shot-{index:03d}.mp4", ffmpeg, float((shot_report.get("shots") or [])[index - 1].get("duration_sec") or 6))
         for index, path in enumerate(paths, start=1)
     ]
+    # Smooth the seams between independently generated shots with a short
+    # crossfade instead of a hard cut (removes the "jump" at each boundary).
+    xfade_s = _xfade_seconds()
+    if len(normalized) >= 2 and xfade_s > 0 and _compose_with_xfade(normalized, output, ffmpeg, xfade_s):
+        return
+    _compose_concat(normalized, output, ffmpeg)
+
+
+def _xfade_seconds() -> float:
+    try:
+        value = float(os.environ.get("COMPOSE_XFADE_S", "0.4"))
+    except (TypeError, ValueError):
+        return 0.4
+    # Keep it small so total shrink (N-1)*xfade stays inside the QA duration tolerance.
+    return max(0.0, min(value, 0.8))
+
+
+def _compose_with_xfade(clips: list[Path], output: Path, ffmpeg: str, xfade_s: float) -> bool:
+    """Chain clips with xfade/acrossfade transitions. Returns False on failure
+    so the caller can fall back to a plain concat."""
+    transition = str(os.environ.get("COMPOSE_XFADE_TYPE") or "fade").strip() or "fade"
+    durations = [max(0.1, _probe_media(clip, ffmpeg).get("duration") or 0.0) for clip in clips]
+    if any(d <= xfade_s for d in durations):
+        return False
+    inputs: list[str] = []
+    for clip in clips:
+        inputs += ["-i", clip.as_posix()]
+    vlabels = [f"[{i}:v]" for i in range(len(clips))]
+    alabels = [f"[{i}:a]" for i in range(len(clips))]
+    steps: list[str] = []
+    prev_v, prev_a = vlabels[0], alabels[0]
+    offset = 0.0
+    for i in range(1, len(clips)):
+        offset += durations[i - 1] - xfade_s
+        out_v, out_a = f"[v{i}]", f"[a{i}]"
+        steps.append(f"{prev_v}{vlabels[i]}xfade=transition={transition}:duration={xfade_s}:offset={offset:.3f}{out_v}")
+        steps.append(f"{prev_a}{alabels[i]}acrossfade=d={xfade_s}{out_a}")
+        prev_v, prev_a = out_v, out_a
+    command = [
+        ffmpeg, "-y", *inputs,
+        "-filter_complex", ";".join(steps),
+        "-map", prev_v, "-map", prev_a,
+        "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-ar", "48000", "-ac", "2",
+        "-movflags", "+faststart", output.as_posix(),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return completed.returncode == 0 and output.is_file()
+
+
+def _compose_concat(clips: list[Path], output: Path, ffmpeg: str) -> None:
     concat_file = output.parent / "concat-list.txt"
     concat_file.write_text(
-        "\n".join(_concat_line(path) for path in normalized) + "\n",
+        "\n".join(_concat_line(path) for path in clips) + "\n",
         encoding="utf-8",
     )
     command = [
-        ffmpeg,
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        concat_file.as_posix(),
-        "-c",
-        "copy",
-        output.as_posix(),
+        ffmpeg, "-y", "-f", "concat", "-safe", "0",
+        "-i", concat_file.as_posix(), "-c", "copy", output.as_posix(),
     ]
     completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if completed.returncode != 0 or not output.is_file():
