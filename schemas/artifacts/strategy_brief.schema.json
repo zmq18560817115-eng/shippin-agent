@@ -12,6 +12,6 @@
     "hook_options": {"type": "array", "items": {"type": "string"}},
     "cta_options": {"type": "array", "items": {"type": "string"}},
     "forbidden_claims": {"type": "array", "items": {"type": "string"}},
-    "product_guardrails": {"type": "string"}
+    "product_guardrails": {"type": "object"}
   }
 }

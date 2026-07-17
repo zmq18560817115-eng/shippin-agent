@@ -307,6 +307,11 @@ def home() -> RedirectResponse:
     return RedirectResponse("/login", status_code=303)
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(WEB_ROOT / "favicon.svg", media_type="image/svg+xml")
+
+
 @app.get("/login", include_in_schema=False)
 def login_page() -> FileResponse:
     return FileResponse(WEB_ROOT / "login.html", headers={"Cache-Control": "no-store"})

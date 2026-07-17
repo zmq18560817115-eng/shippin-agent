@@ -107,8 +107,18 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
                     "Use scenario and detail references only as prompt guidance. "
                     f"Shot role: {role}. Voiceover: {section['voiceover_en']}"
                 ),
-                "visual_zh": "请在真实生成时查看场景、动作和产品外观。",
-                "seedance_prompt_zh": "连续性锁定：同一场景、人物、产品外观与道具；仅作为中文审核提示。",
+                "visual_zh": " ".join(
+                    value for value in (
+                        str(section.get("scene_zh") or ""),
+                        str(section.get("action_zh") or ""),
+                    ) if value
+                ) or "请在真实生成时查看场景、动作和产品外观。",
+                "seedance_prompt_zh": (
+                    "连续性锁定：同一场景、人物、服装、产品外观与道具，五镜保持一致。"
+                    "产品外观须匹配白底身份图；恒温杯与奶瓶为两个独立产品，禁止将奶瓶插入或贴合到杯中。"
+                    "若画面显示温度，只能显示 98 华氏度，禁止摄氏度。"
+                    f"本镜角色：{role}。画面：{section.get('action_zh') or section.get('scene_zh') or ''}"
+                ),
                 "footage_type": "AI_VIDEO" if role in {"方案", "证明", "行动号召"} else "AI_BROLL",
                 "camera_motion": {
                     "type": "dolly_in" if number == 1 else "static",

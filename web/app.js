@@ -595,13 +595,17 @@ function renderProductLibrary() {
   host.innerHTML = state.productLibrary.map(renderProductItem).join("");
 }
 
+function severityLabel(severity) {
+  return { BLOCKED: "⛔ 阻断", WARNING: "⚠ 提醒", INFO: "提示" }[String(severity || "").toUpperCase()] || String(severity || "提示");
+}
+
 function renderProductItem(product) {
   const issues = product.issues || [];
   const counts = formatCounts(product.counts || {});
   const blockers = issues.filter((issue) => issue.severity === "BLOCKED").length;
   const status = product.ready ? "可生产" : `${blockers || issues.length} 项阻塞`;
   const issueText = issues.length
-    ? issues.map((issue) => `${issue.severity}: ${issue.message}`).join(" · ")
+    ? issues.map((issue) => `${severityLabel(issue.severity)}：${issue.message}`).join(" · ")
     : "素材规则通过";
   const sourceText = product.seedance_source
     ? compactPath(product.seedance_source, 4)
