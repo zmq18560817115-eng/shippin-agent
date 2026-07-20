@@ -20,6 +20,8 @@ const state = {
   currentView: "projects",
   selectedRevision: "",
   showAllProjects: false,
+  collectionJobs: [],
+  selectedCollectionJobId: null,
 };
 
 const views = {
@@ -245,11 +247,15 @@ async function boot() {
   await loadProductLibrary();
   await loadProducts();
   await loadAutoCollector();
+  await loadCollectionJobs();
   await refreshProjects();
   window.setInterval(() => {
     if (!document.hidden) refreshProjects({ silent: true });
   }, 10000);
   window.setInterval(() => loadAutoCollector(), 15000);
+  window.setInterval(() => {
+    if (!document.hidden) loadCollectionJobs({ silent: true });
+  }, 5000);
 }
 
 async function loadWorkbenchSession() {
@@ -304,6 +310,7 @@ function bindEvents() {
   $("#crawlForm").addEventListener("submit", crawlTikTok);
   $("#saveAutoCrawl").addEventListener("click", saveAutoCollector);
   $("#stopAutoCrawl").addEventListener("click", stopAutoCollector);
+  $("#refreshCollectionJobs").addEventListener("click", () => loadCollectionJobs());
   $("#runtimeMode").addEventListener("change", updateRuntimeModeHint);
   $("#crawlTargetType").addEventListener("change", updateCrawlTargetUI);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
@@ -754,30 +761,124 @@ async function crawlTikTok(event) {
     return;
   }
   button.disabled = true;
-  beginOperation("正在发现、下载并分析 TikTok 素材", 150);
-  $("#crawlState").textContent = "发现与下载中";
+  beginOperation("正在创建后台采集任务", 5);
+  $("#crawlState").textContent = "正在创建任务";
   try {
-    const payload = await api("/api/v2/collect/tiktok/crawl", {
+    const payload = await api("/api/v2/collect/jobs", {
       method: "POST",
       body: JSON.stringify({
         target_type: targetType,
         provider: $("#crawlProvider").value,
         target,
-        limit: Number($("#crawlLimit").value || 3),
+        requested_count: Number($("#crawlLimit").value || 6),
         product_id: $("#productSelect").value,
         mock: $("#runtimeMode").value !== "real",
       }),
     });
-    if (payload.results?.length) state.selectedId = payload.results[0].project_id;
-    toast(`发现 ${payload.discovered_count} 条，完成 ${payload.completed_count} 条，失败 ${payload.failed_count} 条`);
-    await refreshProjects();
-    if (payload.results?.length) continueCurrentProject();
+    state.selectedCollectionJobId = payload.job.id;
+    toast(`采集任务 #${payload.job.id} 已进入后台队列`);
+    await loadCollectionJobs();
   } catch (error) {
     toast(error.message, "error");
   } finally {
     button.disabled = false;
     $("#crawlState").textContent = "";
     endOperation();
+  }
+}
+
+const collectionStatusLabels = {
+  queued: "排队中",
+  running: "采集中",
+  paused: "已暂停",
+  succeeded: "已完成",
+  partial: "部分完成",
+  failed: "失败",
+  cancelled: "已取消",
+  discovered: "已发现",
+  filtered: "已过滤",
+  downloading: "下载中",
+  downloaded: "已下载",
+  transcribing: "转写中",
+  analyzing: "分析中",
+  ready: "可用",
+};
+
+function collectionStatusLabel(value) {
+  return collectionStatusLabels[String(value || "")] || String(value || "未知");
+}
+
+async function loadCollectionJobs({ silent = false } = {}) {
+  try {
+    const payload = await api("/api/v2/collect/jobs?limit=12");
+    state.collectionJobs = payload.jobs || [];
+    renderCollectionJobs();
+    if (state.selectedCollectionJobId) await loadCollectionJobDetail(state.selectedCollectionJobId);
+  } catch (error) {
+    if (!silent) toast(`无法读取采集任务：${error.message}`, "error");
+  }
+}
+
+function renderCollectionJobs() {
+  const host = $("#collectionJobList");
+  if (!state.collectionJobs.length) {
+    host.className = "collectionJobList emptyState";
+    host.textContent = "暂无采集任务。输入关键词后点击“立即抓取并分析”即可创建。";
+    return;
+  }
+  host.className = "collectionJobList";
+  host.innerHTML = state.collectionJobs.map((job) => {
+    const progress = job.progress || {};
+    const requested = Number(progress.requested || job.requested_count || 0);
+    const analyzed = Number(progress.analyzed || 0);
+    const percent = requested ? Math.min(100, Math.round(analyzed / requested * 100)) : 0;
+    return `<article class="collectionJobCard ${job.id === state.selectedCollectionJobId ? "active" : ""}">
+      <button type="button" class="collectionJobOpen" data-collection-job="${job.id}" aria-label="查看采集任务 ${job.id}">
+        <span><strong>${escapeHtml(job.target || "热门视频")}</strong><small>#${job.id} · ${escapeHtml(collectionStatusLabel(job.status))}</small></span>
+        <span class="collectionJobNumbers">相关 ${Number(progress.relevant || 0)} · 已分析 ${analyzed}/${requested} · 失败 ${Number(progress.failed || 0)}</span>
+        <span class="collectionProgress"><i style="width:${percent}%"></i></span>
+      </button>
+      ${["queued", "paused"].includes(job.status) ? `<button type="button" class="collectionCancel" data-cancel-job="${job.id}">取消</button>` : ""}
+    </article>`;
+  }).join("");
+  host.querySelectorAll("[data-collection-job]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.selectedCollectionJobId = Number(button.dataset.collectionJob);
+      renderCollectionJobs();
+      await loadCollectionJobDetail(state.selectedCollectionJobId);
+    });
+  });
+  host.querySelectorAll("[data-cancel-job]").forEach((button) => {
+    button.addEventListener("click", () => cancelCollectionJob(Number(button.dataset.cancelJob)));
+  });
+}
+
+async function loadCollectionJobDetail(jobId) {
+  const host = $("#collectionJobDetail");
+  try {
+    const payload = await api(`/api/v2/collect/jobs/${jobId}`);
+    const items = payload.items || [];
+    host.hidden = false;
+    host.innerHTML = `<div class="collectionDetailHead"><strong>任务 #${jobId} 素材明细</strong><span>${items.length} 条候选</span></div>
+      ${items.length ? `<div class="collectionItems">${items.map((item) => `<article>
+        ${item.cover_url ? `<img src="${escapeAttr(item.cover_url)}" alt="" loading="lazy" />` : `<span class="collectionCoverPlaceholder">无封面</span>`}
+        <div><strong>${escapeHtml(item.title || "未命名 TikTok 素材")}</strong><small>${escapeHtml(item.author_name || "未知作者")} · 相关度 ${Math.round(Number(item.relevance_score || 0) * 100)}%</small><a href="${escapeAttr(item.source_url)}" target="_blank" rel="noopener">查看来源</a></div>
+        <span class="collectionItemStatus ${statusClass(item.status)}">${escapeHtml(collectionStatusLabel(item.status))}</span>
+        ${item.error_message ? `<p>${escapeHtml(item.error_message)}</p>` : ""}
+      </article>`).join("")}</div>` : `<div class="emptyState">任务已创建，等待发现候选素材。</div>`}`;
+  } catch (error) {
+    host.hidden = false;
+    host.innerHTML = `<div class="emptyState">无法读取任务详情：${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function cancelCollectionJob(jobId) {
+  try {
+    await api(`/api/v2/collect/jobs/${jobId}/cancel`, { method: "POST" });
+    toast(`采集任务 #${jobId} 已取消`);
+    await loadCollectionJobs();
+  } catch (error) {
+    toast(error.message, "error");
   }
 }
 

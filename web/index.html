@@ -118,7 +118,7 @@
           </label>
           <label>
             每轮数量
-            <input id="crawlLimit" type="number" min="1" max="20" value="6" />
+            <input id="crawlLimit" type="number" min="1" max="100" value="6" />
           </label>
           <label>
             后台频率
@@ -136,6 +136,17 @@
           </div>
         </form>
         <div id="autoCrawlStatus" class="autoCrawlStatus">正在读取后台自动采集状态...</div>
+        <section class="collectionQueue" aria-labelledby="collectionQueueTitle">
+          <div class="collectionQueueHead">
+            <div>
+              <strong id="collectionQueueTitle">后台采集任务</strong>
+              <small>抓取、去重、下载、转写与分析均在服务器后台持续执行。</small>
+            </div>
+            <button type="button" id="refreshCollectionJobs">刷新任务</button>
+          </div>
+          <div id="collectionJobList" class="collectionJobList emptyState">暂无采集任务</div>
+          <div id="collectionJobDetail" class="collectionJobDetail" hidden></div>
+        </section>
         <details class="advancedIntake directIntake">
           <summary><span><strong>补充：直接导入视频链接</strong><small>仅用于已知链接、临时补充或单条快速分析</small></span><span>展开</span></summary>
           <form class="collectForm quickIntake" id="collectForm">
