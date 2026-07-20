@@ -269,8 +269,27 @@ function endOperation() {
   state.operation = null;
 }
 
+function installCommandIcons(root = document) {
+  const rules = [
+    [/刷新/, "refresh-cw"], [/下载/, "download"], [/(开始|运行|生成|抓取)/, "play"],
+    [/(保存|通过|确认|选用)/, "check"], [/(新增|增加)/, "plus"], [/删除/, "trash-2"],
+    [/(打开|查看)/, "arrow-up-right"], [/(停止|取消)/, "square"], [/(重试|重跑|重做)/, "rotate-cw"],
+    [/合成/, "clapperboard"], [/反馈/, "message-square"], [/(拒绝|退回)/, "undo-2"], [/关闭/, "x"],
+  ];
+  root.querySelectorAll("button:not([data-icon-ready]), .buttonLink:not([data-icon-ready])").forEach((button) => {
+    button.dataset.iconReady = "true";
+    if (button.querySelector("svg, [data-lucide]")) return;
+    const match = rules.find(([pattern]) => pattern.test(button.textContent.trim()));
+    if (!match) return;
+    button.classList.add("iconAction");
+    button.insertAdjacentHTML("afterbegin", `<i data-lucide="${match[1]}"></i>`);
+  });
+  window.lucide?.createIcons({ attrs: { "stroke-width": 1.8 } });
+}
+
 async function boot() {
   bindEvents();
+  installCommandIcons();
   await loadWorkbenchSession();
   const initialView = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
   showView(views[initialView] ? initialView : "projects", { updateUrl: false });
@@ -281,6 +300,7 @@ async function boot() {
   await loadAutoCollector();
   await loadCollectionJobs();
   await refreshProjects();
+  installCommandIcons();
   window.setInterval(() => {
     if (!document.hidden) refreshProjects({ silent: true });
   }, 10000);
@@ -1491,6 +1511,7 @@ function renderPanels() {
     renderComposeNode();
   }
   if (state.currentView === "delivery") renderDelivery();
+  installCommandIcons();
 }
 
 function renderScriptGate() {

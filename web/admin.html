@@ -5,30 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂 · 管理后台</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/portal.css?v=20260716-2" />
+    <link rel="stylesheet" href="/static/portal.css?v=20260720-2" />
   </head>
   <body class="adminPage">
     <header class="adminTopbar">
-      <div class="adminBrand"><span class="productMark">VF</span><div><h1>视频内容工厂</h1><p>运行治理与数据分析</p></div></div>
-      <div class="adminActions"><span id="adminUser">管理员</span><a href="/workbench">进入生产工作台</a><button id="logout">退出</button></div>
+      <div class="adminBrand"><span class="productMark">VF</span><div><h1>管理中心</h1><p>视频内容工厂</p></div></div>
+      <div class="adminActions"><span id="adminUser">管理员</span><a class="iconAction" href="/workbench"><i data-lucide="panels-top-left"></i>生产工作台</a><button class="iconAction" id="logout"><i data-lucide="log-out"></i>退出</button></div>
     </header>
     <main class="adminWorkspace">
-      <section class="adminIntro"><div><span>ADMIN CONSOLE</span><h2>系统运行总览</h2><p>项目、任务、成本、素材和存储状态</p></div><button id="refreshAdmin">刷新数据</button></section>
+      <section class="adminIntro"><div><span>OVERVIEW</span><h2>系统总览</h2></div><button class="iconAction" id="refreshAdmin"><i data-lucide="refresh-cw"></i>刷新</button></section>
       <section id="stats" class="statsGrid"></section>
       <section class="adminColumns">
-        <div class="adminPanel"><div class="panelHead"><h3>项目状态</h3><span id="projectTotal"></span></div><div id="projectStates" class="stateBars"></div></div>
-        <div class="adminPanel"><div class="panelHead"><h3>采集与模型后端</h3><span>实时配置状态</span></div><div id="backendStates" class="backendList"></div></div>
+        <div class="adminPanel"><div class="panelHead"><div><i data-lucide="activity"></i><h3>项目状态</h3></div><span id="projectTotal"></span></div><div id="projectStates" class="stateBars"></div></div>
+        <div class="adminPanel"><div class="panelHead"><div><i data-lucide="server-cog"></i><h3>服务状态</h3></div><span>实时</span></div><div id="backendStates" class="backendList"></div></div>
       </section>
       <section class="adminPanel registrationRequestsPanel">
-        <div class="panelHead"><div><h3>账号申请</h3><span>审核通过后自动创建普通操作员账号；密码仅保存加密摘要。</span></div><span id="registrationRequestCount"></span></div>
+        <div class="panelHead"><div><i data-lucide="user-round-check"></i><h3>账号申请</h3></div><span id="registrationRequestCount"></span></div>
         <div class="tableScroll"><table><thead><tr><th>账号</th><th>姓名</th><th>申请时间</th><th>状态</th><th>审核</th></tr></thead><tbody id="registrationRequestRows"></tbody></table></div>
       </section>
       <section class="adminPanel userPanel">
-        <div class="panelHead"><div><h3>成员账号</h3><span>管理员创建账号，密码只保存加密摘要</span></div><button id="openUserDialog" class="primaryAdmin">新增成员</button></div>
+        <div class="panelHead"><div><i data-lucide="users"></i><h3>成员账号</h3></div><button id="openUserDialog" class="primaryAdmin iconAction"><i data-lucide="user-plus"></i>新增成员</button></div>
         <div class="tableScroll"><table><thead><tr><th>账号</th><th>姓名</th><th>角色</th><th>状态</th><th>最近登录</th><th>操作</th></tr></thead><tbody id="userRows"></tbody></table></div>
       </section>
-      <section class="adminPanel"><div class="panelHead"><h3>近期项目</h3><span>最近更新 12 条</span></div><div class="tableScroll"><table><thead><tr><th>项目编号</th><th>产品</th><th>状态</th><th>更新时间</th><th>入口</th></tr></thead><tbody id="recentProjects"></tbody></table></div></section>
-      <section class="adminPanel"><div class="panelHead"><h3>近期失败节点</h3><span>用于定位供应商、素材和流程问题</span></div><div id="recentFailures" class="failureList"></div></section>
+      <section class="adminPanel"><div class="panelHead"><div><i data-lucide="list-filter"></i><h3>近期项目</h3></div><span>最近 12 条</span></div><div class="tableScroll"><table><thead><tr><th>项目编号</th><th>产品</th><th>状态</th><th>更新时间</th><th>入口</th></tr></thead><tbody id="recentProjects"></tbody></table></div></section>
+      <section class="adminPanel"><div class="panelHead"><div><i data-lucide="circle-alert"></i><h3>异常节点</h3></div><span>等待处理</span></div><div id="recentFailures" class="failureList"></div></section>
     </main>
     <dialog id="userDialog">
       <form id="userForm" class="userForm">
@@ -41,6 +41,7 @@
         <div class="dialogActions"><button type="button" id="cancelUserDialog">取消</button><button type="submit" class="primaryAdmin">创建账号</button></div>
       </form>
     </dialog>
-    <script src="/static/admin.js?v=20260716-3"></script>
+    <script src="/static/vendor/lucide.min.js"></script>
+    <script src="/static/admin.js?v=20260720-2"></script>
   </body>
 </html>

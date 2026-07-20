@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260716-2" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260720-2" />
   </head>
   <body>
     <header class="topbar">
@@ -17,23 +17,22 @@
         </div>
       </div>
       <div class="topActions">
-        <a class="topLink" href="/admin" id="adminEntry"><span class="desktopLabel">管理后台</span><span class="mobileLabel">后台</span></a>
-        <button type="button" class="quietButton" id="logoutWorkbench">退出</button>
-        <button type="button" id="continueProject" class="continueButton" disabled><span class="desktopLabel">继续当前节点</span><span class="mobileLabel">继续</span></button>
+        <a class="topLink iconAction" href="/admin" id="adminEntry"><i data-lucide="chart-no-axes-combined"></i><span class="desktopLabel">管理后台</span><span class="mobileLabel">后台</span></a>
+        <button type="button" class="quietButton iconAction" id="logoutWorkbench"><i data-lucide="log-out"></i><span class="desktopLabel">退出</span></button>
+        <button type="button" id="continueProject" class="continueButton iconAction" disabled><i data-lucide="arrow-right"></i><span class="desktopLabel">继续当前节点</span><span class="mobileLabel">继续</span></button>
         <div class="operationStatus" id="operationStatus" hidden></div>
         <div class="health" id="health">连接中</div>
       </div>
     </header>
 
     <nav class="workflowNav" aria-label="制作流程">
-      <div class="navLabel">工作流程</div>
-      <button type="button" data-view="projects" class="active"><span>01</span><strong>项目</strong><small>创建与任务队列</small></button>
-      <button type="button" data-view="assets"><span>02</span><strong>素材采集</strong><small>产品库与参考视频</small></button>
-      <button type="button" data-view="script"><span>03</span><strong>脚本</strong><small>策略、拆解与确认</small></button>
-      <button type="button" data-view="storyboard"><span>04</span><strong>分镜</strong><small>镜头与关键帧</small></button>
-      <button type="button" data-view="production"><span>05</span><strong>制作</strong><small>单镜生成与合成</small></button>
-      <button type="button" data-view="delivery"><span>06</span><strong>交付</strong><small>质检、下载与反馈</small></button>
-      <div class="navFoot">人工闸门会暂停流程，确认后从当前节点继续。</div>
+      <div class="navLabel">生产流程</div>
+      <button type="button" data-view="projects" class="active"><i data-lucide="folder-kanban"></i><strong>项目</strong></button>
+      <button type="button" data-view="assets"><i data-lucide="database"></i><strong>素材采集</strong></button>
+      <button type="button" data-view="script"><i data-lucide="file-pen-line"></i><strong>脚本</strong></button>
+      <button type="button" data-view="storyboard"><i data-lucide="layout-grid"></i><strong>分镜</strong></button>
+      <button type="button" data-view="production"><i data-lucide="clapperboard"></i><strong>制作</strong></button>
+      <button type="button" data-view="delivery"><i data-lucide="package-check"></i><strong>交付</strong></button>
     </nav>
 
     <main class="workspace">
@@ -66,7 +65,7 @@
             参考素材编号（可选）
             <input id="linkInput" name="link_id" inputmode="numeric" placeholder="例如 101" />
           </label>
-          <button type="submit">开始生产</button>
+          <button type="submit" class="iconAction"><i data-lucide="play"></i>开始生产</button>
           <small id="runtimeModeHint" class="runtimeModeHint">用于完整流程演练：生成带演练标记的可播放 720P 成片，不调用外部模型。</small>
         </form>
       </section>
@@ -304,7 +303,7 @@
 
       <section class="band" id="productionNode" data-view-section="production" hidden>
         <div class="sectionHead">
-          <h2>单镜生产节点</h2>
+          <h2>单镜生产</h2>
           <span id="productionNodeState"></span>
         </div>
         <div class="standaloneLauncher" data-standalone-action="production">
@@ -318,7 +317,7 @@
 
       <section class="band" id="composeNode" data-view-section="production" hidden>
         <div class="sectionHead">
-          <h2>合成节点</h2>
+          <h2>成片合成</h2>
           <span>目标成片 30 秒</span>
         </div>
         <div id="composePanel" class="emptyState">等待成功镜头</div>
@@ -326,7 +325,7 @@
 
       <section class="band" id="deliveryNode" data-view-section="delivery" hidden>
         <div class="sectionHead">
-          <h2>交付区</h2>
+          <h2>交付</h2>
           <span id="deliveryState"></span>
         </div>
         <div id="deliveryPanel" class="emptyState">暂无可交付项目</div>
@@ -334,6 +333,7 @@
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js?v=20260716-2"></script>
+    <script src="/static/vendor/lucide.min.js"></script>
+    <script src="/static/app.js?v=20260720-2"></script>
   </body>
 </html>

@@ -160,3 +160,107 @@ dialog::backdrop { background: rgba(17, 26, 47, .62); }
   .adminColumns { grid-template-columns: 1fr; }
   .backendList { grid-template-columns: 1fr; }
 }
+
+/* 2026-07-20 unified admin analytics theme */
+:root {
+  --navy: #0f172a;
+  --purple: #2563eb;
+  --blue-soft: #eaf1ff;
+  --green: #16a34a;
+  --orange: #f59e0b;
+  --red: #ef4444;
+  --line: #e2e8f0;
+  --muted: #64748b;
+}
+
+.adminPage { background: #f6f8fc; color: #0f172a; }
+.adminTopbar {
+  min-height: 64px;
+  padding: 9px 28px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255,255,255,.96);
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15,23,42,.04);
+}
+.adminBrand .productMark { border-radius: 8px; background: var(--purple); }
+.adminBrand p { color: var(--muted); }
+.adminActions { color: var(--muted); }
+.adminActions a, .adminActions button, #refreshAdmin { border-color: #cbd5e1; background: #fff; color: #334155; }
+.iconAction { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.iconAction svg { width: 16px; height: 16px; }
+
+.adminWorkspace { width: min(1480px, 100%); padding: 26px 30px 56px; }
+.adminIntro { border: 0; padding: 6px 0 18px; }
+.adminIntro span { color: var(--purple); letter-spacing: .08em; }
+.adminIntro h2 { margin-top: 5px; font-size: 25px; }
+
+.statsGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  border: 0;
+}
+.statsGrid article.metricCard {
+  min-height: 116px;
+  display: grid;
+  grid-template-columns: 42px minmax(0,1fr);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15,23,42,.04);
+}
+.metricIcon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: var(--purple) !important;
+}
+.metricIcon svg { width: 20px; height: 20px; }
+.metricCard > div { min-width: 0; display: grid; gap: 3px; }
+.statsGrid .metricCard strong { font-size: 23px; line-height: 1.1; }
+.metric-green .metricIcon { background: #ecfdf3; color: var(--green) !important; }
+.metric-orange .metricIcon { background: #fff7e6; color: #d97706 !important; }
+.metric-red .metricIcon { background: #fef2f2; color: var(--red) !important; }
+.metric-violet .metricIcon { background: #f3efff; color: #7c3aed !important; }
+.metric-cyan .metricIcon { background: #ecfeff; color: #0891b2 !important; }
+
+.adminColumns { grid-template-columns: minmax(0,1.15fr) minmax(0,.85fr); gap: 14px; margin-top: 14px; }
+.adminPanel { margin-top: 14px; border-color: var(--line); border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+.panelHead { margin-bottom: 16px; }
+.panelHead > div { display: flex; align-items: center; gap: 8px; }
+.panelHead > div svg { width: 17px; height: 17px; color: var(--purple); }
+.panelHead h3 { font-size: 15px; }
+.panelHead span { font-size: 12px; }
+
+.stateBars { gap: 15px; }
+.stateBars div { padding-bottom: 9px; }
+.stateBars i { height: 6px; border-radius: 999px; background: var(--purple); }
+.backendList div { border-radius: 6px; border-bottom: 0; padding: 10px; background: #f8fafc; }
+.backendList strong { border-radius: 999px; padding: 3px 7px; background: #fff; }
+.backendList .ready { background: #ecfdf3; }
+.backendList .missing { background: #fef2f2; }
+
+table { min-width: 720px; }
+th { background: #f8fafc; color: #64748b; font-weight: 650; }
+th:first-child { border-radius: 6px 0 0 6px; }
+th:last-child { border-radius: 0 6px 6px 0; }
+td { color: #334155; }
+.statusTag { border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 650; }
+.primaryAdmin { border-radius: 6px; background: var(--purple) !important; }
+.tableAction { border-radius: 6px; }
+dialog { border: 0; border-radius: 8px; }
+
+@media (max-width: 1100px) {
+  .statsGrid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media (max-width: 700px) {
+  .adminWorkspace { padding: 18px 14px 40px; }
+  .statsGrid { grid-template-columns: 1fr; }
+  .statsGrid article.metricCard { min-height: 96px; }
+  .adminColumns { grid-template-columns: 1fr; }
+}

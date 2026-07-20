@@ -1155,6 +1155,168 @@ summary:focus-visible {
   }
 }
 
+/* 2026-07-20 unified light data-product visual system */
+:root {
+  --bg: #f6f8fc;
+  --surface: #ffffff;
+  --surface-subtle: #f8faff;
+  --line: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --muted-strong: #475569;
+  --blue: #2563eb;
+  --blue-soft: #eaf1ff;
+  --teal: #0891b2;
+  --green: #16a34a;
+  --amber: #d97706;
+  --red: #dc2626;
+  --ink: #1e293b;
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+body { background: var(--bg); }
+
+.iconAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.iconAction svg,
+.workflowNav svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.topbar {
+  min-height: 64px;
+  padding: 10px 24px;
+  border-color: var(--line);
+  box-shadow: var(--shadow-xs);
+}
+
+.brandMark {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--blue);
+}
+
+.topbar h1 { font-size: 17px; }
+.topbar p { font-size: 12px; }
+.health { min-width: auto; border: 0; background: #ecfdf3; color: var(--green); }
+.continueButton { border-color: var(--blue); background: var(--blue); box-shadow: 0 4px 12px rgba(37, 99, 235, .16); }
+
+.workflowNav {
+  top: 64px;
+  width: 196px;
+  gap: 4px;
+  padding: 22px 12px;
+  border-color: var(--line);
+}
+
+.workflowNav .navLabel {
+  margin: 0 10px 8px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.workflowNav button {
+  min-height: 44px;
+  grid-template-columns: 24px 1fr;
+  grid-template-rows: 1fr;
+  gap: 8px;
+  border-radius: 7px;
+  padding: 9px 11px;
+  color: var(--muted-strong);
+}
+
+.workflowNav button:hover { background: #f8fafc; color: var(--text); }
+.workflowNav button.active { background: var(--blue-soft); color: var(--blue); }
+.workflowNav button.active::before { width: 3px; background: var(--blue); }
+.workflowNav button strong { font-size: 14px; }
+
+.workspace {
+  width: min(1440px, calc(100% - 196px));
+  margin-left: 196px;
+  padding: 0 clamp(20px, 3vw, 42px) 56px;
+}
+
+.viewIntro {
+  min-height: 116px;
+  padding: 28px 0 18px;
+  border-color: var(--line);
+}
+
+.viewIntro > div > span { color: var(--blue); font-size: 11px; font-weight: 750; }
+.viewIntro h2 { margin: 4px 0 0; font-size: 24px; }
+.viewIntro p { display: none; }
+.currentStage { border: 0; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 12px; }
+
+.band {
+  margin: 16px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.sectionHead { min-height: 34px; margin-bottom: 16px; border: 0; padding: 0; }
+.sectionHead h2 { font-size: 16px; }
+.sectionHead > span { font-size: 12px; }
+.headActions { gap: 8px; }
+
+.startBar { gap: 12px; }
+.startBar label, label { color: var(--muted-strong); font-size: 12px; font-weight: 600; }
+input, select, textarea { border-color: #cbd5e1; border-radius: 6px; }
+input:focus, select:focus, textarea:focus { border-color: var(--blue); outline: 3px solid rgba(37, 99, 235, .1); }
+button, .buttonLink { border-color: #cbd5e1; color: var(--ink); }
+button.primary, .primary, .startBar > button { border-color: var(--blue); background: var(--blue); color: #fff; }
+
+.nodeTools,
+.standaloneLauncher {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 16px 0 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.nodeToolHead { margin-bottom: 10px; }
+.nodeToolHead strong { font-size: 14px; }
+.nodeToolHead span { color: var(--muted); font-size: 12px; }
+.advancedIntake { border-color: var(--line); border-radius: 7px; background: var(--surface-subtle); }
+.advancedIntake > summary { padding: 13px 14px; }
+.agentContract, .backendStrip, .autoCrawlStatus { border-radius: 6px; }
+
+.statusTag,
+.scoreChips span,
+.readinessBadge,
+.mediaState {
+  border-radius: 999px;
+  font-weight: 650;
+}
+
+.projectTable th { background: #f8fafc; }
+.projectTable tbody tr:hover td { background: #f8faff; }
+.emptyState { color: var(--muted); }
+
+@media (max-width: 900px) {
+  .workflowNav { top: 59px; width: 100%; }
+  .workflowNav button { display: inline-flex; align-items: center; gap: 7px; }
+  .workflowNav button svg { display: none; }
+  .workspace { width: 100%; margin-left: 0; padding-inline: 12px; }
+  .viewIntro { min-height: 88px; padding-top: 18px; }
+  .band { padding: 16px; }
+}
+
 /* Keep the clarity layer authoritative after legacy component declarations. */
 .nodeTools,
 .standaloneLauncher,
