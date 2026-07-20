@@ -51,6 +51,11 @@ def assess_storyboard(plan: dict[str, Any], script: dict[str, Any] | None = None
         _check("no_generated_text", not any(token in visual_copy for token in ("配文", "字幕", "文字叠加", "屏幕文字", "标题文字", "slogan", "caption", "overlay text")), "生成画面不得要求字幕、配文或其他可读文字"),
         _check("visual_specificity", _all_min_length(shots, "visual_zh", 20), "每镜必须写清主体位置、环境和可见动作，不能只给抽象风格词"),
         _check("prompt_specificity", _all_min_length(shots, "seedance_prompt_zh", 24), "每镜生成提示必须具体、可执行并包含连续性线索"),
+        _check(
+            "production_prompt_contract",
+            bool(prompts) and all(all(token in prompt.casefold() for token in ("continuity lock", "product identity lock", "action continuity", "camera contract", "negative constraints")) for prompt in prompts),
+            "每镜提示词必须统一包含场景连续性、产品身份、动作承接、镜头语言与负面约束",
+        ),
     ]
     product_id = str((script or {}).get("product_id") or "")
     if "恒温杯" in product_id and len(shots) >= 4:

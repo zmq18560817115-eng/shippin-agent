@@ -55,6 +55,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "每镜只返回 visual、visual_zh、seedance_prompt、seedance_prompt_zh 和 camera_motion.type。"
                     "先给五镜分配不同视觉任务：建立空间、表现冲突、发现方案、看清关键动作、情绪收束。至少使用三种景别或运镜，禁止五镜同构图。"
                     "每镜只设计一个主要动作，并写清主体在画面中的位置、景别、机位高度、光线、前后景关系和镜头结束状态。"
+                    "每个 seedance_prompt_zh 必须按顺序写清：场景环境、主体位置、产品动作、景别与镜头焦段、机位与运镜、光线、连续性锚点、禁止项、镜头结束状态。"
                     "下一镜开场要继承上一镜的主体位置、动作方向与视线；运镜以缓慢推近、平移或拉远为主，避免跳轴和无动机炫技。"
                     "提示词必须具体可见，禁止使用高级感、氛围感、电影感等空词代替画面设计；不得要求字幕、配文、标语、标签、Logo 或其他可读文字。"
                     "每个文字字段保持简洁，不在逐镜重复全局产品规则。五镜依次完成喂养准备、等待痛点、独立恒温杯出现、正确倒液、产品与人物共同收束。"
@@ -186,6 +187,8 @@ def _lock_prompt(
         "The warming cup and baby bottle are separate products. Never insert or attach a bottle, nipple, carton, or commercial milk bottle to the cup. "
         f"{display_contract}"
         f"Action continuity for shot {shot_index}: {_shot_action(shot_index)} "
+        f"Camera contract: {_shot_camera_contract(shot_index)} "
+        "Negative constraints: no malformed hands, duplicated props, warped product body, unreadable display, invented accessories, jump cuts, or continuity breaks. "
     )
     prompt = lock + prompt
     if voiceover and shot_index not in {3, 4}:
@@ -251,6 +254,16 @@ def _shot_action(index: int) -> str:
         4: "continue from heating/preparation; tilt the cup and pour through its round spout into a separate clean baby bottle.",
         5: "settle the product back into the established scene and hold a clean final CTA frame.",
     }.get(index, "continue the previous action without a scene or identity change.")
+
+
+def _shot_camera_contract(index: int) -> str:
+    return {
+        1: "24mm wide establishing frame at eye level, slow dolly in, end with the product anchored on the right third.",
+        2: "50mm medium close-up at chest height, restrained lateral move, preserve the established screen direction.",
+        3: "70mm hand-and-product close-up from slightly above, static support, end after liquid enters the cup.",
+        4: "85mm macro close-up level with the round spout, gentle follow move, keep the outbound pour direction readable.",
+        5: "35mm medium-wide closing frame at eye level, slow dolly out, hold a stable product-and-caregiver composition.",
+    }.get(index, "50mm neutral framing at eye level with motivated, restrained movement.")
 
 
 def _motion_type(value: str) -> str:

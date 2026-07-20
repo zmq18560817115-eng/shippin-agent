@@ -94,9 +94,13 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
                 "seedance_prompt": (
                     "Continuity lock: same location, lighting, caregiver, wardrobe, hands, and props across all five shots. "
                     "Product appearance must match the white-background hero reference. "
+                    "Product identity lock: preserve the approved proportions, lid, ring, spout, display, button, and port cover. "
                     "The warming cup and baby bottle are separate products; never insert or attach the bottle to the cup. "
                     "If visible, the display reads 98 degrees Fahrenheit (98 F), never Celsius. "
                     "Use scenario and detail references only as prompt guidance. "
+                    f"Action continuity for shot {number}: one motivated action that begins from the previous shot end state. "
+                    f"Camera contract: shot {number} uses a distinct lens, framing, camera height, and restrained movement. "
+                    "Negative constraints: no malformed hands, duplicated props, warped product, invented text, jump cuts, or continuity breaks. "
                     f"Shot role: {role}. Voiceover: {section.get('voiceover_zh', '')}. "
                     + ("Pour from the warming cup through the round spout into a separate clean baby bottle." if number == 4 else "")
                 ),

@@ -319,11 +319,6 @@ if WEB_ROOT.exists():
     app.mount("/static", StaticFiles(directory=WEB_ROOT), name="static")
 
 
-@app.get("/favicon.ico", include_in_schema=False)
-def favicon() -> RedirectResponse:
-    return RedirectResponse("/static/favicon.svg", status_code=307)
-
-
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     if _auth_enabled() and request.url.path.startswith(("/api/v2/", "/workbench", "/admin")):
@@ -1888,6 +1883,8 @@ def collect_library(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, A
         except (FileNotFoundError, ValueError):
             meta = None
         payload["material_meta"] = meta
+        if meta is not None:
+            payload["material_meta"]["production_readiness"] = _material_production_readiness(meta, root / str(item["material_id"]))
         enriched.append(payload)
     return {"library_root": root.as_posix(), "items": enriched}
 
@@ -2862,6 +2859,7 @@ def _project_summary(project_id: str, *, row: Any | None = None) -> dict[str, An
     return {
         "project_id": project_id,
         "standalone": bool(payload.get("standalone")),
+        "mock": bool(payload.get("mock")) if isinstance(payload.get("mock"), bool) else True,
         "product_id": row["product_id"],
         "source_link_id": row["source_link_id"],
         "source_material_id": payload.get("source_material_id"),
@@ -3296,6 +3294,45 @@ def _attach_take_media_status(project_id: str, manifest: dict[str, Any]) -> None
             take["playable"] = playable
             take["media_url"] = f"/api/v2/runs/{project_id}/{relative}" if playable else ""
             take["media_message"] = "媒体已就绪" if playable else "无可播放视频：请以真实运行模式重新生成此 Take。"
+            qa = take.get("qa") if isinstance(take.get("qa"), dict) else None
+            if qa is not None and _looks_corrupted_text(str(qa.get("notes") or "")):
+                qa["note_corrupted"] = True
+                qa["notes"] = "历史质检备注编码损坏，请重新执行本镜质检并填写中文备注。"
+
+
+def _looks_corrupted_text(value: str) -> bool:
+    text = value.strip()
+    return bool(text) and text.count("?") >= max(4, int(len(text) * 0.35))
+
+
+def _material_production_readiness(meta: dict[str, Any], material_dir: Path) -> dict[str, Any]:
+    title = str(meta.get("video_title") or meta.get("caption") or "").casefold()
+    keyword = str(meta.get("source_keyword") or "").casefold().strip()
+    keyword_tokens = [token for token in re.split(r"[\s,，、/|#_-]+", keyword) if len(token) >= 2 and token not in {"tiktok", "manual", "real", "mock"}]
+    relevance_score = 1.0 if not keyword_tokens else sum(token in title for token in keyword_tokens) / len(keyword_tokens)
+    local_video = str(meta.get("local_video_path") or "").strip()
+    local_cover = str(meta.get("local_cover_path") or "").strip()
+    video_ready = bool(local_video and (Path(local_video).is_file() or (material_dir / Path(local_video).name).is_file()))
+    cover_ready = bool(local_cover and (Path(local_cover).is_file() or (material_dir / Path(local_cover).name).is_file()))
+    transcript_ready = bool(str(meta.get("transcript_text") or "").strip())
+    analysis_ready = bool(str(meta.get("ai_analysis_json") or "").strip())
+    missing: list[str] = []
+    if relevance_score < 0.5:
+        missing.append("与采集关键词不匹配")
+    if not video_ready:
+        missing.append("未下载原视频")
+    if not cover_ready:
+        missing.append("缺少本地封面")
+    if not transcript_ready:
+        missing.append("缺少转写")
+    if not analysis_ready:
+        missing.append("缺少镜头拆解")
+    return {
+        "ready": not missing,
+        "relevance_score": round(relevance_score, 3),
+        "missing": missing,
+        "lane": "production" if not missing else "cleanup",
+    }
 
 
 def _safe_run_file(run_root: Path, relative_path: str) -> Path:

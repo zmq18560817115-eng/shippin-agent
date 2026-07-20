@@ -1469,6 +1469,24 @@ button.quietButton {
   margin-top: 12px;
 }
 
+.materialLibraryView { display: grid; gap: 10px; }
+
+.materialFilters {
+  position: sticky;
+  top: 64px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(130px, 180px) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  background: var(--canvas);
+}
+
+.materialReadiness { width: fit-content; font-size: 12px; font-weight: 700; }
+.materialReadiness.ready, .takeResolved { color: var(--green); }
+.materialReadiness.cleanup, .takeRejected { color: var(--red); }
+
 .takeList,
 .takeCandidates {
   display: grid;
@@ -1493,6 +1511,24 @@ button.quietButton {
   display: grid;
   gap: 7px;
   min-width: 0;
+}
+
+.takeStatus { font-weight: 700; }
+.takeActions { min-height: 42px; align-items: center; }
+.takeNote {
+  padding: 8px;
+  border-left: 3px solid var(--red);
+  background: #fff5f4;
+  line-height: 1.5;
+}
+
+.gateHistory {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--green);
+  background: #fff;
 }
 
 .takeCandidate video {
@@ -2224,8 +2260,17 @@ pre {
 }
 
 .deliveryList button {
+  display: grid;
+  gap: 3px;
   text-align: left;
+  white-space: normal;
+}
+
+.deliveryList button span,
+.deliveryList button small {
   overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2416,6 +2461,10 @@ pre {
 }
 
 @media (max-width: 640px) {
+  .materialFilters {
+    position: static;
+    grid-template-columns: 1fr;
+  }
   .agentExecutionContext {
     align-items: flex-start;
     flex-direction: column;
@@ -2429,6 +2478,26 @@ pre {
 .agentResultCards {
   display: grid;
   gap: 8px;
+}
+
+.agentResultStack {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.agentResultStack section {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.agentResultStack ul,
+.agentResultStack ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  line-height: 1.55;
 }
 
 .agentResultCard,

@@ -181,6 +181,16 @@ function artifactLabel(name) {
 }
 
 function renderFriendlyArtifact(name, artifact) {
+  if (name === "orchestration_plan") {
+    const route = Array.isArray(artifact.route) ? artifact.route : [];
+    const gates = Array.isArray(artifact.human_gates) ? artifact.human_gates : [];
+    const risks = Array.isArray(artifact.risks) ? artifact.risks : [];
+    return `<div class="agentResultStack">
+      <section><strong>执行路径</strong><ol>${route.map((item) => `<li>${escapeHtml(typeof item === "string" ? item : item.stage || item.action || JSON.stringify(item))}</li>`).join("") || "<li>暂无执行路径</li>"}</ol></section>
+      <section><strong>人工闸门</strong><ul>${gates.map((item) => `<li>${escapeHtml(typeof item === "string" ? item : item.name || item.stage || JSON.stringify(item))}</li>`).join("") || "<li>暂无人工闸门</li>"}</ul></section>
+      <section><strong>主要风险</strong><ul>${risks.map((item) => `<li>${escapeHtml(typeof item === "string" ? item : item.message || item.risk || JSON.stringify(item))}</li>`).join("") || "<li>暂无新增风险</li>"}</ul></section>
+    </div>`;
+  }
   if (name === "script_copy") {
     const sections = Array.isArray(artifact.sections) ? artifact.sections : [];
     return `<div class="agentResultCards">${sections.map((section) => `
@@ -425,6 +435,48 @@ function updateIndependentAgentUI() {
     contractHost.hidden = true;
     contractHost.innerHTML = "";
   }
+  if (name === "research_brief") {
+    return renderNamedLists(artifact, { audience_insights: "受众洞察", viral_patterns: "传播结构", content_risks: "内容风险", pacing_notes: "节奏建议" });
+  }
+  if (name === "strategy_brief") {
+    return renderNamedLists(artifact, { content_direction: "内容方向", hook_options: "钩子方案", cta_options: "行动号召", selling_point_priority: "卖点优先级", target_audience: "目标受众" });
+  }
+  if (name === "script_breakdown") {
+    const beats = Array.isArray(artifact.beats) ? artifact.beats : [];
+    return `<div class="agentResultCards">${beats.map((beat, index) => `<article class="agentResultCard"><strong>${escapeHtml(beat.role || `段落 ${index + 1}`)}</strong><p>${escapeHtml(beat.intent_zh || beat.intent || beat.summary || "")}</p><small>${escapeHtml(beat.visual_zh || beat.visual || beat.action_zh || "")}</small></article>`).join("") || "<p>暂无拆解结果。</p>"}</div>`;
+  }
+  if (name === "asset_manifest") {
+    const frames = Array.isArray(artifact.hero_frames) ? artifact.hero_frames : [];
+    return `<div class="agentResultCards">${frames.map((frame) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(frame.number || "-")} 素材</strong><p>${escapeHtml(frame.reference_reason || frame.status || "已匹配")}</p></article>`).join("") || "<p>暂无素材匹配结果。</p>"}</div>`;
+  }
+  if (name === "shot_report") {
+    const shots = Array.isArray(artifact.shots) ? artifact.shots : [];
+    return `<div class="agentResultCards">${shots.map((shot) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(shot.number || "-")}</strong><p>${escapeHtml(takeStatusLabel(shot.status))}</p><small>${escapeHtml(shot.path || "")}</small></article>`).join("") || "<p>暂无镜头结果。</p>"}</div>`;
+  }
+}
+
+function renderNamedLists(artifact, fields) {
+  return `<div class="agentResultStack">${Object.entries(fields).map(([key, label]) => {
+    const value = artifact[key];
+    const items = Array.isArray(value) ? value : value && typeof value === "object" ? Object.values(value) : [value];
+    return `<section><strong>${label}</strong><ul>${items.filter(Boolean).map((item) => `<li>${escapeHtml(typeof item === "string" ? item : JSON.stringify(item))}</li>`).join("") || "<li>暂无内容</li>"}</ul></section>`;
+  }).join("")}</div>`;
+}
+
+function takeStatusLabel(status) {
+  return {
+    needs_review: "待单镜质检", qa_pass: "质检通过，待选用", selected: "已选用",
+    rejected: "已拒绝，等待重做", succeeded: "生成成功", failed: "生成失败",
+  }[String(status || "")] || stageLabel(status);
+}
+
+function safeTakeNote(take) {
+  if (take?.qa?.note_corrupted) return "历史质检备注编码损坏，请重新执行本镜质检并填写中文备注。";
+  const note = String(take?.qa?.notes || "").trim();
+  if (note && (note.match(/\?/g) || []).length >= Math.max(4, Math.floor(note.length * 0.35))) {
+    return "历史质检备注编码损坏，请重新执行本镜质检并填写中文备注。";
+  }
+  return note;
 }
 
 async function runIndependentAgent() {
@@ -1071,8 +1123,31 @@ function renderMaterialLibrary() {
     host.textContent = "暂无人工导入素材";
     return;
   }
-  host.className = "materialList";
-  host.innerHTML = state.materials.map(renderMaterialItem).join("");
+  host.className = "materialLibraryView";
+  host.innerHTML = `<div class="materialFilters">
+      <input id="materialSearch" type="search" placeholder="搜索标题、作者或关键词" aria-label="搜索素材" />
+      <select id="materialReadiness" aria-label="筛选素材状态"><option value="all">全部素材</option><option value="ready">可生产</option><option value="cleanup">待清洗</option></select>
+      <span id="materialCount"></span>
+    </div><div class="materialList" id="materialListInner"></div>`;
+  const draw = () => {
+    const query = $("#materialSearch").value.trim().toLowerCase();
+    const readiness = $("#materialReadiness").value;
+    const filtered = state.materials.filter((item) => {
+      const meta = item.material_meta || {};
+      const searchable = [meta.video_title, meta.caption, meta.author_name, meta.source_keyword].join(" ").toLowerCase();
+      const ready = Boolean(meta.production_readiness?.ready);
+      return (!query || searchable.includes(query)) && (readiness === "all" || (readiness === "ready" ? ready : !ready));
+    });
+    $("#materialCount").textContent = `${filtered.length} / ${state.materials.length} 条`;
+    $("#materialListInner").innerHTML = filtered.map(renderMaterialItem).join("") || '<div class="emptyState">没有符合条件的素材</div>';
+    bindMaterialActions($("#materialListInner"));
+  };
+  $("#materialSearch").addEventListener("input", draw);
+  $("#materialReadiness").addEventListener("change", draw);
+  draw();
+}
+
+function bindMaterialActions(host) {
   host.querySelectorAll("[data-start-material]").forEach((button) => {
     button.addEventListener("click", () => startFromMaterial(button.dataset.startMaterial));
   });
@@ -1086,6 +1161,8 @@ function renderMaterialItem(item) {
   const title = meta.video_title || meta.caption || meta.source_url || "未命名 TikTok 素材";
   const caption = meta.caption || "未取得视频简介";
   const analysis = materialAnalysisSummary(meta);
+  const readiness = meta.production_readiness || {};
+  const ready = Boolean(readiness.ready);
   const sourceUrl = meta.source_url || meta.video_url || "";
   const videoName = String(meta.local_video_path || "").split(/[\\/]/).pop();
   const localVideo = videoName
@@ -1102,7 +1179,8 @@ function renderMaterialItem(item) {
       ${cover}
       <div class="materialBody">
         <strong>${escapeHtml(title)}</strong>
-        <span>${escapeHtml(meta.author_name || "未知创作者")} · ${escapeHtml(meta.source_keyword || "manual_tiktok")} · ${escapeHtml(meta.processing_status || item.status || "待处理")}</span>
+        <span>${escapeHtml(meta.author_name || "未知创作者")} · ${escapeHtml(meta.source_keyword || "manual_tiktok")} · ${escapeHtml(materialStatusLabel(meta.processing_status || item.status))}</span>
+        <span class="materialReadiness ${ready ? "ready" : "cleanup"}">${ready ? "可生产" : "待清洗"}${Number.isFinite(Number(readiness.relevance_score)) ? ` · 相关度 ${Math.round(Number(readiness.relevance_score) * 100)}%` : ""}</span>
         <p>${escapeHtml(caption)}</p>
         <p class="materialAnalysis">${escapeHtml(analysis)}</p>
         ${sourceUrl ? `<a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener">打开 TikTok 来源</a>` : ""}
@@ -1111,7 +1189,7 @@ function renderMaterialItem(item) {
           ${localVideo ? `<a class="buttonLink" href="${escapeAttr(localVideo)}" download>下载原视频</a>` : ""}
         </div>
       </div>
-      <button type="button" data-start-material="${escapeAttr(item.material_id)}">发起项目</button>
+      <button type="button" data-start-material="${escapeAttr(item.material_id)}" ${ready ? "" : "disabled"} title="${ready ? "使用该素材创建生产项目" : escapeAttr((readiness.missing || []).join("、") || "素材尚未完成下载、转写与分析")}">${ready ? "发起项目" : "补齐后可生产"}</button>
     </article>
   `;
 }
@@ -1429,7 +1507,7 @@ function renderScriptGate() {
   host.innerHTML = `
     ${renderCreativeQuality(state.scriptCopy.quality_assessment)}
     <div class="reviewStrip">
-      <span>Review: ${escapeHtml(state.reviewReport?.status || "PASS")}</span>
+      <span>脚本审核：${escapeHtml(reviewStatusLabel(state.reviewReport?.status || "PASS"))}</span>
       <span>${Object.entries(scores).map(([key, value]) => `${escapeHtml(key)} ${escapeHtml(String(value))}`).join(" · ")}</span>
       <span>${comments.map(escapeHtml).join(" · ")}</span>
     </div>
@@ -1632,20 +1710,26 @@ function renderProductionNode() {
     while (existingTakeIds.has(String.fromCharCode(65 + nextTakeIndex))) nextTakeIndex += 1;
     const nextTakeId = String.fromCharCode(65 + nextTakeIndex);
     const prompt = shot.seedance_prompt_zh || shot.seedance_prompt || shot.visual_prompt || "";
-    const candidates = takes.map((take) => `
+    const candidates = takes.map((take) => {
+      const status = String(take.status || "needs_review");
+      const note = safeTakeNote(take);
+      const canReview = take.playable && ["needs_review", "succeeded", "qa_pass"].includes(status);
+      const canSelect = take.playable && status === "qa_pass";
+      return `
       <div class="takeCandidate">
         ${take.playable
           ? `<video controls preload="metadata" data-video-state src="${escapeAttr(take.media_url || runFileUrl(state.selectedId, take.path))}"></video><span class="mediaState" data-media-state>正在读取镜头预览...</span><a class="buttonLink" download href="${escapeAttr(take.media_url || runFileUrl(state.selectedId, take.path))}">下载此 Take</a>`
           : `<div class="mediaUnavailable">${escapeHtml(take.media_message || "无可播放视频：请以真实运行模式重新生成此 Take。")}</div>`}
-        <span>Take ${escapeHtml(take.take_id)} · ${escapeHtml(take.status)}</span>
+        <span class="takeStatus ${statusClass(status)}">Take ${escapeHtml(take.take_id)} · ${escapeHtml(takeStatusLabel(status))}</span>
         <div class="actionBar takeActions">
-          <button type="button" data-review-pass-shot="${shot.number}" data-review-pass-take="${escapeAttr(take.take_id)}" ${!take.playable || take.status === "selected" ? "disabled" : ""}>通过单镜质检</button>
-          <button type="button" data-review-reject-shot="${shot.number}" data-review-reject-take="${escapeAttr(take.take_id)}" ${!take.playable || take.status === "selected" ? "disabled" : ""}>不通过并重做</button>
-          <button type="button" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}" ${take.status === "selected" || take.status !== "qa_pass" ? "disabled" : ""}>${take.status === "selected" ? "已选用" : take.status === "qa_pass" ? "选用此 Take" : "先完成单镜质检"}</button>
+          ${canReview ? `<button type="button" data-review-pass-shot="${shot.number}" data-review-pass-take="${escapeAttr(take.take_id)}">通过单镜质检</button><button type="button" data-review-reject-shot="${shot.number}" data-review-reject-take="${escapeAttr(take.take_id)}">不通过并重做</button>` : ""}
+          ${canSelect ? `<button type="button" class="primary" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}">选用此 Take</button>` : ""}
+          ${status === "selected" ? '<span class="takeResolved">该镜头已选用</span>' : ""}
+          ${status === "rejected" ? '<span class="takeRejected">请修改上方提示词或返工说明后生成新候选</span>' : ""}
         </div>
-        ${take.qa?.notes ? `<small class="takeNote">质检备注：${escapeHtml(take.qa.notes)}</small>` : ""}
+        ${note ? `<small class="takeNote">质检备注：${escapeHtml(note)}</small>` : ""}
       </div>
-    `).join("");
+    `; }).join("");
     return `<section class="takeShot">
       <strong>镜头 ${shot.number} · ${shot.camera_motion?.duration_sec || 6}s</strong>
       <label class="takePromptLabel">生成提示词（可针对本镜修改后再生成）<textarea class="promptField" data-production-prompt="${shot.number}">${escapeHtml(prompt)}</textarea></label>
@@ -1681,13 +1765,16 @@ function renderComposeNode() {
   }
   host.className = "editor";
   const currentDuration = plannedDuration();
-  const ready = Math.abs(currentDuration - 30) <= 2;
+  const takeEntries = state.takeManifest?.shots || [];
+  const missingShots = (state.shotPlan.shots || []).filter((shot) => !takeEntries.find((entry) => Number(entry.number) === Number(shot.number))?.selected_take_id).map((shot) => Number(shot.number));
+  const durationReady = Math.abs(currentDuration - 30) <= 2;
+  const ready = durationReady && missingShots.length === 0;
   const visualReview = state.renderReport?.output_path ? renderVisualReview() : "";
   const finalVideoLink = state.renderReport?.output_path
     ? `<a class="buttonLink" download href="${escapeAttr(runFileUrl(state.selectedId, state.renderReport.output_path))}">下载 720P 成片</a>`
     : "";
   host.innerHTML = `<div class="actionBar"><button type="button" id="composeVideo" ${ready ? "" : "disabled"}>${
-    ready ? "使用现有成功镜头合成 30 秒视频" : `当前仅 ${currentDuration} 秒，请先更新分镜并重跑镜头`
+    ready ? "使用已选镜头合成 30 秒视频" : missingShots.length ? `还差 ${missingShots.length} 个镜头未选用：镜头 ${missingShots.join("、")}` : `当前 ${currentDuration} 秒，请调整为 30 秒`
   }</button>${finalVideoLink}</div>${visualReview}`;
   $("#composeVideo").addEventListener("click", () => runManualStage("compose"));
   $("#submitVisualReview")?.addEventListener("click", submitVisualReview);
@@ -1860,9 +1947,14 @@ async function rejectAndRegenerate(shotIndex, takeId) {
 function renderHeroGate() {
   const host = $("#heroEditor");
   $("#heroGateState").textContent = state.selected?.current_gate === "hero_gate" ? "待确认" : "";
-  if (!state.selected || state.selected.current_gate !== "hero_gate" || !state.assetManifest) {
+  if (!state.selected || !state.assetManifest) {
     host.className = "emptyState";
-    host.textContent = "等待关键帧闸门项目";
+    host.textContent = "当前项目尚未生成可核对的关键帧。";
+    return;
+  }
+  if (state.selected.current_gate !== "hero_gate") {
+    host.className = "gateHistory";
+    host.innerHTML = `<strong>关键帧闸门已完成</strong><span>当前项目已进入“${escapeHtml(stageLabel(state.selected.current_gate || state.selected.current_stage))}”，可回看产品身份锚点，无需重复确认。</span>`;
     return;
   }
   host.className = "heroReview";
@@ -1907,7 +1999,7 @@ async function regenHero(shotIndex) {
       method: "POST",
       body: JSON.stringify({ project_id: state.selectedId, shot_index: shotIndex }),
     });
-    toast(`Shot ${shotIndex} 已重生成`);
+    toast(`镜头 ${shotIndex} 已重新生成`);
     await loadSelectedProject(state.selectedId);
   } catch (error) {
     toast(error.message, "error");
@@ -1979,7 +2071,7 @@ function renderDelivery() {
     <div class="deliveryList">
       ${delivered.map((project) => `
         <button type="button" data-open="${escapeAttr(project.project_id)}" class="${project.project_id === selectedDelivered?.project_id ? "active" : ""}" title="${escapeAttr(project.project_id)}">
-          ${escapeHtml(project.project_id)} · ¥${Number(project.cost.total_cost_cny || 0).toFixed(2)}
+          <strong>${escapeHtml(project.product_id || "未命名产品")}</strong><span>${escapeHtml(formatProjectTime(project.updated_at))} · ${project.mock ? "演练" : "真实"} · QA 通过</span><small>${escapeHtml(project.project_id)} · ¥${Number(project.cost.total_cost_cny || 0).toFixed(2)}</small>
         </button>
       `).join("")}
     </div>
@@ -2017,6 +2109,12 @@ function renderDelivery() {
     $("#sendFeedback").addEventListener("click", () => sendFeedback(selectedDelivered.project_id));
   }
   bindVideoPreviewStates(host, "交付成片不可播放。该项目已被识别为无效媒体，请重新合成并通过质检。");
+}
+
+function formatProjectTime(value) {
+  if (!value) return "时间未知";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
 async function sendFeedback(projectId) {

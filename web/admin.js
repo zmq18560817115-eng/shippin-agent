@@ -34,7 +34,7 @@ async function loadAdmin() {
   document.querySelector("#projectStates").innerHTML = stateOrder.filter((status) => Number(payload.projects[status] || 0) > 0).map((status) => `<div><span>${statusNames[status] || status}</span><strong>${payload.projects[status]}</strong><i style="--width:${projectTotal ? Math.max(3, Number(payload.projects[status]) / projectTotal * 100) : 0}%"></i></div>`).join("") || "暂无项目";
   const providers = [...(payload.runtime.collector_backends || []), ...Object.entries(payload.runtime.providers || {}).filter(([id]) => ["doubao", "seedance", "speech_to_text"].includes(id)).map(([id, value]) => ({ id, ready: value.configured }))];
   document.querySelector("#backendStates").innerHTML = providers.map((provider) => `<div><span>${escapeHtml(providerNames[provider.id] || provider.id)}</span><strong class="${provider.ready ? "ready" : "missing"}">${provider.ready ? "可用" : "未配置"}</strong></div>`).join("");
-  document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(project.updated_at)}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';
+  document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(formatTime(project.updated_at))}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';
   document.querySelector("#recentFailures").innerHTML = payload.recent_failures.map((failure) => `<details><summary>${escapeHtml(failure.project_id)} · ${escapeHtml(failure.stage)} · ${escapeHtml(failure.agent)}</summary><pre>${escapeHtml(failure.error_json || "无错误详情")}</pre></details>`).join("") || '<p class="emptyMessage">当前没有失败节点</p>';
   renderUsers(users.items || []);
   renderRegistrationRequests(registrations.items || []);
@@ -46,7 +46,7 @@ function renderRegistrationRequests(items) {
   document.querySelector("#registrationRequestRows").innerHTML = items.map((item) => `<tr>
     <td><strong>${escapeHtml(item.username)}</strong></td>
     <td>${escapeHtml(item.display_name || "-")}</td>
-    <td>${escapeHtml(item.requested_at)}</td>
+    <td>${escapeHtml(formatTime(item.requested_at))}</td>
     <td><span class="statusTag status-${item.status === "approved" ? "succeeded" : item.status === "rejected" ? "blocked" : "running"}">${item.status === "pending" ? "待审核" : item.status === "approved" ? "已开通" : "已拒绝"}</span></td>
     <td>${item.status === "pending" ? `<button type="button" class="tableAction" data-registration-approve="${item.id}">通过</button> <button type="button" class="tableAction" data-registration-reject="${item.id}">拒绝</button>` : escapeHtml(item.reviewed_by || "-")}</td>
   </tr>`).join("") || '<tr><td colspan="5">暂无账号申请</td></tr>';
