@@ -107,6 +107,17 @@ def init_db(db_path: str | os.PathLike[str] | None = None) -> None:
             conn.execute("ALTER TABLE collector_schedules ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0")
         if "next_run_at" not in columns:
             conn.execute("ALTER TABLE collector_schedules ADD COLUMN next_run_at TEXT")
+        job_columns = {row["name"] for row in conn.execute("PRAGMA table_info(collection_jobs)").fetchall()}
+        collection_job_migrations = {
+            "max_attempts": "ALTER TABLE collection_jobs ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3",
+            "next_attempt_at": "ALTER TABLE collection_jobs ADD COLUMN next_attempt_at TEXT",
+            "lease_owner": "ALTER TABLE collection_jobs ADD COLUMN lease_owner TEXT",
+            "lease_expires_at": "ALTER TABLE collection_jobs ADD COLUMN lease_expires_at TEXT",
+            "heartbeat_at": "ALTER TABLE collection_jobs ADD COLUMN heartbeat_at TEXT",
+        }
+        for name, statement in collection_job_migrations.items():
+            if name not in job_columns:
+                conn.execute(statement)
 
 
 def create_collection_job(
@@ -196,6 +207,169 @@ def cancel_collection_job(
     if not changed:
         return None
     return get_collection_job(job_id, db_path=db_path)
+
+
+def claim_collection_job(
+    worker_id: str,
+    *,
+    lease_seconds: int = 900,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any] | None:
+    init_db(db_path)
+    recover_expired_collection_jobs(db_path=db_path)
+    now = utc_now()
+    lease_expires = _iso_after(max(30, int(lease_seconds)))
+    with get_conn(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT id FROM collection_jobs
+            WHERE status = 'queued'
+              AND attempt < max_attempts
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+            ORDER BY created_at, id
+            LIMIT 1
+            """,
+            (now,),
+        ).fetchone()
+        if row is None:
+            conn.execute("COMMIT")
+            return None
+        changed = conn.execute(
+            """
+            UPDATE collection_jobs
+            SET status = 'running', attempt = attempt + 1, lease_owner = ?, lease_expires_at = ?,
+                heartbeat_at = ?, started_at = COALESCE(started_at, ?), updated_at = ?, error_message = ''
+            WHERE id = ? AND status = 'queued'
+            """,
+            (worker_id, lease_expires, now, now, now, int(row["id"])),
+        ).rowcount
+        conn.execute("COMMIT")
+    return get_collection_job(int(row["id"]), db_path=db_path) if changed else None
+
+
+def heartbeat_collection_job(
+    job_id: int,
+    worker_id: str,
+    *,
+    lease_seconds: int = 900,
+    db_path: str | os.PathLike[str] | None = None,
+) -> bool:
+    now = utc_now()
+    with get_conn(db_path) as conn:
+        changed = conn.execute(
+            """
+            UPDATE collection_jobs
+            SET heartbeat_at = ?, lease_expires_at = ?, updated_at = ?
+            WHERE id = ? AND status = 'running' AND lease_owner = ?
+            """,
+            (now, _iso_after(max(30, int(lease_seconds))), now, job_id, worker_id),
+        ).rowcount
+    return bool(changed)
+
+
+def complete_collection_job(
+    job_id: int,
+    worker_id: str,
+    *,
+    discovered_count: int,
+    relevant_count: int,
+    downloaded_count: int,
+    analyzed_count: int,
+    failed_count: int,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    now = utc_now()
+    with get_conn(db_path) as conn:
+        lease = conn.execute(
+            "SELECT requested_count FROM collection_jobs WHERE id = ? AND status = 'running' AND lease_owner = ?",
+            (job_id, worker_id),
+        ).fetchone()
+        if lease is None:
+            raise RuntimeError("collection job lease is no longer owned by this worker")
+        requested_count = int(lease["requested_count"] or 0)
+        final_status = (
+            "succeeded"
+            if analyzed_count >= requested_count and failed_count == 0
+            else "partial"
+            if analyzed_count >= 1
+            else "failed"
+        )
+        changed = conn.execute(
+            """
+            UPDATE collection_jobs
+            SET status = ?, discovered_count = ?, relevant_count = ?, downloaded_count = ?, analyzed_count = ?,
+                failed_count = ?, lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+                next_attempt_at = NULL, finished_at = ?, updated_at = ?
+            WHERE id = ? AND status = 'running' AND lease_owner = ?
+            """,
+            (
+                final_status, max(0, discovered_count), max(0, relevant_count), max(0, downloaded_count),
+                max(0, analyzed_count), max(0, failed_count), now, now, job_id, worker_id,
+            ),
+        ).rowcount
+    if not changed:
+        raise RuntimeError("collection job lease is no longer owned by this worker")
+    job = get_collection_job(job_id, db_path=db_path)
+    if job is None:
+        raise RuntimeError("collection job disappeared after completion")
+    return job
+
+
+def fail_collection_job(
+    job_id: int,
+    worker_id: str,
+    error: str,
+    *,
+    retryable: bool = True,
+    retry_after_seconds: int | None = None,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    now = utc_now()
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT attempt, max_attempts FROM collection_jobs WHERE id = ? AND status = 'running' AND lease_owner = ?",
+            (job_id, worker_id),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("collection job lease is no longer owned by this worker")
+        can_retry = retryable and int(row["attempt"]) < int(row["max_attempts"])
+        delay = retry_after_seconds if retry_after_seconds is not None else min(3600, 60 * (2 ** max(0, int(row["attempt"]) - 1)))
+        next_attempt = _iso_after(max(1, delay)) if can_retry else None
+        conn.execute(
+            """
+            UPDATE collection_jobs
+            SET status = ?, error_message = ?, next_attempt_at = ?, lease_owner = NULL,
+                lease_expires_at = NULL, heartbeat_at = NULL, finished_at = ?, updated_at = ?
+            WHERE id = ? AND lease_owner = ?
+            """,
+            ("queued" if can_retry else "failed", str(error)[:2000], next_attempt, None if can_retry else now, now, job_id, worker_id),
+        )
+    job = get_collection_job(job_id, db_path=db_path)
+    if job is None:
+        raise RuntimeError("collection job disappeared after failure")
+    return job
+
+
+def recover_expired_collection_jobs(
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> int:
+    init_db(db_path)
+    now = utc_now()
+    with get_conn(db_path) as conn:
+        changed = conn.execute(
+            """
+            UPDATE collection_jobs
+            SET status = CASE WHEN attempt < max_attempts THEN 'queued' ELSE 'failed' END,
+                error_message = 'Worker 租约过期，任务已恢复', next_attempt_at = NULL,
+                lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+                finished_at = CASE WHEN attempt < max_attempts THEN NULL ELSE ? END, updated_at = ?
+            WHERE status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?
+            """,
+            (now, now, now),
+        ).rowcount
+    return int(changed)
 
 
 def _collection_job_dict(row: sqlite3.Row) -> dict[str, Any]:

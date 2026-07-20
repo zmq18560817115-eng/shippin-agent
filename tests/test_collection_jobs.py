@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from orchestrator import queue
+from orchestrator import api, queue
 from orchestrator.api import app
 
 
@@ -38,6 +38,7 @@ def test_collection_job_persists_progress_contract(tmp_path: Path) -> None:
 
 def test_collection_job_api_create_list_and_cancel(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "agentflow.db"))
+    monkeypatch.setenv("VAF_COLLECTION_WORKER_ENABLED", "false")
 
     with TestClient(app) as client:
         created = client.post(
@@ -69,6 +70,7 @@ def test_collection_job_api_create_list_and_cancel(tmp_path: Path, monkeypatch) 
 
 def test_collection_job_api_rejects_missing_target(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "agentflow.db"))
+    monkeypatch.setenv("VAF_COLLECTION_WORKER_ENABLED", "false")
 
     with TestClient(app) as client:
         response = client.post(
@@ -78,3 +80,101 @@ def test_collection_job_api_rejects_missing_target(tmp_path: Path, monkeypatch) 
 
     assert response.status_code == 422
     assert "必须填写目标" in response.json()["detail"]
+
+
+def test_collection_job_lease_is_exclusive_and_expired_work_recovers(tmp_path: Path) -> None:
+    db_path = tmp_path / "agentflow.db"
+    job = queue.create_collection_job(
+        target_type="keyword",
+        provider="auto",
+        target="heated cup",
+        requested_count=3,
+        product_id="便携恒温杯",
+        mock=True,
+        db_path=db_path,
+    )
+
+    claimed = queue.claim_collection_job("worker-a", lease_seconds=30, db_path=db_path)
+    assert claimed is not None
+    assert claimed["status"] == "running"
+    assert claimed["attempt"] == 1
+    assert queue.claim_collection_job("worker-b", db_path=db_path) is None
+
+    with queue.get_conn(db_path) as conn:
+        conn.execute(
+            "UPDATE collection_jobs SET lease_expires_at = '2000-01-01T00:00:00.000Z' WHERE id = ?",
+            (job["id"],),
+        )
+    assert queue.recover_expired_collection_jobs(db_path=db_path) == 1
+    recovered = queue.claim_collection_job("worker-b", db_path=db_path)
+    assert recovered is not None
+    assert recovered["id"] == job["id"]
+    assert recovered["attempt"] == 2
+
+
+def test_collection_job_failure_retries_then_stops(tmp_path: Path) -> None:
+    db_path = tmp_path / "agentflow.db"
+    job = queue.create_collection_job(
+        target_type="keyword",
+        provider="auto",
+        target="heated cup",
+        requested_count=2,
+        product_id="便携恒温杯",
+        mock=True,
+        db_path=db_path,
+    )
+
+    first = queue.claim_collection_job("worker", db_path=db_path)
+    assert first is not None
+    retry = queue.fail_collection_job(
+        job["id"], "worker", "temporary block", retryable=True, retry_after_seconds=1, db_path=db_path
+    )
+    assert retry["status"] == "queued"
+    assert retry["next_attempt_at"]
+
+    with queue.get_conn(db_path) as conn:
+        conn.execute(
+            "UPDATE collection_jobs SET next_attempt_at = '2000-01-01T00:00:00.000Z', max_attempts = 2 WHERE id = ?",
+            (job["id"],),
+        )
+    second = queue.claim_collection_job("worker", db_path=db_path)
+    assert second is not None
+    stopped = queue.fail_collection_job(job["id"], "worker", "still blocked", retryable=True, db_path=db_path)
+    assert stopped["status"] == "failed"
+    assert stopped["next_attempt_at"] is None
+
+
+def test_background_worker_writes_job_progress(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "agentflow.db"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    job = queue.create_collection_job(
+        target_type="keyword",
+        provider="auto",
+        target="heated cup",
+        requested_count=2,
+        product_id="便携恒温杯",
+        mock=True,
+        db_path=db_path,
+    )
+    monkeypatch.setattr(
+        api,
+        "crawl_tiktok_and_run",
+        lambda request: {
+            "ok": True,
+            "discovered_count": 3,
+            "completed_count": 2,
+            "failed_count": 0,
+            "results": [],
+            "failures": [],
+        },
+    )
+
+    result = api._run_collection_job_once("test-worker")
+
+    assert result is not None and result["ok"] is True
+    completed = queue.get_collection_job(job["id"], db_path=db_path)
+    assert completed is not None
+    assert completed["status"] == "succeeded"
+    assert completed["progress"]["discovered"] == 3
+    assert completed["progress"]["downloaded"] == 2
+    assert completed["progress"]["analyzed"] == 2

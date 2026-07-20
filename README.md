@@ -142,6 +142,8 @@ Cookies、`TIKTOK_MS_TOKEN` 和 API Key 不应进入仓库或镜像。TikTok 的
 
 `config/orchestrator.yaml` 中的价格按火山引擎公开价格与实测 token 用量估算，并非供应商结算账单。上线后应根据企业火山引擎账单，通过 `VAF_PRICE_<TOOL>_CNY` 定期覆盖校准。部署预检会检查模型供应商估价均大于零、本地 FFmpeg 估价不小于零，并确认默认预算模式为 `enforce`。
 
+采集中心创建的任务写入 SQLite `collection_jobs`，由 API 后台 Worker 持续领取；关闭浏览器不会中断任务。Worker 使用数据库租约和心跳避免重复执行，进程异常后过期租约会自动回收，临时故障按退避策略重试。默认 `VAF_COLLECTION_WORKER_ENABLED=true`；只有部署独立采集 Worker 时才应在 API 进程中显式关闭。
+
 真实模型验收必须保留项目运行报告、五个镜头产物、最终 720×1280 成片和人工抽帧检查结果。一次真实回归只能证明当次模型与配置可用，不能替代持续的失败率、耗时和实际账单监控。
 
 ```powershell

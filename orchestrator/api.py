@@ -9,6 +9,7 @@ import shutil
 import base64
 import hashlib
 import hmac
+import threading
 import time
 import zipfile
 from collections import defaultdict, deque
@@ -292,14 +293,21 @@ async def lifespan(_: FastAPI):
     _ensure_auto_collector_settings()
     _recover_auto_collector_on_startup()
     scheduler = asyncio.create_task(_auto_collector_loop())
+    collection_worker = asyncio.create_task(_collection_job_loop()) if _env_bool("VAF_COLLECTION_WORKER_ENABLED", True) else None
     try:
         yield
     finally:
-        scheduler.cancel()
-        try:
-            await scheduler
-        except asyncio.CancelledError:
-            pass
+        background_tasks = [scheduler, collection_worker]
+        for task in background_tasks:
+            if task is not None:
+                task.cancel()
+        for task in background_tasks:
+            if task is None:
+                continue
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="video-agent-factory", version="0.0.0", lifespan=lifespan)
@@ -1451,6 +1459,70 @@ async def _auto_collector_loop() -> None:
             # Settings and errors remain visible through the collection endpoint; keep the scheduler alive.
             pass
         await asyncio.sleep(20)
+
+
+def _run_collection_job_once(worker_id: str) -> dict[str, Any] | None:
+    job = queue.claim_collection_job(worker_id, db_path=_db_path())
+    if job is None:
+        return None
+    job_id = int(job["id"])
+    heartbeat_stop = threading.Event()
+
+    def keep_lease_alive() -> None:
+        while not heartbeat_stop.wait(30):
+            if not queue.heartbeat_collection_job(job_id, worker_id, db_path=_db_path()):
+                return
+
+    heartbeat_thread = threading.Thread(
+        target=keep_lease_alive,
+        name=f"collection-heartbeat-{job_id}",
+        daemon=True,
+    )
+    heartbeat_thread.start()
+    try:
+        queue.heartbeat_collection_job(job_id, worker_id, db_path=_db_path())
+        result = crawl_tiktok_and_run(
+            TikTokCrawlRequest(
+                target_type=job["target_type"],
+                provider=job["provider"],
+                target=job["target"],
+                limit=min(int(job["requested_count"]), 20),
+                product_id=job["product_id"],
+                mock=bool(job["mock"]),
+            )
+        )
+        completed = int(result.get("completed_count") or 0)
+        final = queue.complete_collection_job(
+            job_id,
+            worker_id,
+            discovered_count=int(result.get("discovered_count") or 0),
+            relevant_count=int(result.get("discovered_count") or 0),
+            downloaded_count=completed,
+            analyzed_count=completed,
+            failed_count=int(result.get("failed_count") or 0),
+            db_path=_db_path(),
+        )
+        return {"ok": True, "job": final, "result": result}
+    except HTTPException as exc:
+        retryable = exc.status_code >= 500
+        failed = queue.fail_collection_job(job_id, worker_id, str(exc.detail), retryable=retryable, db_path=_db_path())
+        return {"ok": False, "job": failed, "error": str(exc.detail)}
+    except Exception as exc:
+        failed = queue.fail_collection_job(job_id, worker_id, str(exc), retryable=True, db_path=_db_path())
+        return {"ok": False, "job": failed, "error": str(exc)}
+    finally:
+        heartbeat_stop.set()
+        heartbeat_thread.join(timeout=1)
+
+
+async def _collection_job_loop() -> None:
+    worker_id = f"api-collector-{os.getpid()}-{secrets.token_hex(3)}"
+    while True:
+        try:
+            result = await asyncio.to_thread(_run_collection_job_once, worker_id)
+        except Exception:
+            result = None
+        await asyncio.sleep(1 if result is not None else 5)
 
 
 def _auth_enabled() -> bool:
