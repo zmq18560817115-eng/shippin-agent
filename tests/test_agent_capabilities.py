@@ -52,12 +52,12 @@ def test_agent_map_and_independent_research_strategy_breakdown(tmp_path: Path, m
         )
 
     assert capability_map.status_code == 200
-    assert capability_map.json()["summary"] == {"total": 10, "deployed": 7, "partial": 3, "missing": 0}
+    assert capability_map.json()["summary"] == {"total": 11, "deployed": 7, "partial": 4, "missing": 0}
     assert [
         item["independent_action"]
         for item in capability_map.json()["agents"]
         if item["independent_action"]
-    ] == ["analysis", "research", "strategy", "script,script_breakdown", "storyboard", "production", "review", "feedback"]
+    ] == ["orchestrator", "collector", "analysis", "research", "strategy", "script,script_breakdown", "storyboard", "asset", "production", "review", "feedback"]
     assert research.status_code == 200
     assert research.json()["artifact_name"] == "research_brief"
     assert strategy.status_code == 200
@@ -180,6 +180,40 @@ def test_standalone_non_pour_production_does_not_leak_action_references(tmp_path
 
     assert response.status_code == 200, response.text
     assert response.json()["meta"]["reference_paths"] == []
+
+
+def test_orchestrator_and_asset_are_independently_runnable(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "standalone-control.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        orchestrator = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "orchestrator",
+                "product_id": "便携恒温杯",
+                "prompt": "规划一条 30 秒恒温杯产品视频生产任务。",
+                "mock": True,
+            },
+        )
+        asset = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "asset",
+                "product_id": "便携恒温杯",
+                "prompt": "夜间床头场景中的产品身份关键帧。",
+                "mock": True,
+            },
+        )
+        asset_download = client.get(asset.json()["download_url"])
+
+    assert orchestrator.status_code == 200, orchestrator.text
+    assert orchestrator.json()["artifact_name"] == "orchestration_plan"
+    assert len(orchestrator.json()["artifact"]["route"]) == 6
+    assert asset.status_code == 200, asset.text
+    assert asset.json()["artifact_name"] == "asset_manifest"
+    assert asset.json()["artifact"]["hero_frames"][0]["status"] == "generated"
+    assert asset_download.status_code == 200
 
 
 def test_standalone_script_promotes_to_a_gated_production_project(tmp_path: Path, monkeypatch) -> None:

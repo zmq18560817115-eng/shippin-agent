@@ -3,12 +3,18 @@ from orchestrator.capabilities import capability_map
 
 
 def test_every_model_agent_has_actionable_contract() -> None:
-    for agent_id in ("analysis", "research", "strategy", "script", "storyboard", "production", "review", "feedback"):
+    for agent_id in ("orchestrator", "collector", "analysis", "research", "strategy", "script", "storyboard", "asset", "production", "review", "feedback"):
         contract = AGENT_CONTRACTS[agent_id]
         assert contract["identity"]
         assert contract["mission"]
         assert len(contract["quality_gates"]) >= 3
         assert len(contract["forbidden"]) >= 2
+
+
+def test_every_agent_has_patient_method_and_expertise() -> None:
+    for agent_id, contract in AGENT_CONTRACTS.items():
+        assert contract.get("expertise"), agent_id
+        assert contract.get("method"), agent_id
 
 
 def test_system_prompt_carries_identity_quality_and_grounding() -> None:

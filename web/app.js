@@ -61,6 +61,7 @@ const agentLabels = {
 };
 
 const independentActionLabels = {
+  orchestrator: "总控规划",
   collector: "素材采集",
   analysis: "素材分析",
   research: "研究洞察",
@@ -68,12 +69,14 @@ const independentActionLabels = {
   script: "脚本生成",
   script_breakdown: "脚本拆解",
   storyboard: "分镜生成",
+  asset: "素材匹配",
   production: "单镜制作",
   review: "内容审核",
   feedback: "反馈学习",
 };
 
 const independentActionHints = {
+  orchestrator: "输入完整任务目标，由总控 Agent 给出执行路径、闸门、风险和交付清单。",
   collector: "按关键词、账号或话题发现参考视频；可选择下载入库后进入分析。",
   analysis: "输入视频转写、素材说明或参考链接，生成结构、节奏和镜头拆解。",
   research: "输入转写、竞品文案或研究资料，生成结构、节奏与受众洞察。",
@@ -81,6 +84,7 @@ const independentActionHints = {
   script: "输入产品、受众、平台和内容需求，生成完整中文脚本。",
   script_breakdown: "输入已有脚本或内容需求，生成逐段意图、画面和连续性拆解。",
   storyboard: "输入场景、人物、动作、镜头运动和风格，生成可编辑分镜。",
+  asset: "输入镜头需求或脚本，为产品匹配批准素材并生成可确认的关键帧清单。",
   production: "输入单镜画面 Prompt，使用产品素材库生成 720P 竖屏视频。",
   review: "输入脚本文本或内容需求，生成产品安全与合规审核报告。",
   feedback: "输入人工复盘结论、问题和优化要求，保存为可下载的反馈记录。",
@@ -204,7 +208,7 @@ async function loadIndependentAgentActions() {
   const select = $("#independentAgentAction");
   try {
     const capabilityMap = await api("/api/v2/agents");
-    const actions = ["collector"];
+    const actions = [];
     (capabilityMap.agents || []).forEach((agent) => {
       String(agent.independent_action || "").split(",").map((item) => item.trim()).filter(Boolean).forEach((action) => {
         if (independentActionLabels[action] && !actions.includes(action)) actions.push(action);
@@ -395,6 +399,8 @@ function updateIndependentAgentUI() {
   if (contract.identity) {
     contractHost.hidden = false;
     contractHost.innerHTML = `<div><span>当前身份</span><strong>${escapeHtml(contract.identity)}</strong><p>${escapeHtml(contract.mission || "")}</p></div>
+      <div><span>核心专长</span><ul>${(contract.expertise || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+      <div><span>耐心工作方法</span><ul>${(contract.method || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
       <div><span>交付前自检</span><ul>${(contract.quality_gates || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`;
   } else {
     contractHost.hidden = true;

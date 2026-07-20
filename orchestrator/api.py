@@ -621,17 +621,44 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     standalone = not request.project_id
     action = request.action.strip().casefold()
     project_id = _validate_project_id(request.project_id or _new_standalone_id())
-    if standalone and action != "collector":
+    if standalone and action not in {"collector", "orchestrator"}:
         queue.ensure_project(
             project_id,
             product_id=request.product_id,
             payload={"standalone": True, "standalone_action": action},
             db_path=_db_path(),
         )
-    project = _project_summary(project_id) if action != "collector" else {}
+    project = _project_summary(project_id) if action not in {"collector", "orchestrator"} else {}
     root = _run_root(project_id)
     payload: dict[str, Any] = {"project_id": project_id}
 
+    if action == "orchestrator":
+        goal = (request.prompt or request.source_text or "").strip()
+        if not goal:
+            raise HTTPException(status_code=400, detail="总控规划需要任务目标、产品与期望交付说明")
+        plan = {
+            "goal": goal,
+            "product_id": request.product_id,
+            "operating_principle": "逐节点耐心核对输入、产物、人工闸门和预算，不替专业 Agent 擅自改写内容。",
+            "route": [
+                {"agent": "Collector", "task": "采集并登记可追溯参考素材"},
+                {"agent": "Analysis / Research", "task": "拆解素材并形成有来源的研究洞察"},
+                {"agent": "Strategy / Script", "task": "建立产品护栏并产出可拍摄脚本"},
+                {"agent": "Storyboard / Asset", "task": "生成分镜并匹配批准素材与关键帧"},
+                {"agent": "Production / Review", "task": "生成候选 Take、人工选择、合成与质检"},
+                {"agent": "Feedback", "task": "归档交付结果与人工复盘"},
+            ],
+            "human_gates": ["脚本确认", "关键帧确认", "逐镜 Take 选择", "成片人工视觉验收"],
+            "delivery": ["中文脚本", "分镜计划", "素材清单", "720×1280 成片", "质检报告"],
+        }
+        return {
+            "ok": True,
+            "project_id": None,
+            "action": action,
+            "artifact_name": "orchestration_plan",
+            "artifact": plan,
+            "meta": {"standalone": True, "agent": "orchestrator"},
+        }
     if action == "collector":
         if not request.target:
             raise HTTPException(status_code=400, detail="collector requires target")
@@ -746,6 +773,26 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             artifacts.save_artifact(project_id, "script_copy", script, run_root=root)
         payload["script_copy"] = script
         tool_name, artifact_name = "doubao_shotplan", "shot_plan"
+    elif action == "asset":
+        source = product_library.resolve_seedance_source(request.product_id)
+        shot_text = (request.prompt or request.source_text or "产品身份关键帧").strip()
+        payload.update(
+            {
+                "product_id": request.product_id,
+                "seedance_source": source,
+                "shot_plan": {
+                    "shots": [
+                        {
+                            "number": 1,
+                            "visual": shot_text,
+                            "seedance_prompt": shot_text,
+                            "camera_motion": {"duration_sec": 6},
+                        }
+                    ]
+                },
+            }
+        )
+        tool_name, artifact_name = "hero_frame", "asset_manifest"
     elif action == "production":
         prompt = (request.prompt or request.source_text or "Create a product-safe vertical shot").strip()
         source = product_library.resolve_seedance_source(request.product_id)
@@ -867,7 +914,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             "meta": {"tool": "feedback_library", "standalone": standalone},
         }
     else:
-        raise HTTPException(status_code=400, detail="action must be collector, analysis, research, strategy, script, script_breakdown, storyboard, production, review, or feedback")
+        raise HTTPException(status_code=400, detail="action must be orchestrator, collector, analysis, research, strategy, script, script_breakdown, storyboard, asset, production, review, or feedback")
 
     result = tool_registry.execute_tool(
         tool_name,
