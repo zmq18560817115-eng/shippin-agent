@@ -79,3 +79,23 @@ def test_normalization_repairs_temperature_encoding_and_shot_four_action() -> No
     assert "travel bag" not in shots[3]["seedance_prompt"]
     assert "pour through the round spout" in shots[3]["seedance_prompt"]
     assert "pour through the round spout" not in shots[2]["visual"]
+
+
+def test_normalization_repairs_all_static_shots_and_generated_text_requests() -> None:
+    script = mock_script_copy("camera-repair")
+    raw = [
+        {
+            "visual": f"scene {index}",
+            "visual_zh": "产品画面" if index < 5 else "产品画面并配文行动号召",
+            "seedance_prompt": f"opening frame {index}",
+            "seedance_prompt_zh": "保持连续画面" if index < 5 else "增加字幕和品牌口号",
+            "camera_motion": {"type": "static"},
+        }
+        for index in range(1, 6)
+    ]
+
+    shots = _normalize_shots(raw, script)
+
+    assert len({shot["camera_motion"]["type"] for shot in shots}) >= 3
+    assert shots[4]["visual_zh"] == "回到同一夜间场景，清晰展示产品并完成行动号召。"
+    assert "字幕" not in shots[4]["seedance_prompt_zh"]

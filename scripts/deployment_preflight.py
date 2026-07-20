@@ -7,13 +7,15 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
-from tools.base_tool import ToolContext
-
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.base_tool import ToolContext
 
 
 def command_version(command: str, args: list[str]) -> dict[str, object]:

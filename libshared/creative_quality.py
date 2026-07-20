@@ -36,6 +36,7 @@ def assess_storyboard(plan: dict[str, Any], script: dict[str, Any] | None = None
     durations = [float((shot.get("camera_motion") or {}).get("duration_sec") or 0) for shot in shots]
     motions = {str((shot.get("camera_motion") or {}).get("type") or "") for shot in shots}
     prompts = [str(shot.get("seedance_prompt") or "") for shot in shots]
+    visual_copy = " ".join(str(shot.get("visual_zh") or shot.get("visual") or "") for shot in shots).casefold()
     checks = [
         _check("shot_count", len(shots) == 5, "分镜必须包含五个镜头"),
         _check("duration", len(durations) == 5 and abs(sum(durations) - 30) < 0.01, "五镜总时长必须为 30 秒"),
@@ -44,6 +45,7 @@ def assess_storyboard(plan: dict[str, Any], script: dict[str, Any] | None = None
         _check("continuity_lock", bool(prompts) and all("continuity lock" in prompt.casefold() for prompt in prompts), "每镜提示词必须包含连续性锁定"),
         _check("product_lock", bool(prompts) and all("white-background hero" in prompt.casefold() for prompt in prompts), "每镜提示词必须锚定获批产品白底主图"),
         _check("chinese_fields", _all_fields(shots, "visual_zh", "seedance_prompt_zh"), "每镜必须提供中文画面与生成提示"),
+        _check("no_generated_text", not any(token in visual_copy for token in ("配文", "字幕", "文字叠加", "屏幕文字", "标题文字", "slogan", "caption", "overlay text")), "生成画面不得要求字幕、配文或其他可读文字"),
     ]
     product_id = str((script or {}).get("product_id") or "")
     if "恒温杯" in product_id and len(shots) >= 4:

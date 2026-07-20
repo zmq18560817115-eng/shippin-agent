@@ -751,7 +751,10 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         source = product_library.resolve_seedance_source(request.product_id)
         references = product_library.resolve_generation_references(request.product_id)
         payload.update({
-            "shot": {"number": 1, "visual": prompt, "seedance_prompt": prompt, "reference_paths": references, "camera_motion": {"duration_sec": 6}},
+            # Let seedance_shot select action references from the prompt. Passing
+            # every product reference here can leak the pouring reference into a
+            # closed-product establishing shot and confuse the generated action.
+            "shot": {"number": 1, "visual": prompt, "seedance_prompt": prompt, "reference_paths": [], "camera_motion": {"duration_sec": 6}},
             "shot_index": 1,
             "take_id": "A",
             "asset_manifest": {"version": "2.0", "project_id": project_id, "product_id": request.product_id, "seedance_source": source, "reference_paths": references, "hero_frames": [{"number": 1, "path": source, "source_refs": [source, *references], "status": "approved"}]},

@@ -58,7 +58,9 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "For every shot return only visual, visual_zh, seedance_prompt, seedance_prompt_zh, and camera_motion.type. "
                     "In each shot's seedance_prompt, briefly state the opening frame so it matches the previous shot's ending "
                     "(same subject placement and camera angle) for a seamless transition. Prefer gentle camera moves "
-                    "(slow push-in or slow pan) over static-to-moving jumps. "
+                    "(slow push-in, slow pan, or gentle pull-out) over static-to-moving jumps. Across the five shots use at least "
+                    "three distinct camera_motion.type values; never return five static shots. "
+                    "Do not request captions, overlays, slogans, labels, logos, or any other readable text inside generated video frames. "
                     "Keep every text field below 45 words; do not restate global continuity or product rules inside each shot. "
                     "Use this five-beat sequence: establish feeding-prep scene, show the pain, introduce the separate warming cup, "
                     "demonstrate the pour, then finish with a product CTA. Script sections: "
@@ -111,7 +113,7 @@ def _normalize_shots(
     character_continuity: str = "same caregiver, wardrobe, hands, and props",
 ) -> list[dict[str, Any]]:
     raw = value if isinstance(value, list) else []
-    motions = ("dolly_in", "static", "pan_right")
+    motions = ("dolly_in", "static", "pan_right", "static", "dolly_out")
     shots: list[dict[str, Any]] = []
     for index, section in enumerate(script_copy.get("sections") or [], start=1):
         item = raw[index - 1] if index - 1 < len(raw) and isinstance(raw[index - 1], dict) else {}
@@ -139,8 +141,8 @@ def _normalize_shots(
                 "visual": visual,
                 "visual_prompt": visual_prompt,
                 "seedance_prompt": prompt,
-                "visual_zh": _fallback_visual_zh(index) if safety_fallback else str(item.get("visual_zh") or _fallback_visual_zh(index)),
-                "seedance_prompt_zh": _fallback_prompt_zh(index) if safety_fallback else str(item.get("seedance_prompt_zh") or _fallback_prompt_zh(index)),
+                "visual_zh": _fallback_visual_zh(index) if safety_fallback else _without_generated_text(str(item.get("visual_zh") or _fallback_visual_zh(index)), index),
+                "seedance_prompt_zh": _fallback_prompt_zh(index) if safety_fallback else _without_generated_text(str(item.get("seedance_prompt_zh") or _fallback_prompt_zh(index)), index),
                 "footage_type": "AI_VIDEO",
                 "camera_motion": {
                     "type": _motion_type(str(motion_value or motions[min(index - 1, len(motions) - 1)])),
@@ -148,6 +150,9 @@ def _normalize_shots(
                 },
             }
         )
+    if len({str((shot.get("camera_motion") or {}).get("type") or "") for shot in shots}) < 2:
+        for index, shot in enumerate(shots):
+            shot["camera_motion"]["type"] = motions[min(index, len(motions) - 1)]
     return shots
 
 
@@ -249,6 +254,11 @@ def _motion_type(value: str) -> str:
 def _clean_temperature_text(value: str) -> str:
     value = re.sub(r"98[^A-Za-z0-9\s]{1,5}F", "98 F", value, flags=re.IGNORECASE)
     return value.replace("98°F", "98 F").replace("98 F degrees", "98 degrees Fahrenheit")
+
+
+def _without_generated_text(value: str, index: int) -> str:
+    forbidden = ("配文", "字幕", "文字叠加", "屏幕文字", "标题文字", "slogan", "caption", "overlay text")
+    return _fallback_visual_zh(index) if any(token in value.casefold() for token in forbidden) else value
 
 
 def _has_outbound_pour(value: str) -> bool:

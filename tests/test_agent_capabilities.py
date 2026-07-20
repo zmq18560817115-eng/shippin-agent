@@ -163,6 +163,25 @@ def test_standalone_analysis_review_and_feedback_are_downloadable(tmp_path: Path
     assert all(response.status_code == 200 for response in (analysis_download, review_download, feedback_download))
 
 
+def test_standalone_non_pour_production_does_not_leak_action_references(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "standalone-production.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "production",
+                "product_id": "便携恒温杯",
+                "prompt": "产品闭盖放在床头柜上，不展示倒液动作。",
+                "mock": True,
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["meta"]["reference_paths"] == []
+
+
 def test_standalone_script_promotes_to_a_gated_production_project(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "promotion.db"))
     monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))

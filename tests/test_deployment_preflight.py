@@ -1,6 +1,26 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 from scripts import deployment_preflight
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_deployment_preflight_supports_direct_script_execution() -> None:
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "deployment_preflight.py"), "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Validate a video-agent-factory deployment host" in result.stdout
 
 
 def test_security_preflight_requires_intranet_auth(monkeypatch) -> None:

@@ -41,6 +41,17 @@ def test_storyboard_assessment_rejects_repeated_static_shots() -> None:
     assert "至少使用两种景别或镜头运动" in report["issues"]
 
 
+def test_storyboard_assessment_rejects_generated_frame_text_requests() -> None:
+    script = mock_script_copy("quality-board-text")
+    plan = mock_shot_plan("quality-board-text", script)
+    plan["shots"][4]["visual_zh"] = "产品定格画面，配文立即了解更多"
+
+    report = assess_storyboard(plan, script)
+
+    assert report["status"] == "NEEDS_REWRITE"
+    assert "生成画面不得要求字幕、配文或其他可读文字" in report["issues"]
+
+
 def test_engine_queues_only_one_targeted_creative_rewrite(tmp_path: Path) -> None:
     db_path = tmp_path / "agentflow.db"
     run_root = tmp_path / "runs" / "quality-retry"
