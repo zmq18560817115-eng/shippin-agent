@@ -122,7 +122,7 @@ def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
             "Character continuity contract for every shot: people may appear naturally when the approved script calls for them. Preserve the same approved adult caregiver identity, face, age range, hairstyle, wardrobe, sleeves, hands, body proportions, and relationship to the product across shots. Do not introduce a different performer, distorted anatomy, or unexplained identity changes. Product-only and hands-only framing may still be used when it best serves the approved shot, but it is not mandatory.",
             "For a warming-cup pouring shot: pour liquid from the warming cup spout into a separate clean baby bottle; never place the baby bottle inside the warming cup and never pour in the reverse direction.",
             action_rule,
-            "Display contract: only show a lit display when the shot explicitly requires a temperature close-up. If visible, it must read exactly 98°F with one Fahrenheit symbol and no Celsius symbol. Never show °C, 98°C, mixed °C/F, extra digits, or corrupted glyphs. If exact 98°F cannot be rendered, keep the display unlit or fully out of frame.",
+            "Display contract: only show a lit display when the shot explicitly requires a temperature proof close-up. In every other shot the screen must remain fully unlit, blank, or outside the readable crop, with no digits or unit glyphs. In a temperature proof shot it must read exactly 98°F with one Fahrenheit symbol and no Celsius symbol. Never show °C, 98°C, 90°C, mixed °C/F, extra digits, or corrupted glyphs. If exact 98°F cannot be rendered, keep the display unlit or fully out of frame.",
         )
         if part
     )

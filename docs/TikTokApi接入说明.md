@@ -31,6 +31,7 @@ TIKTOK_MS_TOKEN=服务账号的msToken
 TIKTOK_BROWSER=chromium
 TIKTOK_HEADLESS=true
 TIKTOK_TIMEOUT_MS=45000
+TIKTOK_WORKER_TIMEOUT_SEC=75
 TIKTOK_PROXY=
 
 # 推荐：从专用服务账号导出的 Netscape cookies.txt 文件。
@@ -39,6 +40,8 @@ TIKTOK_COOKIES_FILE=/srv/video-agent-factory/secrets/tiktok-cookies.txt
 # 可选：关键词托管采集。
 APIFY_API_TOKEN=
 ```
+
+TikTokApi 采集在独立子进程中运行，超过 `TIKTOK_WORKER_TIMEOUT_SEC` 会被终止并返回明确错误，不会拖死 API 主进程。当前 TikTokApi 包的“关键词”路径实质上按话题标签发现；严格的自然语言关键词检索建议使用 Apify。无字幕视频下载后若要自动转写，还需配置独立的 `VOLCENGINE_ASR_API_KEY`，或旧版 `VOLCENGINE_ASR_APP_KEY` 与 `VOLCENGINE_ASR_ACCESS_KEY`。
 
 Cookies 文件只放在服务器密钥目录，权限建议为 `600`，禁止提交 Git、放入前端或写入日志。
 

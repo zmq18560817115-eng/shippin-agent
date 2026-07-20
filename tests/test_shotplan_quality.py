@@ -17,7 +17,9 @@ def test_normalized_shots_lock_scene_character_product_and_action_continuity() -
     assert all("one stable night bedroom" in shot["seedance_prompt"] for shot in plan)
     assert all("same caregiver in a blue shirt" in shot["seedance_prompt"] for shot in plan)
     assert all("approved white-background hero reference" in shot["seedance_prompt"] for shot in plan)
-    assert all("98 degrees Fahrenheit" in shot["seedance_prompt"] for shot in plan)
+    assert all("temperature display fully unlit" in shot["seedance_prompt"] for shot in plan[:3])
+    assert all("exactly 98 degrees Fahrenheit" in shot["seedance_prompt"] for shot in plan[3:])
+    assert all("90 C" in shot["seedance_prompt"] for shot in plan[3:])
     assert "pour from an approved source into the cup" in plan[2]["seedance_prompt"]
     assert "pour through its round spout" in plan[3]["seedance_prompt"]
 
@@ -42,6 +44,8 @@ def test_real_shotplan_reads_product_facts_and_returns_five_shots(monkeypatch) -
 
     assert result.ok is True
     assert len(result.data["shot_plan"]["shots"]) == 5
+    assert result.data["shot_plan"]["scene_continuity"] == "one stable night feeding-prep scene"
+    assert result.data["shot_plan"]["character_continuity"] == "same caregiver, wardrobe, hands, and props"
     assert "Approved product facts" in captured["messages"][1]["content"]
 
 

@@ -81,6 +81,19 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     if video_path is None:
         return ToolResult.failure("provider", "yt-dlp completed without a video file")
     subtitle_text = supplied_transcript or _read_subtitles(material_dir)
+    transcript_source = "operator" if supplied_transcript else ("subtitle" if subtitle_text else "missing")
+    asr_error = ""
+    asr_segments: list[dict[str, Any]] = []
+    if not subtitle_text:
+        from tools.audio import volcengine_asr
+
+        asr = volcengine_asr.execute({"audio_path": video_path.as_posix()}, context)
+        if asr.ok:
+            subtitle_text = str(asr.data.get("transcript_text") or "").strip()
+            asr_segments = list(asr.data.get("segments") or [])
+            transcript_source = "volcengine_asr" if subtitle_text else "missing"
+        else:
+            asr_error = str((asr.error or {}).get("message") or "")
     cover_path = _find_cover(material_dir)
     frame_paths = _extract_frames(video_path, material_dir / "frames")
     return ToolResult.success(
@@ -89,10 +102,12 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "local_video_path": video_path.as_posix(),
             "local_cover_path": cover_path.as_posix() if cover_path else "",
             "transcript_text": subtitle_text,
-            "transcript_source": "operator" if supplied_transcript else ("subtitle" if subtitle_text else "missing"),
+            "transcript_source": transcript_source,
+            "transcript_segments": asr_segments,
+            "asr_error": asr_error,
             "frame_paths": [path.as_posix() for path in frame_paths],
         },
-        meta={"tool": "tiktok_video", "mock": False, "frame_count": len(frame_paths)},
+        meta={"tool": "tiktok_video", "mock": False, "frame_count": len(frame_paths), "transcript_source": transcript_source},
     )
 
 

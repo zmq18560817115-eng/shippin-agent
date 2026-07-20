@@ -114,5 +114,7 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
         "project_id": project_id,
         "script_copy_ref": "artifacts/script_copy.json",
         "aspect_ratio": "9:16",
+        "scene_continuity": "同一深夜卧室、暖黄色床头灯与床头柜区域",
+        "character_continuity": "同一位成年照护者，保持脸部身份、发型、浅色家居服、手部与体态一致",
         "shots": shots,
     }

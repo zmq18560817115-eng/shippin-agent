@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -59,6 +60,27 @@ def test_tiktok_api_video_normalization() -> None:
     assert item["url"] == "https://www.tiktok.com/@brand/video/123"
     assert item["like_count"] == 9
     assert item["play_count"] == 20
+
+
+def test_tiktok_api_worker_empty_output_becomes_actionable_error(monkeypatch) -> None:
+    monkeypatch.setattr(tiktok_api_adapter, "package_available", lambda: True)
+    monkeypatch.setattr(
+        tiktok_api_adapter.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, stdout="", stderr=""),
+    )
+
+    try:
+        tiktok_api_adapter.discover(
+            target_type="keyword",
+            target="portable bottle warmer",
+            limit=3,
+            env={"TIKTOK_MS_TOKEN": "secret"},
+        )
+    except RuntimeError as exc:
+        assert "未返回数据" in str(exc)
+    else:
+        raise AssertionError("empty worker output must fail")
 
 
 def test_auto_account_falls_back_to_ytdlp_when_tiktok_api_fails(monkeypatch) -> None:

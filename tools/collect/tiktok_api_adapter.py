@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import re
+import subprocess
+import sys
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
@@ -27,6 +30,51 @@ def discover(
     token = str(env.get("TIKTOK_MS_TOKEN") or "").strip()
     if not token:
         raise RuntimeError("未配置 TIKTOK_MS_TOKEN，请按 docs/TikTokApi接入说明.md 写入 .env.local")
+    timeout_sec = max(15, int(env.get("TIKTOK_WORKER_TIMEOUT_SEC") or 75))
+    request = {
+        "target_type": target_type,
+        "target": target,
+        "limit": limit,
+        "token": token,
+        "browser": str(env.get("TIKTOK_BROWSER") or "chromium"),
+        "proxy": str(env.get("TIKTOK_PROXY") or ""),
+        "timeout_ms": str(env.get("TIKTOK_TIMEOUT_MS") or "45000"),
+        "headless": str(env.get("TIKTOK_HEADLESS") or "true"),
+    }
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-m", "tools.collect.tiktok_api_worker"],
+            input=json.dumps(request, ensure_ascii=False),
+            text=True,
+            capture_output=True,
+            timeout=timeout_sec,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"TikTok 浏览器采集超过 {timeout_sec} 秒，已终止本次任务") from exc
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "采集子进程异常退出").strip()
+        raise RuntimeError(detail[-800:])
+    output = completed.stdout.strip()
+    if not output:
+        raise RuntimeError("TikTok 浏览器采集未返回数据，可能遇到验证码、地区限制或失效会话")
+    try:
+        response = json.loads(output.splitlines()[-1])
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("TikTok 浏览器采集返回了无法解析的结果") from exc
+    if not response.get("ok"):
+        raise RuntimeError(str(response.get("error") or "TikTok 浏览器采集失败"))
+    return list(response.get("items") or [])
+
+
+def discover_direct(
+    *,
+    target_type: str,
+    target: str,
+    limit: int,
+    env: Mapping[str, str],
+    token: str,
+) -> list[dict[str, Any]]:
     return asyncio.run(_discover(target_type=target_type, target=target, limit=limit, env=env, token=token))
 
 

@@ -11,6 +11,8 @@
       "description": "所依据的 script_copy 产物路径；script_copy 变更后 engine 使本产物失效"
     },
     "aspect_ratio": {"enum": ["9:16", "16:9", "1:1"], "default": "9:16"},
+    "scene_continuity": {"type": "string", "minLength": 4},
+    "character_continuity": {"type": "string", "minLength": 4},
     "quality_assessment": {"type": "object"},
     "shots": {
       "type": "array",

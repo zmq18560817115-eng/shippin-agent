@@ -130,9 +130,22 @@ VAF_AUTO_COLLECT_REAL=true
 
 ```dotenv
 TIKTOK_COOKIES_FILE=/data/secrets/tiktok-cookies.txt
+TIKTOK_WORKER_TIMEOUT_SEC=75
 ```
 
 Cookies、`TIKTOK_MS_TOKEN` 和 API Key 不应进入仓库或镜像。TikTok 的可访问性会受地区、登录状态、Cookie 有效期和平台策略影响；系统会保留人工链接导入作为降级入口。
+
+无字幕视频需要额外配置火山语音识别，不能复用豆包文本或 Seedance 密钥：
+
+```dotenv
+# 新版控制台优先使用这一项
+VOLCENGINE_ASR_API_KEY=
+# 旧版控制台使用以下两项
+VOLCENGINE_ASR_APP_KEY=
+VOLCENGINE_ASR_ACCESS_KEY=
+```
+
+TikTokApi 浏览器采集运行在隔离子进程中，超过 `TIKTOK_WORKER_TIMEOUT_SEC` 会终止并返回可读错误，避免主服务被浏览器卡死。TikTokApi 对关键词的能力更接近话题标签发现；需要严格按自然语言关键词检索时，应配置 `APIFY_API_TOKEN`，并保留账号采集、Cookies 下载和人工直链作为降级路径。
 
 ## 验收与开发
 

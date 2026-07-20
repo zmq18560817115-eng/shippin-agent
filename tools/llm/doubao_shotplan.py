@@ -70,16 +70,20 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             },
         ],
     )
+    scene_continuity = str(response.get("scene_continuity") or "one stable night feeding-prep scene")
+    character_continuity = str(response.get("character_continuity") or "same caregiver, wardrobe, hands, and props")
     shot_plan = {
         "version": "2.0",
         "project_id": project_id,
         "script_copy_ref": "artifacts/script_copy.json",
         "aspect_ratio": "9:16",
+        "scene_continuity": scene_continuity,
+        "character_continuity": character_continuity,
         "shots": _normalize_shots(
             response.get("shots"),
             script_copy,
-            scene_continuity=str(response.get("scene_continuity") or "one stable night feeding-prep scene"),
-            character_continuity=str(response.get("character_continuity") or "same caregiver, wardrobe, hands, and props"),
+            scene_continuity=scene_continuity,
+            character_continuity=character_continuity,
         ),
     }
     artifacts.validate_artifact("shot_plan", shot_plan, script_copy=script_copy)
@@ -170,6 +174,14 @@ def _lock_prompt(
     # requirement, so it is always guaranteed on the seedance_prompt.
     if "white-background hero" in prompt.casefold():
         return prompt
+    display_contract = (
+        "This shot is not a temperature proof shot. Keep the temperature display fully unlit, blank, "
+        "or outside the readable crop; do not render any digits, temperature unit, or glowing symbols. "
+        if shot_index not in {4, 5}
+        else "Temperature proof contract: if the display is readable, it must show exactly 98 degrees "
+        "Fahrenheit (98 F) with a single Fahrenheit symbol. Never show Celsius, 98 C, 90 C, mixed units, "
+        "extra digits, or malformed glyphs. If exact 98 F cannot be rendered, keep the display unlit. "
+    )
     lock = (
         "Continuity lock: same location and lighting across all five shots; "
         f"scene: {scene_continuity}; character: {character_continuity}. "
@@ -177,7 +189,7 @@ def _lock_prompt(
         "purple lid and ring, round pouring spout, vertical temperature display, oval power button, logo placement, and charging-port cover. "
         "Keep the product clearly lit and fully visible; even in the night scene a warm bedside lamp evenly illuminates the product, avoid an all-black or underexposed frame. "
         "The warming cup and baby bottle are separate products. Never insert or attach a bottle, nipple, carton, or commercial milk bottle to the cup. "
-        "When visible, the display reads 98 degrees Fahrenheit (98 F), never Celsius. "
+        f"{display_contract}"
         f"Action continuity for shot {shot_index}: {_shot_action(shot_index)} "
     )
     prompt = lock + prompt
