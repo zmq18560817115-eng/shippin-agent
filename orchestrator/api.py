@@ -30,7 +30,7 @@ from orchestrator import cost_tracker, engine, queue, user_store
 from orchestrator.capabilities import capability_map
 from tools import tool_registry
 from tools.base_tool import ToolContext
-from tools.collect import manual_import, product_library, tiktok_oembed
+from tools.collect import manual_import, product_library, relevance, tiktok_oembed
 
 
 load_local_env()
@@ -1194,7 +1194,8 @@ def collection_job(job_id: int) -> dict[str, Any]:
     job = queue.get_collection_job(job_id, db_path=_db_path())
     if job is None:
         raise HTTPException(status_code=404, detail="采集任务不存在")
-    return {"ok": True, "job": job}
+    items = queue.list_collection_items(job_id, db_path=_db_path())
+    return {"ok": True, "job": job, "items": items, "item_count": len(items)}
 
 
 @app.post("/api/v2/collect/jobs/{job_id}/cancel")
@@ -1481,22 +1482,13 @@ def _run_collection_job_once(worker_id: str) -> dict[str, Any] | None:
     heartbeat_thread.start()
     try:
         queue.heartbeat_collection_job(job_id, worker_id, db_path=_db_path())
-        result = crawl_tiktok_and_run(
-            TikTokCrawlRequest(
-                target_type=job["target_type"],
-                provider=job["provider"],
-                target=job["target"],
-                limit=min(int(job["requested_count"]), 20),
-                product_id=job["product_id"],
-                mock=bool(job["mock"]),
-            )
-        )
+        result = _collect_relevant_job_items(job)
         completed = int(result.get("completed_count") or 0)
         final = queue.complete_collection_job(
             job_id,
             worker_id,
             discovered_count=int(result.get("discovered_count") or 0),
-            relevant_count=int(result.get("discovered_count") or 0),
+            relevant_count=int(result.get("relevant_count") or 0),
             downloaded_count=completed,
             analyzed_count=completed,
             failed_count=int(result.get("failed_count") or 0),
@@ -1513,6 +1505,125 @@ def _run_collection_job_once(worker_id: str) -> dict[str, Any] | None:
     finally:
         heartbeat_stop.set()
         heartbeat_thread.join(timeout=1)
+
+
+def _collect_relevant_job_items(job: dict[str, Any]) -> dict[str, Any]:
+    job_id = int(job["id"])
+    requested = int(job["requested_count"])
+    seen_urls: set[str] = set()
+    discovered_count = 0
+    relevant_count = 0
+    completed_count = 0
+    failed_count = 0
+    failures: list[dict[str, str]] = []
+    provider = job["provider"]
+
+    for round_index in range(3):
+        discovery_limit = min(100, max(12, requested * (3 + round_index)))
+        discovered = tool_registry.execute_tool(
+            "tiktok_crawler",
+            {
+                "target_type": job["target_type"],
+                "provider": job["provider"],
+                "target": job["target"],
+                "limit": discovery_limit,
+            },
+            context={"mock": bool(job["mock"]), "env": os.environ},
+        )
+        if not discovered.ok:
+            error = discovered.error or {"category": "provider", "message": "TikTok crawl failed"}
+            status_code = 422 if error.get("category") == "validation" else 503
+            raise HTTPException(status_code=status_code, detail=error["message"])
+        provider = discovered.data.get("provider") or provider
+        new_in_round = 0
+        for item in discovered.data.get("items", []):
+            url = str(item.get("url") or "").strip()
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            new_in_round += 1
+            discovered_count += 1
+            scored = relevance.score_item(item, str(job["target"]), target_type=str(job["target_type"]))
+            if not scored["relevant"]:
+                queue.upsert_collection_item(
+                    job_id,
+                    source_url=url,
+                    item={**item, "relevance": scored},
+                    relevance_score=float(scored["score"]),
+                    status="filtered",
+                    error_message="与采集目标相关性不足",
+                    db_path=_db_path(),
+                )
+                continue
+            if queue.collection_url_exists(url, exclude_job_id=job_id, db_path=_db_path()):
+                queue.upsert_collection_item(
+                    job_id,
+                    source_url=url,
+                    item={**item, "relevance": scored},
+                    relevance_score=float(scored["score"]),
+                    status="filtered",
+                    error_message="素材库或其他采集任务已存在该视频",
+                    db_path=_db_path(),
+                )
+                continue
+            relevant_count += 1
+            queue.upsert_collection_item(
+                job_id,
+                source_url=url,
+                item={**item, "relevance": scored},
+                relevance_score=float(scored["score"]),
+                status="downloading",
+                db_path=_db_path(),
+            )
+            try:
+                intake = collect_tiktok_and_run(
+                    TikTokIntakeRunRequest(
+                        url=url,
+                        product_id=str(job["product_id"]),
+                        transcript_text=str(item.get("caption") or "") or None,
+                        source_item=item,
+                        mock=bool(job["mock"]),
+                    )
+                )
+                queue.upsert_collection_item(
+                    job_id,
+                    source_url=url,
+                    item={**item, "relevance": scored, "material_id": intake["material"]["material_id"], "project_id": intake["project_id"]},
+                    relevance_score=float(scored["score"]),
+                    status="ready",
+                    db_path=_db_path(),
+                )
+                completed_count += 1
+            except HTTPException as exc:
+                failed_count += 1
+                failures.append({"url": url, "error": str(exc.detail)})
+                queue.upsert_collection_item(
+                    job_id,
+                    source_url=url,
+                    item={**item, "relevance": scored},
+                    relevance_score=float(scored["score"]),
+                    status="failed",
+                    error_message=str(exc.detail),
+                    db_path=_db_path(),
+                )
+            if completed_count >= requested:
+                break
+        if completed_count >= requested or new_in_round == 0:
+            break
+
+    return {
+        "ok": completed_count > 0,
+        "provider": provider,
+        "target_type": job["target_type"],
+        "target": job["target"],
+        "requested_count": requested,
+        "discovered_count": discovered_count,
+        "relevant_count": relevant_count,
+        "completed_count": completed_count,
+        "failed_count": failed_count,
+        "shortfall_count": max(0, requested - completed_count),
+        "failures": failures,
+    }
 
 
 async def _collection_job_loop() -> None:

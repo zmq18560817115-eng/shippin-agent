@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from orchestrator import api, queue
 from orchestrator.api import app
+from tools.base_tool import ToolResult
 
 
 def test_collection_job_persists_progress_contract(tmp_path: Path) -> None:
@@ -157,15 +158,26 @@ def test_background_worker_writes_job_progress(tmp_path: Path, monkeypatch) -> N
         db_path=db_path,
     )
     monkeypatch.setattr(
+        api.tool_registry,
+        "execute_tool",
+        lambda *args, **kwargs: ToolResult.success(
+            {
+                "provider": "mock",
+                "items": [
+                    {"url": "https://www.tiktok.com/@demo/video/3", "caption": "unrelated dance clip"},
+                    {"url": "https://www.tiktok.com/@demo/video/1", "caption": "heated cup bottle warmer"},
+                    {"url": "https://www.tiktok.com/@demo/video/2", "caption": "portable milk warmer review"},
+                ],
+            }
+        ),
+    )
+    monkeypatch.setattr(
         api,
-        "crawl_tiktok_and_run",
+        "collect_tiktok_and_run",
         lambda request: {
             "ok": True,
-            "discovered_count": 3,
-            "completed_count": 2,
-            "failed_count": 0,
-            "results": [],
-            "failures": [],
+            "material": {"material_id": request.url.rsplit("/", 1)[-1]},
+            "project_id": f"project-{request.url.rsplit('/', 1)[-1]}",
         },
     )
 
@@ -176,5 +188,90 @@ def test_background_worker_writes_job_progress(tmp_path: Path, monkeypatch) -> N
     assert completed is not None
     assert completed["status"] == "succeeded"
     assert completed["progress"]["discovered"] == 3
+    assert completed["progress"]["relevant"] == 2
     assert completed["progress"]["downloaded"] == 2
     assert completed["progress"]["analyzed"] == 2
+
+    items = queue.list_collection_items(job["id"], db_path=db_path)
+    assert [item["status"] for item in items].count("ready") == 2
+    assert [item["status"] for item in items].count("filtered") == 1
+
+
+def test_collection_worker_replenishes_and_deduplicates_across_jobs(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "agentflow.db"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    prior = queue.create_collection_job(
+        target_type="keyword",
+        provider="auto",
+        target="heated cup",
+        requested_count=1,
+        product_id="便携恒温杯",
+        mock=True,
+        db_path=db_path,
+    )
+    duplicate_url = "https://www.tiktok.com/@demo/video/100"
+    queue.upsert_collection_item(
+        prior["id"],
+        source_url=duplicate_url,
+        item={"url": duplicate_url, "caption": "heated cup demo"},
+        relevance_score=1.0,
+        status="ready",
+        db_path=db_path,
+    )
+    queue.cancel_collection_job(prior["id"], db_path=db_path)
+
+    job = queue.create_collection_job(
+        target_type="keyword",
+        provider="auto",
+        target="heated cup",
+        requested_count=2,
+        product_id="便携恒温杯",
+        mock=True,
+        db_path=db_path,
+    )
+    rounds = [
+        [
+            {"url": duplicate_url, "caption": "heated cup demo"},
+            {"url": "https://www.tiktok.com/@demo/video/101", "caption": "makeup tutorial"},
+            {"url": "https://www.tiktok.com/@demo/video/102", "caption": "portable bottle warmer for travel"},
+        ],
+        [
+            {"url": "https://www.tiktok.com/@demo/video/103", "caption": "formula milk warmer night feeding"},
+        ],
+    ]
+
+    def discover(*args, **kwargs):
+        return ToolResult.success({"provider": "mock", "items": rounds.pop(0) if rounds else []})
+
+    processed: list[str] = []
+    monkeypatch.setattr(api.tool_registry, "execute_tool", discover)
+
+    def intake(request):
+        processed.append(request.url)
+        suffix = request.url.rsplit("/", 1)[-1]
+        return {"material": {"material_id": suffix}, "project_id": f"project-{suffix}"}
+
+    monkeypatch.setattr(api, "collect_tiktok_and_run", intake)
+
+    result = api._run_collection_job_once("test-worker")
+
+    assert result is not None and result["ok"] is True
+    assert processed == [
+        "https://www.tiktok.com/@demo/video/102",
+        "https://www.tiktok.com/@demo/video/103",
+    ]
+    completed = queue.get_collection_job(job["id"], db_path=db_path)
+    assert completed is not None
+    assert completed["status"] == "succeeded"
+    assert completed["progress"] == {
+        "requested": 2,
+        "discovered": 4,
+        "relevant": 2,
+        "downloaded": 2,
+        "analyzed": 2,
+        "failed": 0,
+    }
+    items = queue.list_collection_items(job["id"], db_path=db_path)
+    reasons = {item["source_url"]: item["error_message"] for item in items if item["status"] == "filtered"}
+    assert duplicate_url in reasons
+    assert "101" in next(url for url in reasons if url.endswith("101"))

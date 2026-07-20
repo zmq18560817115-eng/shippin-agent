@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -370,6 +371,103 @@ def recover_expired_collection_jobs(
             (now, now, now),
         ).rowcount
     return int(changed)
+
+
+def collection_url_exists(
+    source_url: str,
+    *,
+    exclude_job_id: int | None = None,
+    db_path: str | os.PathLike[str] | None = None,
+) -> bool:
+    init_db(db_path)
+    params: list[Any] = [source_url]
+    extra = ""
+    if exclude_job_id is not None:
+        extra = "AND job_id != ?"
+        params.append(exclude_job_id)
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            f"SELECT 1 FROM collection_items WHERE source_url = ? {extra} AND status NOT IN ('failed','filtered') LIMIT 1",
+            params,
+        ).fetchone()
+    return row is not None
+
+
+def upsert_collection_item(
+    job_id: int,
+    *,
+    source_url: str,
+    item: dict[str, Any],
+    relevance_score: float,
+    status: str,
+    error_message: str = "",
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    allowed = {"discovered", "filtered", "downloading", "downloaded", "transcribing", "analyzing", "ready", "failed"}
+    if status not in allowed:
+        raise ValueError("unsupported collection item status")
+    now = utc_now()
+    video_id = str(item.get("video_id") or "")
+    if not video_id:
+        match = re.search(r"/video/(\d+)", source_url)
+        video_id = match.group(1) if match else ""
+    with get_conn(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO collection_items
+            (job_id, source_url, source_video_id, title, author_name, cover_url, relevance_score,
+             status, error_message, metadata_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id, source_url) DO UPDATE SET
+                source_video_id = excluded.source_video_id, title = excluded.title,
+                author_name = excluded.author_name, cover_url = excluded.cover_url,
+                relevance_score = excluded.relevance_score, status = excluded.status,
+                error_message = excluded.error_message, metadata_json = excluded.metadata_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                job_id, source_url, video_id,
+                str(item.get("title") or item.get("caption") or "")[:500],
+                str(item.get("author_name") or item.get("author") or "")[:200],
+                str(item.get("cover_url") or item.get("thumbnail_url") or "")[:2000],
+                max(0.0, min(float(relevance_score), 1.0)), status, str(error_message)[:2000],
+                _dumps(item), now, now,
+            ),
+        )
+        row = conn.execute(
+            "SELECT * FROM collection_items WHERE job_id = ? AND source_url = ?",
+            (job_id, source_url),
+        ).fetchone()
+    return _collection_item_dict(row)
+
+
+def list_collection_items(
+    job_id: int,
+    *,
+    status: str | None = None,
+    db_path: str | os.PathLike[str] | None = None,
+) -> list[dict[str, Any]]:
+    init_db(db_path)
+    params: list[Any] = [job_id]
+    extra = ""
+    if status:
+        extra = "AND status = ?"
+        params.append(status)
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM collection_items WHERE job_id = ? {extra} ORDER BY relevance_score DESC, id",
+            params,
+        ).fetchall()
+    return [_collection_item_dict(row) for row in rows]
+
+
+def _collection_item_dict(row: sqlite3.Row) -> dict[str, Any]:
+    payload = dict(row)
+    try:
+        payload["metadata"] = json.loads(payload.pop("metadata_json") or "{}")
+    except json.JSONDecodeError:
+        payload["metadata"] = {}
+    return payload
 
 
 def _collection_job_dict(row: sqlite3.Row) -> dict[str, Any]:
