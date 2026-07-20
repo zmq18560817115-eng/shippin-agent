@@ -48,15 +48,18 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "user",
                 "content": (
-                    "Create script_copy JSON for product_id "
-                    f"{product_id}. Use exactly 5 sections with roles 钩子, 痛点, 方案, 证明, 行动号召 and continuous timings "
-                    "0-6s, 6-12s, 12-18s, 18-24s, 24-30s。每段返回 voiceover_zh、scene_zh（环境、灯光、道具、人物状态）、action_zh（可见动作与产品使用步骤）和 story_beat_zh（相对上一段发生的变化及其叙事作用）。"
-                    "The five sections must create one continuous, filmable story. Beat 1 establishes the scene; beat 2 shows the waiting problem; "
-                    "beat 3 only pours an approved milk source into the warming cup; beat 4 only pours from the warming cup through its round spout into a separate clean baby bottle; beat 5 closes with a CTA. "
-                    "Do not combine the two pouring directions in one beat. Product fact: portable warming cup is separate from baby bottle. "
-                    f"Approved product facts and hard constraints: {product_facts or 'not provided'}. "
-                    f"Previous review feedback that must be fixed: {rewrite_reason or 'none'}. "
-                    f"Approved content strategy: {strategy_brief}. Analysis: {analysis_report}"
+                    f"为产品 {product_id} 创作 script_copy JSON。先在内部比较三个真实生活切口，只输出最有张力且最可拍的一版。"
+                    "必须使用钩子、痛点、方案、证明、行动号召五段，时间依次为 0-6s、6-12s、12-18s、18-24s、24-30s。"
+                    "每段返回 voiceover_zh、scene_zh、action_zh、story_beat_zh。scene_zh 必须包含具体环境、光线、道具位置和人物当下状态；"
+                    "action_zh 只写镜头中可以看见的一个主要动作；story_beat_zh 必须说明这一段相对上一段发生了什么变化、为何推动下一段。"
+                    "五段必须是同一人物、同一时间和同一空间中的连续小故事。开头用异常、选择或未完成动作制造好奇，不使用空泛提问和广告口号；"
+                    "痛点用人物行为表现，不直接宣讲；产品只能在冲突建立后自然出现；结尾给低压力行动号召。旁白应口语、克制、可朗读，删掉可套用到其他产品的句子。"
+                    "第 3 段只展示获批奶液来源倒入恒温杯；第 4 段只展示恒温杯经圆形出液口倒入独立干净奶瓶，不得在同一段合并两个方向。"
+                    "便携恒温杯与奶瓶是两个独立物体。不得虚构功能、品牌、医疗效果或保证性声明。"
+                    f"获批产品事实与硬约束：{product_facts or '未提供'}。"
+                    f"必须修复的上轮反馈：{rewrite_reason or '无'}。"
+                    f"获批内容策略：{strategy_brief}。素材分析：{analysis_report}。"
+                    "交付前静默检查：是否有具体生活细节、五段因果是否连续、人物说话是否自然、产品动作是否准确；不满足时先重写再返回 JSON。"
                 ),
             },
         ],

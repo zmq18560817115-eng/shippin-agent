@@ -944,6 +944,176 @@ textarea:focus {
   }
 }
 
+/* iOS-style clarity layer: compact hierarchy, progressive disclosure, 44px targets. */
+:root {
+  --accent: #007aff;
+  --accent-soft: #eef6ff;
+  --blue: #007aff;
+  --blue-strong: #0062cc;
+  --blue-soft: #eef6ff;
+  --bg: #f2f2f7;
+  --surface-subtle: #f8f8fa;
+  --line: #d9d9df;
+  --line-strong: #c7c7cc;
+  --text: #1c1c1e;
+  --ink: #1c1c1e;
+  --muted: #6e6e73;
+  --muted-strong: #48484a;
+}
+
+body {
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+.buttonLink,
+input,
+select {
+  min-height: 44px;
+}
+
+button,
+.buttonLink,
+input,
+select,
+textarea {
+  border-radius: 8px;
+}
+
+button,
+.buttonLink {
+  box-shadow: none;
+  font-weight: 600;
+}
+
+button.primary,
+.continueButton {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: none;
+}
+
+button:focus-visible,
+.buttonLink:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, 0.22);
+  outline-offset: 2px;
+}
+
+.workflowNav button small,
+.navFoot,
+.viewIntro p,
+.nodeToolHead > div > span,
+.advancedIntake > summary small,
+.quickIntakeIntro small {
+  display: none;
+}
+
+.workflowNav button {
+  min-height: 48px;
+}
+
+.viewIntro {
+  min-height: 84px;
+  padding-top: 18px;
+}
+
+.viewIntro h2 {
+  margin-top: 2px;
+}
+
+.band {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.nodeTools,
+.standaloneLauncher {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.agentContract {
+  display: block;
+  margin: 10px 0;
+  border: 1px solid #cfe3fb;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+}
+
+.agentIdentity {
+  display: grid;
+  gap: 4px;
+}
+
+.agentIdentity p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.agentContractDetails,
+.creativeOptions {
+  margin-top: 10px;
+  border-top: 1px solid rgba(0, 122, 255, 0.16);
+}
+
+.agentContractDetails > summary,
+.creativeOptions > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.agentContractDetails > div {
+  margin-top: 8px;
+}
+
+.creativeOptions {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.creativeOptions > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.creativeOptions label {
+  display: grid;
+  gap: 6px;
+}
+
+.runtimeModeHint {
+  border-left: 0;
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: var(--surface-subtle);
+}
+
+@media (max-width: 700px) {
+  .creativeOptions > div {
+    grid-template-columns: 1fr;
+  }
+
+  .viewIntro {
+    min-height: 76px;
+  }
+}
+
 @media (max-width: 520px) {
   .topbar {
     gap: 8px;
@@ -983,6 +1153,33 @@ textarea:focus {
   .quickIntake .formActions {
     grid-template-columns: 1fr;
   }
+}
+
+/* Keep the clarity layer authoritative after legacy component declarations. */
+.nodeTools,
+.standaloneLauncher,
+.band {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.workflowNav button small,
+.navFoot,
+.viewIntro p,
+.nodeToolHead > div > span,
+.advancedIntake > summary small,
+.quickIntakeIntro small {
+  display: none;
+}
+
+.agentContract {
+  display: block;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+button.quietButton {
+  min-height: 44px;
 }
 
 .collectionQueue {

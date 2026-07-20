@@ -40,6 +40,8 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert "function creativeRequestFields()" in script
     assert "...creativeRequestFields()" in script
     assert "agentExecutionContext" in script
+    assert 'class="creativeOptions"' in html
+    assert "查看能力与质量标准" in script
     assert "function renderCreativeQuality" in script
 
 

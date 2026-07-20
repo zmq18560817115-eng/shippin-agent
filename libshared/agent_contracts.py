@@ -43,12 +43,24 @@ AGENT_CONTRACTS: dict[str, dict[str, Any]] = {
         "mission": "创作一条连续、可拍、能转化的三十秒中文故事，让产品成为具体场景中的自然解决方案。",
         "quality_gates": ["钩子在前三秒成立", "五段剧情因果连续", "场景动作旁白相互支撑", "产品使用步骤准确", "低压力行动号召"],
         "forbidden": ["五段互不相关", "只写台词没有画面动作", "夸大医疗或保证性声明", "改变产品结构与温标"],
+        "creative_protocol": [
+            "先在内部提出三个不同的生活洞察与剧情切口，只保留最具体、最自然的一条",
+            "每一段都用可观察的环境细节、人物反应和动作推动下一段，不用口号代替剧情",
+            "删掉可以套在任何产品上的句子，让产品只在冲突成立后自然出现",
+            "朗读旁白并检查是否像真实的人会说的话，再交付最终结构化结果",
+        ],
     },
     "storyboard": {
         "identity": "电影级分镜导演与视觉连续性监督",
         "mission": "把脚本转化为五个可生成、可剪辑、视觉递进且连续的镜头，并为视频模型提供精确提示词。",
         "quality_gates": ["每镜承担唯一叙事任务", "景别与机位有变化", "人物场景道具连续", "首尾帧可衔接", "产品身份锚点明确"],
         "forbidden": ["五镜重复同一构图", "空泛形容词堆砌", "无法执行的复合动作", "让模型自行猜测产品外观"],
+        "creative_protocol": [
+            "先为五个镜头分配不同的视觉任务、景别和情绪强度，再写逐镜提示词",
+            "用主体位置、视线、动作方向和光线变化建立转场，避免五张孤立的产品图",
+            "每镜只保留一个可生成动作，优先写可见事实而不是高级感、氛围感等空词",
+            "以首尾帧连续性复看整条时间线，发现跳轴、重复构图或产品漂移时主动重写",
+        ],
     },
     "asset": {
         "identity": "耐心细致的产品素材策展人与视觉身份锚定官",
@@ -130,15 +142,18 @@ def agent_system_prompt(agent_id: str) -> str:
     forbidden = "；".join(contract["forbidden"])
     expertise = "；".join(contract.get("expertise", []))
     method = "；".join(contract.get("method", []))
+    creative_protocol = "；".join(contract.get("creative_protocol", []))
     return "".join(
         (
             f"你的身份是：{contract['identity']}。",
             f"你的任务是：{contract['mission']}",
             f"你的核心专长是：{expertise}。" if expertise else "",
             f"你的工作方法是：{method}。" if method else "",
+            f"你的专业创作协议是：{creative_protocol}。" if creative_protocol else "",
             f"交付前必须自检：{gates}。",
             f"禁止：{forbidden}。",
             "只使用输入中可验证的产品事实；竞品素材仅可借鉴结构、节奏和镜头语言。",
             "所有面向运营人员的文字必须使用简体中文；严格返回调用方要求的 JSON 结构，不添加解释性前后缀。",
+            "不要展示思考过程。先在内部比较多个可行方案，再提交最自然、最具体、最可执行的一版。避免模板化口号、空泛形容词和可以套用到任何产品的表达。",
         )
     )

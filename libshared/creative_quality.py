@@ -17,6 +17,9 @@ def assess_script(script: dict[str, Any]) -> dict[str, Any]:
         _check("narrative_diversity", _unique_ratio(sections, "story_beat_zh") >= 0.8, "五段剧情推进不能重复"),
         _check("action_diversity", _unique_ratio(sections, "action_zh") >= 0.8, "每段必须有不同且可见的动作"),
         _check("chinese_delivery", _chinese_ratio(" ".join(str(item.get("voiceover_zh") or "") for item in sections)) >= 0.35, "运营文案必须以简体中文交付"),
+        _check("scene_specificity", _all_min_length(sections, "scene_zh", 18), "每段场景必须包含足够具体的环境、光线、道具或人物状态"),
+        _check("spoken_naturalness", _all_bounded_length(sections, "voiceover_zh", 8, 70), "旁白必须简洁、可朗读，避免空泛或过长句子"),
+        _check("causal_progression", _all_min_length(sections, "story_beat_zh", 14), "每段必须说明剧情变化及其承接作用"),
     ]
     if "恒温杯" in str(script.get("product_id") or "") and len(sections) >= 4:
         solution = str(sections[2].get("action_zh") or "")
@@ -41,11 +44,13 @@ def assess_storyboard(plan: dict[str, Any], script: dict[str, Any] | None = None
         _check("shot_count", len(shots) == 5, "分镜必须包含五个镜头"),
         _check("duration", len(durations) == 5 and abs(sum(durations) - 30) < 0.01, "五镜总时长必须为 30 秒"),
         _check("visual_diversity", _unique_ratio(shots, "visual") >= 0.8, "镜头画面不能重复"),
-        _check("camera_variety", len(motions - {""}) >= 2, "至少使用两种景别或镜头运动"),
+        _check("camera_variety", len(motions - {""}) >= 3, "至少使用三种景别或镜头运动"),
         _check("continuity_lock", bool(prompts) and all("continuity lock" in prompt.casefold() for prompt in prompts), "每镜提示词必须包含连续性锁定"),
         _check("product_lock", bool(prompts) and all("white-background hero" in prompt.casefold() for prompt in prompts), "每镜提示词必须锚定获批产品白底主图"),
         _check("chinese_fields", _all_fields(shots, "visual_zh", "seedance_prompt_zh"), "每镜必须提供中文画面与生成提示"),
         _check("no_generated_text", not any(token in visual_copy for token in ("配文", "字幕", "文字叠加", "屏幕文字", "标题文字", "slogan", "caption", "overlay text")), "生成画面不得要求字幕、配文或其他可读文字"),
+        _check("visual_specificity", _all_min_length(shots, "visual_zh", 20), "每镜必须写清主体位置、环境和可见动作，不能只给抽象风格词"),
+        _check("prompt_specificity", _all_min_length(shots, "seedance_prompt_zh", 24), "每镜生成提示必须具体、可执行并包含连续性线索"),
     ]
     product_id = str((script or {}).get("product_id") or "")
     if "恒温杯" in product_id and len(shots) >= 4:
@@ -80,6 +85,17 @@ def _report(kind: str, checks: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _all_fields(items: list[dict[str, Any]], *names: str) -> bool:
     return bool(items) and all(all(str(item.get(name) or "").strip() for name in names) for item in items)
+
+
+def _all_min_length(items: list[dict[str, Any]], name: str, minimum: int) -> bool:
+    return bool(items) and all(len(str(item.get(name) or "").strip()) >= minimum for item in items)
+
+
+def _all_bounded_length(items: list[dict[str, Any]], name: str, minimum: int, maximum: int) -> bool:
+    if not items:
+        return False
+    lengths = [len(str(item.get(name) or "").strip()) for item in items]
+    return all(minimum <= length <= maximum for length in lengths)
 
 
 def _unique_ratio(items: list[dict[str, Any]], name: str) -> float:

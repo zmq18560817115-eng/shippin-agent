@@ -104,7 +104,13 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
                 "seedance_prompt_zh": "连续性锁定：同一场景、人物、服装、光线、产品外观与道具。" + visual_prompt,
                 "footage_type": "AI_VIDEO" if role in {"方案", "证明", "行动号召"} else "AI_BROLL",
                 "camera_motion": {
-                    "type": "dolly_in" if number == 1 else "static",
+                    "type": {
+                        1: "dolly_in",
+                        2: "static",
+                        3: "pan_right",
+                        4: "static",
+                        5: "dolly_out",
+                    }.get(number, "static"),
                     "duration_sec": 6,
                 },
             }

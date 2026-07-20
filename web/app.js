@@ -415,10 +415,12 @@ function updateIndependentAgentUI() {
   const contractHost = $("#independentAgentContract");
   if (contract.identity) {
     contractHost.hidden = false;
-    contractHost.innerHTML = `<div><span>当前身份</span><strong>${escapeHtml(contract.identity)}</strong><p>${escapeHtml(contract.mission || "")}</p></div>
-      <div><span>核心专长</span><ul>${(contract.expertise || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
-      <div><span>耐心工作方法</span><ul>${(contract.method || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
-      <div><span>交付前自检</span><ul>${(contract.quality_gates || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`;
+    contractHost.innerHTML = `<div class="agentIdentity"><span>当前 Agent</span><strong>${escapeHtml(contract.identity)}</strong><p>${escapeHtml(contract.mission || "")}</p></div>
+      <details class="agentContractDetails"><summary>查看能力与质量标准</summary>
+        <div><span>核心专长</span><ul>${(contract.expertise || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+        <div><span>工作方法</span><ul>${(contract.method || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+        <div><span>交付自检</span><ul>${(contract.quality_gates || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
+      </details>`;
   } else {
     contractHost.hidden = true;
     contractHost.innerHTML = "";

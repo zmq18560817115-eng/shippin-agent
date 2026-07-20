@@ -24,6 +24,16 @@ def test_system_prompt_carries_identity_quality_and_grounding() -> None:
     assert "交付前必须自检" in prompt
     assert "竞品素材仅可借鉴结构" in prompt
     assert "简体中文" in prompt
+    assert "专业创作协议" in prompt
+    assert "内部比较多个可行方案" in prompt
+
+
+def test_script_and_storyboard_have_human_craft_protocols() -> None:
+    for agent_id in ("script", "storyboard"):
+        protocol = AGENT_CONTRACTS[agent_id].get("creative_protocol") or []
+        assert len(protocol) >= 4
+    assert "剧情切口" in "".join(AGENT_CONTRACTS["script"]["creative_protocol"])
+    assert "首尾帧连续性" in "".join(AGENT_CONTRACTS["storyboard"]["creative_protocol"])
 
 
 def test_capability_map_exposes_agent_contract_to_frontend() -> None:

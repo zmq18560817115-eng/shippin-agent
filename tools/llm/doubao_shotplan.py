@@ -42,30 +42,25 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "role": "system",
                 "content": (
                     agent_system_prompt("storyboard")
-                    + "You create concise, continuous AI video shot plans. Return strict JSON only. "
-                    "Keep one stable scene and one stable caregiver profile across all shots. "
-                    "Shots are generated independently and hard to match, so make transitions smooth: "
-                    "each shot must OPEN on framing, subject position and lighting that continue the PREVIOUS shot's "
-                    "closing frame, and camera moves must stay slow and in a consistent direction so cuts do not jump. "
-                    "Do not repeat product safety locks: the production system adds them deterministically. "
-                    "All Chinese fields (visual_zh, seedance_prompt_zh) must be written in Simplified Chinese."
+                    + "你负责把一个连续故事设计成可执行的竖屏镜头，而不是生成五张孤立产品图。只返回严格 JSON。"
+                    "保持同一场景、同一照护者、同一服装与道具关系。每个镜头开场必须承接上一个镜头结束时的主体位置、动作方向和光线。"
+                    "先在内部完成全片视觉节奏设计，再写逐镜结果。产品安全锁由系统确定性追加，不要在每镜重复堆砌。"
+                    "visual_zh 与 seedance_prompt_zh 必须使用简体中文。"
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    "Create a compact JSON object with scene_continuity, character_continuity, and exactly five shots in vertical 9:16. "
-                    "For every shot return only visual, visual_zh, seedance_prompt, seedance_prompt_zh, and camera_motion.type. "
-                    "In each shot's seedance_prompt, briefly state the opening frame so it matches the previous shot's ending "
-                    "(same subject placement and camera angle) for a seamless transition. Prefer gentle camera moves "
-                    "(slow push-in, slow pan, or gentle pull-out) over static-to-moving jumps. Across the five shots use at least "
-                    "three distinct camera_motion.type values; never return five static shots. "
-                    "Do not request captions, overlays, slogans, labels, logos, or any other readable text inside generated video frames. "
-                    "Keep every text field below 45 words; do not restate global continuity or product rules inside each shot. "
-                    "Use this five-beat sequence: establish feeding-prep scene, show the pain, introduce the separate warming cup, "
-                    "demonstrate the pour, then finish with a product CTA. Script sections: "
-                    f"{_shotplan_input(script_copy)}. Product facts: {(product_facts or 'not provided')[:900]}. "
-                    f"Previous quality feedback that must be fixed: {rewrite_reason or 'none'}"
+                    "创建包含 scene_continuity、character_continuity 和五个 9:16 竖屏镜头的紧凑 JSON。"
+                    "每镜只返回 visual、visual_zh、seedance_prompt、seedance_prompt_zh 和 camera_motion.type。"
+                    "先给五镜分配不同视觉任务：建立空间、表现冲突、发现方案、看清关键动作、情绪收束。至少使用三种景别或运镜，禁止五镜同构图。"
+                    "每镜只设计一个主要动作，并写清主体在画面中的位置、景别、机位高度、光线、前后景关系和镜头结束状态。"
+                    "下一镜开场要继承上一镜的主体位置、动作方向与视线；运镜以缓慢推近、平移或拉远为主，避免跳轴和无动机炫技。"
+                    "提示词必须具体可见，禁止使用高级感、氛围感、电影感等空词代替画面设计；不得要求字幕、配文、标语、标签、Logo 或其他可读文字。"
+                    "每个文字字段保持简洁，不在逐镜重复全局产品规则。五镜依次完成喂养准备、等待痛点、独立恒温杯出现、正确倒液、产品与人物共同收束。"
+                    f"脚本段落：{_shotplan_input(script_copy)}。产品事实：{(product_facts or '未提供')[:900]}。"
+                    f"必须修复的质量反馈：{rewrite_reason or '无'}。"
+                    "交付前静默复看整条时间线：若镜头重复、转场不连续、动作不可生成或产品成为无意义摆拍，先重写再返回 JSON。"
                 ),
             },
         ],

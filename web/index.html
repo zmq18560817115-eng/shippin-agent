@@ -194,25 +194,30 @@
           <label id="independentTargetLabel">抓取目标
             <input id="independentAgentTarget" placeholder="关键词或 TikTok 账号主页 URL" />
           </label>
-          <label>创意风格
-            <select id="independentCreativeStyle">
-              <option value="">由 Agent 自动匹配</option>
-              <option value="真实生活方式广告">真实生活方式广告</option>
-              <option value="电影感叙事">电影感叙事</option>
-              <option value="高转化 UGC">高转化 UGC</option>
-              <option value="极简产品展示">极简产品展示</option>
-            </select>
-          </label>
-          <label>目标受众
-            <input id="independentTargetAudience" placeholder="例如：夜间喂养的新手父母" />
-          </label>
-          <label>创作自由度
-            <select id="independentCreativeFreedom">
-              <option value="balanced">平衡创作</option>
-              <option value="strict">严格执行</option>
-              <option value="exploratory">探索创作</option>
-            </select>
-          </label>
+          <details class="creativeOptions">
+            <summary>创作偏好</summary>
+            <div>
+              <label>创意风格
+                <select id="independentCreativeStyle">
+                  <option value="">由 Agent 自动匹配</option>
+                  <option value="真实生活方式广告">真实生活方式广告</option>
+                  <option value="电影感叙事">电影感叙事</option>
+                  <option value="高转化 UGC">高转化 UGC</option>
+                  <option value="极简产品展示">极简产品展示</option>
+                </select>
+              </label>
+              <label>目标受众
+                <input id="independentTargetAudience" placeholder="例如：夜间喂养的新手父母" />
+              </label>
+              <label>创作自由度
+                <select id="independentCreativeFreedom">
+                  <option value="balanced">平衡创作</option>
+                  <option value="strict">严格执行</option>
+                  <option value="exploratory">探索创作</option>
+                </select>
+              </label>
+            </div>
+          </details>
         </div>
         <button type="button" id="runIndependentAgent" class="primary">运行独立 Agent</button>
         <div id="independentAgentResult" class="nodeResult">结果会在这里展示，可继续保存到项目。</div>

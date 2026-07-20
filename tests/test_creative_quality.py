@@ -38,7 +38,7 @@ def test_storyboard_assessment_rejects_repeated_static_shots() -> None:
 
     assert report["status"] == "NEEDS_REWRITE"
     assert "镜头画面不能重复" in report["issues"]
-    assert "至少使用两种景别或镜头运动" in report["issues"]
+    assert "至少使用三种景别或镜头运动" in report["issues"]
 
 
 def test_storyboard_assessment_rejects_generated_frame_text_requests() -> None:
