@@ -543,6 +543,448 @@ textarea {
   color: #8f2424;
 }
 
+/* Linear-inspired visual system. This layer intentionally changes presentation only. */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-subtle: #fafbfc;
+  --surface-hover: #f4f6f8;
+  --line: #e1e4e8;
+  --line-strong: #cdd2d8;
+  --text: #17191c;
+  --ink: #25282d;
+  --muted: #6b7280;
+  --muted-strong: #4f5662;
+  --blue: #5e5ce6;
+  --blue-strong: #4f46d8;
+  --blue-soft: #f0efff;
+  --teal: #087f73;
+  --amber: #a8610a;
+  --red: #b42318;
+  --green: #18794e;
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.07), 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+body {
+  background:
+    linear-gradient(#f7f8fa 0 0) padding-box,
+    var(--bg);
+}
+
+button,
+.buttonLink {
+  min-height: 38px;
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-xs);
+  font-weight: 600;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+button:hover,
+.buttonLink:hover {
+  border-color: #aaa6f5;
+  background: var(--blue-soft);
+  color: var(--blue-strong);
+}
+
+button:focus-visible,
+.buttonLink:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid rgba(94, 92, 230, 0.28);
+  outline-offset: 2px;
+}
+
+button.primary,
+.continueButton {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(79, 70, 216, 0.22);
+}
+
+button.primary:hover,
+.continueButton:hover {
+  border-color: var(--blue-strong);
+  background: var(--blue-strong);
+  color: #ffffff;
+}
+
+input,
+select,
+textarea {
+  border-color: var(--line-strong);
+  background: var(--surface);
+  box-shadow: inset 0 1px 1px rgba(16, 24, 40, 0.02);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: #aeb4bd;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.1);
+  outline: none;
+}
+
+.topbar {
+  min-height: 64px;
+  border-bottom-color: rgba(225, 228, 232, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.brandMark {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  background: var(--blue);
+  box-shadow: 0 4px 12px rgba(94, 92, 230, 0.2);
+}
+
+.topbar h1 {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.health,
+.currentStage {
+  border-color: var(--line);
+  background: var(--surface-subtle);
+  box-shadow: none;
+}
+
+.workflowNav {
+  top: 64px;
+  width: 224px;
+  gap: 3px;
+  border-right-color: var(--line);
+  padding: 20px 12px;
+  background: #fbfbfc;
+}
+
+.workflowNav button {
+  min-height: 56px;
+  border: 1px solid transparent;
+  padding: 8px 10px;
+}
+
+.workflowNav button strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.workflowNav button small,
+.navFoot,
+.navLabel {
+  font-size: 12px;
+}
+
+.workflowNav button:hover,
+.workflowNav button:focus-visible {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.workflowNav button.active {
+  border-color: #dcdafc;
+  background: var(--blue-soft);
+  color: var(--blue-strong);
+  box-shadow: var(--shadow-xs);
+}
+
+.workflowNav button.active::before {
+  background: var(--blue);
+}
+
+.workspace {
+  max-width: 1480px;
+  margin-left: 224px;
+  padding-inline: clamp(22px, 3vw, 44px);
+}
+
+.viewIntro {
+  min-height: 112px;
+  border-bottom-color: transparent;
+  padding-top: 26px;
+}
+
+.viewIntro h2 {
+  margin: 5px 0 3px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.viewIntro p,
+.viewIntro > div > span {
+  font-size: 13px;
+}
+
+.band {
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.sectionHead {
+  min-height: 36px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.sectionHead h2 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.startBar {
+  grid-template-columns: minmax(190px, 240px) minmax(190px, 220px) minmax(220px, 1fr) auto;
+  column-gap: 14px;
+  row-gap: 10px;
+}
+
+.runtimeModeHint {
+  margin-top: 1px;
+  border-left: 2px solid #c8c5fb;
+  padding: 5px 9px;
+  background: #fafaff;
+  line-height: 1.5;
+}
+
+.startBar label,
+.collectForm label,
+.crawlForm label,
+.agentWorkbenchGrid label,
+.nodeTools label {
+  color: var(--muted-strong);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.emptyState {
+  min-height: 108px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  padding: 22px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  text-align: center;
+}
+
+.autoCrawlForm,
+.quickIntake,
+.agentContract,
+.creativeQuality {
+  border-left-color: var(--blue);
+  border-radius: 5px;
+  background: #fafaff;
+}
+
+.collectionQueue,
+.collectionJobCard,
+.materialItem,
+.agentResultCard,
+.agentReview,
+.materialDetailPanel {
+  border-color: var(--line);
+  box-shadow: var(--shadow-xs);
+}
+
+.collectionJobCard,
+.materialItem,
+.agentResultCard,
+.agentReview {
+  background: var(--surface);
+}
+
+.collectionJobCard:hover,
+.materialItem:hover {
+  border-color: #c9c7ef;
+  box-shadow: var(--shadow-sm);
+}
+
+.collectionJobCard.active {
+  border-color: #aaa6f5;
+  box-shadow: inset 3px 0 var(--blue), var(--shadow-sm);
+}
+
+.collectionProgress i {
+  background: var(--blue);
+}
+
+.advancedIntake {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+}
+
+.advancedIntake > summary {
+  padding-inline: 12px;
+}
+
+.advancedIntake[open] > summary {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.advancedIntake .crawlForm,
+.agentDetails > .nodeTools {
+  padding-inline: 14px;
+}
+
+.nodeTools,
+.standaloneLauncher {
+  border-color: var(--line);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+}
+
+.nodeResult {
+  line-height: 1.55;
+}
+
+.projectTable th {
+  background: var(--surface-subtle);
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.projectTable td {
+  border-color: var(--line);
+}
+
+.projectTable tbody tr:hover td {
+  background: #fafaff;
+}
+
+.scoreChips span {
+  background: #efefff;
+  color: var(--blue-strong);
+}
+
+@media (max-width: 1100px) {
+  .startBar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .startBar > button {
+    align-self: end;
+  }
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    min-height: 60px;
+  }
+
+  .workflowNav {
+    top: 60px;
+    gap: 5px;
+    background: rgba(251, 251, 252, 0.96);
+    backdrop-filter: blur(12px);
+  }
+
+  .workflowNav button {
+    border: 1px solid transparent;
+  }
+
+  .workspace {
+    margin-left: 0;
+    padding-inline: 12px;
+  }
+
+  .viewIntro {
+    padding-inline: 4px;
+  }
+
+  .band {
+    margin-bottom: 12px;
+    border-radius: 6px;
+    padding: 16px;
+  }
+
+  .startBar {
+    grid-template-columns: 1fr;
+  }
+
+  button,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]),
+  .workflowNav button,
+  .buttonLink {
+    min-height: 44px;
+  }
+
+  .workflowNav button strong,
+  .topLink,
+  .quietButton,
+  .continueButton {
+    font-size: 13px;
+  }
+
+  .collectionQueueHead,
+  .collectionDetailHead {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .topbar {
+    gap: 8px;
+  }
+
+  .brandBlock {
+    flex: 1 1 auto;
+  }
+
+  .topActions {
+    flex: 0 0 auto;
+  }
+
+  .topbar h1 {
+    font-size: 15px;
+  }
+
+  .topLink,
+  .quietButton {
+    padding-inline: 5px;
+  }
+
+  .viewIntro h2 {
+    font-size: 21px;
+  }
+
+  .band {
+    padding: 14px;
+  }
+
+  .autoCrawlForm,
+  .quickIntake {
+    padding: 14px;
+  }
+
+  .autoCrawlActions,
+  .quickIntake .formActions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .collectionQueue {
   margin: 14px 0 18px;
   border: 1px solid var(--line);
@@ -2060,5 +2502,75 @@ pre {
   .actionBar .buttonLink {
     flex: 1 1 180px;
     white-space: normal;
+  }
+}
+
+/* Final cascade guards for components declared after the visual-system layer. */
+.nodeTools,
+.standaloneLauncher {
+  border-color: var(--line);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  box-shadow: var(--shadow-xs);
+}
+
+.nodeResult,
+.nodeToolHead span,
+.advancedIntake > summary small {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.projectTable th {
+  background: var(--surface-subtle);
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.projectTable td {
+  border-color: var(--line);
+}
+
+.projectTable tbody tr:hover td {
+  background: #fafaff;
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    margin-left: 0;
+    padding: 0 12px 36px;
+  }
+
+  .band {
+    margin-bottom: 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px;
+    background: var(--surface);
+  }
+
+  .startBar {
+    grid-template-columns: 1fr;
+  }
+
+  button,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]),
+  .workflowNav button,
+  .buttonLink,
+  .quietButton {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 520px) {
+  .band {
+    padding: 14px;
+  }
+
+  .autoCrawlActions,
+  .quickIntake .formActions {
+    grid-template-columns: 1fr;
   }
 }
