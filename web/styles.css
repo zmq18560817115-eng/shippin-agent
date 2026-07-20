@@ -697,6 +697,42 @@ textarea {
   margin: 12px 0;
 }
 
+.agentContract {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.4fr);
+  gap: 18px;
+  margin: 12px 0 4px;
+  padding: 14px 16px;
+  border-left: 3px solid #315fbe;
+  background: #f5f8fd;
+}
+
+.agentContract > div {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.agentContract span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agentContract p,
+.agentContract ul {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.agentContract ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  padding-left: 18px;
+}
+
 .startBar > label,
 .crawlForm > label,
 .agentWorkbenchGrid > label {
@@ -738,6 +774,9 @@ textarea {
     grid-template-columns: 1fr;
   }
   .agentWorkbenchGrid {
+    grid-template-columns: 1fr;
+  }
+  .agentContract {
     grid-template-columns: 1fr;
   }
   .collectionJobList {

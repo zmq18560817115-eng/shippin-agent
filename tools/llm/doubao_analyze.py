@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from libshared import artifacts
+from libshared.agent_contracts import agent_system_prompt
 from tools.base_tool import ToolContext, ToolResult, require_env
 from tools.providers import ark
 from tools.tool_registry import register_tool
@@ -52,8 +53,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "system",
                 "content": (
-                    "你为品牌安全的海外本地化分析短视频结构。只返回严格 JSON，不复制竞品文案或无依据的声明。"
-                    "所有文本字段一律使用简体中文。"
+                    agent_system_prompt("analysis")
                 ),
             },
             {

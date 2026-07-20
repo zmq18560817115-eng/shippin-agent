@@ -22,6 +22,7 @@ const state = {
   showAllProjects: false,
   collectionJobs: [],
   selectedCollectionJobId: null,
+  agentContracts: {},
 };
 
 const views = {
@@ -207,6 +208,7 @@ async function loadIndependentAgentActions() {
     (capabilityMap.agents || []).forEach((agent) => {
       String(agent.independent_action || "").split(",").map((item) => item.trim()).filter(Boolean).forEach((action) => {
         if (independentActionLabels[action] && !actions.includes(action)) actions.push(action);
+        if (independentActionLabels[action]) state.agentContracts[action] = agent;
       });
     });
     select.innerHTML = actions.map((action) => `<option value="${escapeAttr(action)}">${escapeHtml(independentActionLabels[action])}</option>`).join("");
@@ -384,10 +386,20 @@ async function runStandaloneLauncher(button) {
 
 function updateIndependentAgentUI() {
   const action = $("#independentAgentAction").value;
+  const contract = state.agentContracts[action] || {};
   const targetLabel = $("#independentTargetLabel");
   targetLabel.hidden = action !== "collector";
   $("#independentAgentPrompt").placeholder = independentActionHints[action] || "输入需求";
   $("#independentAgentState").textContent = independentActionHints[action] || "";
+  const contractHost = $("#independentAgentContract");
+  if (contract.identity) {
+    contractHost.hidden = false;
+    contractHost.innerHTML = `<div><span>当前身份</span><strong>${escapeHtml(contract.identity)}</strong><p>${escapeHtml(contract.mission || "")}</p></div>
+      <div><span>交付前自检</span><ul>${(contract.quality_gates || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`;
+  } else {
+    contractHost.hidden = true;
+    contractHost.innerHTML = "";
+  }
 }
 
 async function runIndependentAgent() {

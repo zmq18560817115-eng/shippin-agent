@@ -3,17 +3,18 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from libshared.agent_contracts import agent_system_prompt
 from tools.base_tool import ToolContext, ToolResult, require_env
 from tools.providers import ark
 from tools.tool_registry import register_tool
 
 
-def _chat(context: ToolContext, system: str, prompt: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def _chat(context: ToolContext, agent_id: str, system: str, prompt: str) -> tuple[dict[str, Any], dict[str, Any]]:
     require_env(context, "DOUBAO_API_KEY")
     return ark.chat_json(
         context,
         api_key_names=("DOUBAO_API_KEY", "ARK_DOUBAO_API_KEY", "ARK_API_KEY"),
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+        messages=[{"role": "system", "content": agent_system_prompt(agent_id) + system}, {"role": "user", "content": prompt}],
     )
 
 
@@ -33,6 +34,7 @@ def competitor_research(payload: dict[str, Any], context: ToolContext) -> ToolRe
     else:
         body, meta = _chat(
             context,
+            "research",
             "你是短视频研究 Agent。只提取可复用的内容结构，不复制竞品文案或宣称。严格返回 JSON，所有字段值必须使用简体中文。",
             "返回 viral_patterns、audience_insights、pacing_notes、content_risks、source_summary。节奏统一为五个六秒段。素材：\n" + source[:5000],
         )
@@ -67,6 +69,7 @@ def content_strategy(payload: dict[str, Any], context: ToolContext) -> ToolResul
     else:
         body, meta = _chat(
             context,
+            "strategy",
             "你是品牌安全内容策略 Agent。必须以获批产品事实为依据，严格返回 JSON，所有字段值使用简体中文。",
             "研究结论：" + json.dumps(research, ensure_ascii=False) + "\n产品安全规则：" + json.dumps(guardrails, ensure_ascii=False)
             + "\n返回 content_direction、target_audience、selling_point_priority、hook_options、cta_options、forbidden_claims。",

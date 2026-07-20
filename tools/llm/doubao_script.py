@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from libshared import artifacts
+from libshared.agent_contracts import agent_system_prompt
 from tools.base_tool import ToolContext, ToolResult, require_env
 from tools.llm.mock_artifacts import mock_script_copy
 from tools.providers import ark
@@ -41,8 +42,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "system",
                 "content": (
-                    "你为母婴产品海外短视频撰写品牌安全脚本。严格返回 JSON，面向操作员的内容全部使用简体中文。"
-                    "避免医疗效果、保证性、最好、无痛和竞品比较等宣称。"
+                    agent_system_prompt("script")
                 ),
             },
             {

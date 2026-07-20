@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from libshared import artifacts
+from libshared.agent_contracts import agent_system_prompt
 from tools.base_tool import ToolContext, ToolResult, require_env
 from tools.providers import ark
 from tools.tool_registry import register_tool
@@ -49,7 +50,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "system",
                 "content": (
-                    "You review baby product short-video scripts for compliance and product factuality. "
+                    agent_system_prompt("review")
+                    + "You review baby product short-video scripts for compliance and product factuality. "
                     "Return strict JSON only with status PASS, WARNING, or BLOCKED."
                 ),
             },

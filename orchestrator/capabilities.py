@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from libshared.agent_contracts import agent_contract
+
 
 AGENT_CAPABILITIES: tuple[dict[str, Any], ...] = (
     {
@@ -139,7 +141,11 @@ AGENT_CAPABILITIES: tuple[dict[str, Any], ...] = (
 
 
 def capability_map() -> dict[str, Any]:
-    agents = [dict(item) for item in AGENT_CAPABILITIES]
+    agents = []
+    for item in AGENT_CAPABILITIES:
+        enriched = dict(item)
+        enriched.update(agent_contract(str(item["id"])))
+        agents.append(enriched)
     return {
         "version": "1.0",
         "agents": agents,

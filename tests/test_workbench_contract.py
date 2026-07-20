@@ -32,6 +32,8 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert 'provider: $("#crawlProvider").value' in script
     assert "生成第一个候选 Take" in script
     assert 'api("/api/v2/takes/select"' in script
+    assert 'id="independentAgentContract"' in html
+    assert "state.agentContracts[action]" in script
 
 
 def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:

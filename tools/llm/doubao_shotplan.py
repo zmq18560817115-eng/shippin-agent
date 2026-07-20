@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from libshared import artifacts
+from libshared.agent_contracts import agent_system_prompt
 from tools.base_tool import ToolContext, ToolResult, require_env
 from tools.llm.mock_artifacts import mock_script_copy, mock_shot_plan
 from tools.providers import ark
@@ -39,7 +40,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             {
                 "role": "system",
                 "content": (
-                    "You create concise, continuous AI video shot plans. Return strict JSON only. "
+                    agent_system_prompt("storyboard")
+                    + "You create concise, continuous AI video shot plans. Return strict JSON only. "
                     "Keep one stable scene and one stable caregiver profile across all shots. "
                     "Shots are generated independently and hard to match, so make transitions smooth: "
                     "each shot must OPEN on framing, subject position and lighting that continue the PREVIOUS shot's "
