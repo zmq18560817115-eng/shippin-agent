@@ -124,6 +124,15 @@ class TikTokCrawlRequest(BaseModel):
     mock: bool = True
 
 
+class CollectionJobCreateRequest(BaseModel):
+    target_type: str = "keyword"
+    provider: str = "auto"
+    target: str = ""
+    requested_count: int = 10
+    product_id: str = "便携恒温杯"
+    mock: bool = True
+
+
 class AutoCollectorSettingsRequest(BaseModel):
     enabled: bool = False
     target_type: str = "keyword"
@@ -1132,6 +1141,63 @@ def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
         "results": results,
         "failures": failures,
     }
+
+
+@app.post("/api/v2/collect/jobs", status_code=201)
+def create_collection_job(request: CollectionJobCreateRequest) -> dict[str, Any]:
+    _require_known_product(request.product_id)
+    try:
+        job = queue.create_collection_job(
+            target_type=request.target_type,
+            provider=request.provider,
+            target=request.target,
+            requested_count=request.requested_count,
+            product_id=request.product_id,
+            mock=request.mock,
+            db_path=_db_path(),
+        )
+    except ValueError as exc:
+        messages = {
+            "unsupported target_type": "不支持的采集目标类型",
+            "unsupported provider": "不支持的采集后端",
+            "target is required": "关键词、账号或话题采集必须填写目标",
+        }
+        raise HTTPException(status_code=422, detail=messages.get(str(exc), str(exc))) from exc
+    queue.record_event(
+        event_type="collector.job_created",
+        message=f"collection_job:{job['id']}",
+        meta={"target_type": job["target_type"], "target": job["target"], "requested_count": job["requested_count"]},
+        db_path=_db_path(),
+    )
+    return {"ok": True, "job": job}
+
+
+@app.get("/api/v2/collect/jobs")
+def collection_jobs(status: str | None = Query(default=None), limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+    allowed = {"queued", "running", "paused", "succeeded", "partial", "failed", "cancelled"}
+    if status and status not in allowed:
+        raise HTTPException(status_code=422, detail="不支持的采集任务状态")
+    jobs = queue.list_collection_jobs(status=status, limit=limit, db_path=_db_path())
+    return {"ok": True, "count": len(jobs), "jobs": jobs}
+
+
+@app.get("/api/v2/collect/jobs/{job_id}")
+def collection_job(job_id: int) -> dict[str, Any]:
+    job = queue.get_collection_job(job_id, db_path=_db_path())
+    if job is None:
+        raise HTTPException(status_code=404, detail="采集任务不存在")
+    return {"ok": True, "job": job}
+
+
+@app.post("/api/v2/collect/jobs/{job_id}/cancel")
+def cancel_collection_job(job_id: int) -> dict[str, Any]:
+    existing = queue.get_collection_job(job_id, db_path=_db_path())
+    if existing is None:
+        raise HTTPException(status_code=404, detail="采集任务不存在")
+    if existing["status"] not in {"queued", "paused"}:
+        raise HTTPException(status_code=409, detail="只有排队中或已暂停的采集任务可以取消")
+    job = queue.cancel_collection_job(job_id, db_path=_db_path())
+    return {"ok": True, "job": job}
 
 
 @app.get("/api/v2/collect/tiktok/auto")

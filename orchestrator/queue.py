@@ -109,6 +109,109 @@ def init_db(db_path: str | os.PathLike[str] | None = None) -> None:
             conn.execute("ALTER TABLE collector_schedules ADD COLUMN next_run_at TEXT")
 
 
+def create_collection_job(
+    *,
+    target_type: str,
+    provider: str,
+    target: str,
+    requested_count: int,
+    product_id: str,
+    mock: bool,
+    created_by: str = "operator",
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    if target_type not in {"keyword", "account", "hashtag", "trending"}:
+        raise ValueError("unsupported target_type")
+    if provider not in {"auto", "tiktok_api", "apify", "yt_dlp"}:
+        raise ValueError("unsupported provider")
+    if target_type != "trending" and not target.strip():
+        raise ValueError("target is required")
+    count = max(1, min(int(requested_count), 100))
+    now = utc_now()
+    init_db(db_path)
+    with get_conn(db_path) as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO collection_jobs
+            (target_type, provider, target, requested_count, product_id, mock, status, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
+            """,
+            (target_type, provider, target.strip(), count, product_id, int(mock), created_by, now, now),
+        )
+        job_id = int(cursor.lastrowid)
+    job = get_collection_job(job_id, db_path=db_path)
+    if job is None:
+        raise RuntimeError("collection job was not persisted")
+    return job
+
+
+def get_collection_job(
+    job_id: int,
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any] | None:
+    init_db(db_path)
+    with get_conn(db_path) as conn:
+        row = conn.execute("SELECT * FROM collection_jobs WHERE id = ?", (job_id,)).fetchone()
+    return _collection_job_dict(row) if row else None
+
+
+def list_collection_jobs(
+    *,
+    status: str | None = None,
+    limit: int = 50,
+    db_path: str | os.PathLike[str] | None = None,
+) -> list[dict[str, Any]]:
+    init_db(db_path)
+    params: list[Any] = []
+    where = ""
+    if status:
+        where = "WHERE status = ?"
+        params.append(status)
+    params.append(max(1, min(int(limit), 200)))
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM collection_jobs {where} ORDER BY created_at DESC, id DESC LIMIT ?",
+            params,
+        ).fetchall()
+    return [_collection_job_dict(row) for row in rows]
+
+
+def cancel_collection_job(
+    job_id: int,
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any] | None:
+    init_db(db_path)
+    now = utc_now()
+    with get_conn(db_path) as conn:
+        changed = conn.execute(
+            """
+            UPDATE collection_jobs
+            SET status = 'cancelled', finished_at = ?, updated_at = ?
+            WHERE id = ? AND status IN ('queued','paused')
+            """,
+            (now, now, job_id),
+        ).rowcount
+    if not changed:
+        return None
+    return get_collection_job(job_id, db_path=db_path)
+
+
+def _collection_job_dict(row: sqlite3.Row) -> dict[str, Any]:
+    payload = dict(row)
+    payload["mock"] = bool(payload.get("mock"))
+    payload["progress"] = {
+        "requested": int(payload.get("requested_count") or 0),
+        "discovered": int(payload.get("discovered_count") or 0),
+        "relevant": int(payload.get("relevant_count") or 0),
+        "downloaded": int(payload.get("downloaded_count") or 0),
+        "analyzed": int(payload.get("analyzed_count") or 0),
+        "failed": int(payload.get("failed_count") or 0),
+    }
+    return payload
+
+
 def ensure_project(
     project_id: str,
     *,

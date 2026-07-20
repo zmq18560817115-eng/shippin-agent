@@ -136,3 +136,56 @@ CREATE TABLE IF NOT EXISTS collector_schedules (
     next_run_at         TEXT,
     updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+
+CREATE TABLE IF NOT EXISTS collection_jobs (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_type         TEXT NOT NULL CHECK (target_type IN ('keyword','account','hashtag','trending')),
+    provider            TEXT NOT NULL DEFAULT 'auto'
+                        CHECK (provider IN ('auto','tiktok_api','apify','yt_dlp')),
+    target              TEXT NOT NULL DEFAULT '',
+    requested_count     INTEGER NOT NULL DEFAULT 10 CHECK (requested_count BETWEEN 1 AND 100),
+    product_id          TEXT NOT NULL,
+    mock                INTEGER NOT NULL DEFAULT 1 CHECK (mock IN (0, 1)),
+    status              TEXT NOT NULL DEFAULT 'queued'
+                        CHECK (status IN ('queued','running','paused','succeeded','partial','failed','cancelled')),
+    discovered_count    INTEGER NOT NULL DEFAULT 0,
+    relevant_count      INTEGER NOT NULL DEFAULT 0,
+    downloaded_count    INTEGER NOT NULL DEFAULT 0,
+    analyzed_count      INTEGER NOT NULL DEFAULT 0,
+    failed_count        INTEGER NOT NULL DEFAULT 0,
+    attempt             INTEGER NOT NULL DEFAULT 0,
+    error_message       TEXT NOT NULL DEFAULT '',
+    created_by          TEXT NOT NULL DEFAULT 'operator',
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    started_at          TEXT,
+    finished_at         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_jobs_status
+ON collection_jobs(status, created_at);
+
+CREATE TABLE IF NOT EXISTS collection_items (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id              INTEGER NOT NULL REFERENCES collection_jobs(id) ON DELETE CASCADE,
+    source_url          TEXT NOT NULL,
+    source_video_id     TEXT,
+    title               TEXT NOT NULL DEFAULT '',
+    author_name         TEXT NOT NULL DEFAULT '',
+    cover_url           TEXT NOT NULL DEFAULT '',
+    local_video_path    TEXT,
+    local_cover_path    TEXT,
+    transcript_path     TEXT,
+    breakdown_path      TEXT,
+    relevance_score     REAL,
+    status              TEXT NOT NULL DEFAULT 'discovered'
+                        CHECK (status IN ('discovered','filtered','downloading','downloaded','transcribing','analyzing','ready','failed')),
+    error_message       TEXT NOT NULL DEFAULT '',
+    metadata_json       TEXT NOT NULL DEFAULT '{}',
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    UNIQUE(job_id, source_url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_items_job_status
+ON collection_items(job_id, status, created_at);
