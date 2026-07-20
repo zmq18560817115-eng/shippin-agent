@@ -43,6 +43,7 @@
         }
       }
     },
-    "feedback_constraints_applied": {"type": "array", "items": {"type": "string"}}
+    "feedback_constraints_applied": {"type": "array", "items": {"type": "string"}},
+    "quality_assessment": {"type": "object"}
   }
 }

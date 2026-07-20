@@ -1401,6 +1401,7 @@ function renderScriptGate() {
   const comments = state.reviewReport?.comments || [];
   const scores = state.reviewReport?.scores || {};
   host.innerHTML = `
+    ${renderCreativeQuality(state.scriptCopy.quality_assessment)}
     <div class="reviewStrip">
       <span>Review: ${escapeHtml(state.reviewReport?.status || "PASS")}</span>
       <span>${Object.entries(scores).map(([key, value]) => `${escapeHtml(key)} ${escapeHtml(String(value))}`).join(" · ")}</span>
@@ -1440,6 +1441,16 @@ function renderPipelineProgress(project, fallback) {
     const status = stages[stage]?.status || "idle";
     return `<span class="progressStep ${statusClass(status)}">${status === "succeeded" ? "✓" : status === "running" ? "◐" : status === "failed" ? "×" : "○"} ${escapeHtml(stageLabel(stage))}</span>`;
   }).join("")}</div><small>当前：${escapeHtml(stageLabel(project.current_stage || project.status))}</small></div>`;
+}
+
+function renderCreativeQuality(assessment) {
+  if (!assessment) return "";
+  const passed = assessment.status === "PASS";
+  const issues = assessment.issues || [];
+  return `<div class="creativeQuality ${passed ? "pass" : "needsRewrite"}">
+    <div><span>创意质量自检</span><strong>${escapeHtml(String(assessment.score ?? 0))} 分 · ${passed ? "通过" : "需要修改"}</strong></div>
+    <p>${issues.length ? escapeHtml(issues.join("；")) : "结构、连续性、产品事实与可执行性检查均已通过。"}</p>
+  </div>`;
 }
 
 function renderScriptRow(section) {
@@ -1544,6 +1555,7 @@ function renderStoryboardNode() {
   }
   host.className = "editor";
   host.innerHTML = `
+    ${renderCreativeQuality(state.shotPlan.quality_assessment)}
     <div class="tableWrap">
       <table class="scriptTable storyboardTable">
         <thead><tr><th>#</th><th>画面</th><th>生成提示词</th><th>镜头时长（3-10 秒）</th></tr></thead>

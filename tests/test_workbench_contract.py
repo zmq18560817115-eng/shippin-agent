@@ -34,6 +34,7 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert 'api("/api/v2/takes/select"' in script
     assert 'id="independentAgentContract"' in html
     assert "state.agentContracts[action]" in script
+    assert "function renderCreativeQuality" in script
 
 
 def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:

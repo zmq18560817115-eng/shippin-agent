@@ -770,6 +770,9 @@ textarea {
 }
 
 @media (max-width: 900px) {
+  .creativeQuality {
+    grid-template-columns: 1fr;
+  }
   .materialDetailGrid {
     grid-template-columns: 1fr;
   }
@@ -1296,6 +1299,38 @@ pre {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.creativeQuality {
+  display: grid;
+  grid-template-columns: minmax(180px, auto) 1fr;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--green);
+  background: #f1faf5;
+}
+
+.creativeQuality.needsRewrite {
+  border-left-color: var(--amber);
+  background: #fff9e8;
+}
+
+.creativeQuality > div {
+  display: grid;
+  gap: 2px;
+}
+
+.creativeQuality span,
+.creativeQuality p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.creativeQuality p {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .reviewStrip span {

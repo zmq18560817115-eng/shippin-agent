@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from libshared import artifacts, checkpoint
+from libshared import artifacts, checkpoint, creative_quality
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, queue
 from tools import tool_registry
@@ -353,11 +353,22 @@ def _run_script(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path
         mock=mock,
     )
     _record_tool_cost(task, result, "doubao_script", db_path=db_path)
+    script_copy = result.data["script_copy"]
+    script_copy["quality_assessment"] = creative_quality.assess_script(script_copy)
+    if _queue_creative_rewrite_once(
+        task,
+        root,
+        artifact_name="script_copy",
+        payload=script_copy,
+        script_copy=None,
+        db_path=db_path,
+    ):
+        return EngineRunStatus(task.project_id, "script", "queued", "script quality rewrite queued")
     return _complete_with_artifact(
         task,
         root,
         "script_copy",
-        result.data["script_copy"],
+        script_copy,
         next_stage="script_breakdown",
         db_path=db_path,
     )
@@ -430,12 +441,26 @@ def _run_storyboard(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
     script_copy = _load_artifact(root, "script_copy")
     result = _execute_tool(
         "doubao_shotplan",
-        {"project_id": task.project_id, "script_copy": script_copy},
+        {
+            "project_id": task.project_id,
+            "script_copy": script_copy,
+            "rewrite_reason": task.payload_json.get("rewrite_reason"),
+        },
         root,
         mock=mock,
     )
     _record_tool_cost(task, result, "doubao_shotplan", db_path=db_path)
     shot_plan = _attach_reference_footage(task.project_id, result.data["shot_plan"], db_path=db_path)
+    shot_plan["quality_assessment"] = creative_quality.assess_storyboard(shot_plan, script_copy)
+    if _queue_creative_rewrite_once(
+        task,
+        root,
+        artifact_name="shot_plan",
+        payload=shot_plan,
+        script_copy=script_copy,
+        db_path=db_path,
+    ):
+        return EngineRunStatus(task.project_id, "storyboard", "queued", "storyboard quality rewrite queued")
     return _complete_with_artifact(
         task,
         root,
@@ -445,6 +470,41 @@ def _run_storyboard(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         db_path=db_path,
         script_copy=script_copy,
     )
+
+
+def _queue_creative_rewrite_once(
+    task: queue.Task,
+    root: Path,
+    *,
+    artifact_name: str,
+    payload: dict[str, Any],
+    script_copy: dict[str, Any] | None,
+    db_path: str | Path | None,
+) -> bool:
+    assessment = payload.get("quality_assessment") or {}
+    if assessment.get("status") == "PASS" or task.payload_json.get("quality_retry"):
+        return False
+    artifacts.save_artifact(task.project_id, artifact_name, payload, run_root=root, script_copy=script_copy)
+    queue.complete_task(task.id, "engine", {artifact_name: payload}, db_path=db_path)
+    checkpoint.write_checkpoint(
+        task.project_id,
+        task.stage,
+        status="needs_review",
+        artifacts={artifact_name: f"artifacts/{artifact_name}.json"},
+        run_root=root,
+    )
+    _enqueue_stage(
+        task.project_id,
+        task.stage,
+        {
+            "run_root": root.as_posix(),
+            "quality_retry": True,
+            "revision": f"quality-{task.id}",
+            "rewrite_reason": str(assessment.get("rewrite_instruction") or "创意质量未达标，请定向重写"),
+        },
+        db_path=db_path,
+    )
+    return True
 
 
 def _attach_reference_footage(project_id: str, shot_plan: dict[str, Any], *, db_path: str | Path | None) -> dict[str, Any]:

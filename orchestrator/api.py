@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from libshared import artifacts, checkpoint
+from libshared import artifacts, checkpoint, creative_quality
 from libshared.local_env import load_local_env
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, engine, queue, user_store
@@ -1952,7 +1952,11 @@ def put_artifact(
         # the hero gate on the "white-background hero" safety check).
         from tools.llm.doubao_shotplan import ensure_shot_locks
 
-        ensure_shot_locks(payload, _load_artifact_or_none(project_id, "script_copy"))
+        script_copy = _load_artifact_or_none(project_id, "script_copy")
+        ensure_shot_locks(payload, script_copy)
+        payload["quality_assessment"] = creative_quality.assess_storyboard(payload, script_copy)
+    else:
+        payload["quality_assessment"] = creative_quality.assess_script(payload)
     try:
         artifacts.save_artifact(
             project_id,

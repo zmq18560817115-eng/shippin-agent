@@ -33,6 +33,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     project_id = str(payload.get("project_id") or "ref-real")
     script_copy = payload.get("script_copy") or mock_script_copy(project_id)
     product_facts = product_library.product_guardrail_text(str(script_copy.get("product_id") or ""))
+    rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
     response, meta = ark.chat_json(
         context,
         api_key_names=("DOUBAO_API_KEY", "ARK_DOUBAO_API_KEY", "ARK_API_KEY"),
@@ -61,7 +62,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "Keep every text field below 45 words; do not restate global continuity or product rules inside each shot. "
                     "Use this five-beat sequence: establish feeding-prep scene, show the pain, introduce the separate warming cup, "
                     "demonstrate the pour, then finish with a product CTA. Script sections: "
-                    f"{_shotplan_input(script_copy)}. Product facts: {(product_facts or 'not provided')[:900]}"
+                    f"{_shotplan_input(script_copy)}. Product facts: {(product_facts or 'not provided')[:900]}. "
+                    f"Previous quality feedback that must be fixed: {rewrite_reason or 'none'}"
                 ),
             },
         ],
