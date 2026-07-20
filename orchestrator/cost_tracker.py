@@ -7,6 +7,54 @@ from typing import Any
 from orchestrator import queue
 
 
+class BudgetExceededError(RuntimeError):
+    pass
+
+
+def budget_status(
+    project_id: str,
+    *,
+    estimated_next_cny: float = 0.0,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    with queue.get_conn(db_path) as conn:
+        project = conn.execute(
+            "SELECT budget_cny, budget_mode FROM projects WHERE id = ?", (project_id,)
+        ).fetchone()
+        if project is None:
+            raise KeyError(project_id)
+        spent = float(conn.execute(
+            "SELECT COALESCE(SUM(cost_cny), 0) FROM cost_entries WHERE project_id = ?", (project_id,)
+        ).fetchone()[0])
+    budget = float(project["budget_cny"])
+    projected = spent + max(0.0, float(estimated_next_cny))
+    mode = str(project["budget_mode"])
+    return {
+        "project_id": project_id,
+        "budget_mode": mode,
+        "budget_cny": budget,
+        "spent_cny": spent,
+        "estimated_next_cny": max(0.0, float(estimated_next_cny)),
+        "projected_cny": projected,
+        "allowed": mode != "enforce" or projected <= budget,
+    }
+
+
+def require_budget(
+    project_id: str,
+    estimated_next_cny: float,
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    status = budget_status(project_id, estimated_next_cny=estimated_next_cny, db_path=db_path)
+    if not status["allowed"]:
+        raise BudgetExceededError(
+            f"预算不足：已使用 ¥{status['spent_cny']:.2f}，本次预计 ¥{status['estimated_next_cny']:.2f}，"
+            f"项目上限 ¥{status['budget_cny']:.2f}。请提高预算或切换为观察模式。"
+        )
+    return status
+
+
 def reconcile(
     *,
     project_id: str,
@@ -23,10 +71,11 @@ def reconcile(
     if cost_cny < 0:
         raise ValueError("cost_cny must be >= 0")
     queue.ensure_project(project_id, db_path=db_path)
+    budget = budget_status(project_id, db_path=db_path)
     payload = dict(meta or {})
     payload.update(
         {
-            "budget_mode": "observe",
+            "budget_mode": budget["budget_mode"],
             "tokens": tokens or {},
             "model": model,
             "shot_index": shot_index,
@@ -78,9 +127,12 @@ def get_project_cost(
             """,
             (project_id,),
         ).fetchone()
+    budget = budget_status(project_id, db_path=db_path)
     return {
         "project_id": project_id,
-        "budget_mode": "observe",
+        "budget_mode": budget["budget_mode"],
+        "budget_cny": budget["budget_cny"],
+        "remaining_cny": max(0.0, budget["budget_cny"] - float(row["total_cost_cny"])),
         "total_cost_cny": float(row["total_cost_cny"]),
         "entry_count": int(row["entry_count"]),
     }
@@ -102,9 +154,11 @@ def get_task_cost(
             """,
             (task_id,),
         ).fetchone()
+    project_id = queue.get_task(task_id, db_path=db_path).project_id
+    budget = budget_status(project_id, db_path=db_path)
     return {
         "task_id": task_id,
-        "budget_mode": "observe",
+        "budget_mode": budget["budget_mode"],
         "total_cost_cny": float(row["total_cost_cny"]),
         "entry_count": int(row["entry_count"]),
     }

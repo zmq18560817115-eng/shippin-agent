@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS projects (
                         'failed','blocked','needs_review','cancelled'
                     )),
     budget_cny      REAL NOT NULL DEFAULT 35.0,
-    budget_mode     TEXT NOT NULL DEFAULT 'observe',
+    budget_mode     TEXT NOT NULL DEFAULT 'enforce',
     payload_json    TEXT NOT NULL DEFAULT '{}',
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),

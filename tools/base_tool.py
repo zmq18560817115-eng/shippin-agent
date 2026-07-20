@@ -34,6 +34,10 @@ class ToolContext:
         )
 
     def pricing_for(self, tool_name: str) -> float:
+        env_name = f"VAF_PRICE_{tool_name.upper()}_CNY"
+        env_value = str(self.env.get(env_name, "")).strip()
+        if env_value:
+            return float(env_value)
         value = (self.config.get("pricing") or {}).get(tool_name)
         if value is None:
             return 0.0

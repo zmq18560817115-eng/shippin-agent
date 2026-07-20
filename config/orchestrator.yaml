@@ -14,7 +14,7 @@ runtime:
   # Real LLM and video provider calls can legitimately take several minutes.
   lease_seconds: 1200
   worker_poll_interval_s: 1.0
-  budget_mode: "observe"
+  budget_mode: "enforce"
 
 pricing:
   # CNY per call. Calibrated from the Volcengine Ark price sheet using the
@@ -31,4 +31,6 @@ pricing:
   doubao_shotplan: 0.082
   doubao_review: 0.033
   seedance_shot: 5.96
-  ffmpeg_compose: 0.0  # local FFmpeg, no provider cost
+  # Every value can be overridden with VAF_PRICE_<TOOL>_CNY after invoice
+  # reconciliation. Local FFmpeg has no provider charge.
+  ffmpeg_compose: 0.0

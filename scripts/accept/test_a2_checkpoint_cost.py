@@ -73,7 +73,7 @@ def test_a2_approve_gate_requires_awaiting_human(tmp_path: Path) -> None:
     assert approved["approval_notes"] == "copy ok"
 
 
-def test_a2_cost_reconcile_records_observe_mode_meta(tmp_path: Path) -> None:
+def test_a2_cost_reconcile_records_enforce_mode_meta(tmp_path: Path) -> None:
     db_path = tmp_path / "agentflow.db"
     queue.init_db(db_path=db_path)
     task_id = queue.enqueue_task(
@@ -105,7 +105,7 @@ def test_a2_cost_reconcile_records_observe_mode_meta(tmp_path: Path) -> None:
         row = conn.execute("SELECT * FROM cost_entries WHERE id = ?", (entry_id,)).fetchone()
 
     meta = cost_tracker.loads_meta(row["meta_json"])
-    assert meta["budget_mode"] == "observe"
+    assert meta["budget_mode"] == "enforce"
     assert meta["tokens"] == {"input": 100, "output": 40}
     assert meta["model"] == "doubao-turbo"
     assert meta["shot_index"] == 3

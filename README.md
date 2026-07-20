@@ -136,6 +136,14 @@ Cookies、`TIKTOK_MS_TOKEN` 和 API Key 不应进入仓库或镜像。TikTok 的
 
 ## 验收与开发
 
+### 成本护栏
+
+新建项目默认使用 `budget_mode=enforce` 和 `budget_cny=35`。每个真实计费节点在调用供应商前，都会用当前已记账成本加本次调用估算进行检查；预计超出项目预算时，任务进入 `blocked`，不会继续调用模型。`observe` 仅用于管理员受控排查，不建议用于多人生产环境。
+
+`config/orchestrator.yaml` 中的价格按火山引擎公开价格与实测 token 用量估算，并非供应商结算账单。上线后应根据企业火山引擎账单，通过 `VAF_PRICE_<TOOL>_CNY` 定期覆盖校准。部署预检会检查模型供应商估价均大于零、本地 FFmpeg 估价不小于零，并确认默认预算模式为 `enforce`。
+
+真实模型验收必须保留项目运行报告、五个镜头产物、最终 720×1280 成片和人工抽帧检查结果。一次真实回归只能证明当次模型与配置可用，不能替代持续的失败率、耗时和实际账单监控。
+
 ```powershell
 python -m pytest tests scripts/accept -q
 node --check web/app.js

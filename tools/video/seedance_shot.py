@@ -103,8 +103,8 @@ def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
         )
     elif number == 4:
         action_rule = (
-            "Shot 4 action only: close and lock the main lid before pouring. Keep the main lid visibly closed for the entire shot. "
-            "Tilt the warming cup and show one continuous liquid stream leaving only through the approved round spout and entering a separate clean baby bottle. "
+            "Shot 4 action only: close and lock the main screw-on lid before pouring, with the main lid visibly closed throughout the action. The small dust cover may open only enough to expose the approved round spout, while the main lid stays locked. "
+            "Tilt the warming cup and show one continuous liquid stream leaving only through that round spout and entering a separate clean, completely unbranded baby bottle. "
             "Never pour through the open main mouth, never reverse the direction, and never place the bottle inside the cup."
         )
     else:
@@ -118,10 +118,11 @@ def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
             str(shot.get("seedance_prompt") or shot.get("visual_prompt") or shot.get("visual") or ""),
             f"Seedance source: {asset_manifest.get('seedance_source')}",
             f"Approved product facts and hard constraints: {product_facts}" if product_facts else "",
-            "Use only the approved product identity from the reference image. Do not add any invented brand name, logo, watermark, label, or readable text. Do not replace the product with a generic bottle or another brand.",
+            "Use only the approved product identity from the reference image. Preserve its exact body shape, lid, handle, controls, color, and approved logo. Do not add any invented brand name, logo, watermark, label, subtitle, overlay, or readable text. The separate baby bottle must be transparent and completely unbranded. Do not replace the product with a generic bottle or another brand.",
+            "Continuity contract for every shot: do not show a face or identifiable person. Frame only the product and, when required, the same adult hands wearing the same neutral light-gray pajama sleeves. No face, head, full body, or changing performer may appear.",
             "For a warming-cup pouring shot: pour liquid from the warming cup spout into a separate clean baby bottle; never place the baby bottle inside the warming cup and never pour in the reverse direction.",
             action_rule,
-            "If the display is visible, show exactly 98°F with the Fahrenheit symbol; never show Celsius or 98°C.",
+            "Display contract: only show a lit display when the shot explicitly requires a temperature close-up. If visible, it must read exactly 98°F with one Fahrenheit symbol and no Celsius symbol. Never show °C, 98°C, mixed °C/F, extra digits, or corrupted glyphs. If exact 98°F cannot be rendered, keep the display unlit or fully out of frame.",
         )
         if part
     )

@@ -11,6 +11,7 @@ from libshared import artifacts, checkpoint
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, queue
 from tools import tool_registry
+from tools.base_tool import ToolContext
 from tools.collect import manual_import
 from tools.collect import product_library
 
@@ -39,6 +40,8 @@ def start_pipeline(
     db_path: str | Path | None = None,
     run_root: str | Path | None = None,
     mock: bool = True,
+    budget_cny: float = 35.0,
+    budget_mode: str = "enforce",
 ) -> int:
     root = _run_root(project_id, run_root)
     root.mkdir(parents=True, exist_ok=True)
@@ -49,6 +52,8 @@ def start_pipeline(
         project_id,
         product_id=product_id,
         source_link_id=source_link_id,
+        budget_cny=budget_cny,
+        budget_mode=budget_mode,
         payload={
             "mock": mock,
             "run_root": root.as_posix(),
@@ -210,6 +215,11 @@ def _execute_task(
     db_path: str | Path | None,
 ) -> EngineRunStatus:
     try:
+        if not mock:
+            tool_name = _priced_tool_for_stage(task.stage)
+            if tool_name:
+                estimate = ToolContext.from_mapping().pricing_for(tool_name)
+                cost_tracker.require_budget(task.project_id, estimate, db_path=db_path)
         if task.stage == "analysis":
             return _run_analysis(task, root, mock=mock, db_path=db_path)
         if task.stage == "research":
@@ -235,6 +245,11 @@ def _execute_task(
         if task.stage == "archive":
             return _run_archive(task, root, db_path=db_path)
         raise ValueError(f"unknown stage: {task.stage}")
+    except cost_tracker.BudgetExceededError as exc:
+        error = {"category": "budget_exceeded", "message": str(exc)}
+        queue.mark_task_status(task.id, "blocked", worker_id="engine", error=error, db_path=db_path)
+        checkpoint.write_checkpoint(task.project_id, task.stage, status="blocked", data={"error": error}, run_root=root)
+        return EngineRunStatus(task.project_id, task.stage, "blocked", str(exc))
     except Exception as exc:
         queue.fail_task(
             task.id,
@@ -268,6 +283,7 @@ def _run_analysis(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pa
         root,
         mock=mock,
     )
+    _record_tool_cost(task, result, "doubao_analyze", db_path=db_path)
     return _complete_with_artifact(
         task,
         root,
@@ -336,6 +352,7 @@ def _run_script(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path
         root,
         mock=mock,
     )
+    _record_tool_cost(task, result, "doubao_script", db_path=db_path)
     return _complete_with_artifact(
         task,
         root,
@@ -417,6 +434,7 @@ def _run_storyboard(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         root,
         mock=mock,
     )
+    _record_tool_cost(task, result, "doubao_shotplan", db_path=db_path)
     shot_plan = _attach_reference_footage(task.project_id, result.data["shot_plan"], db_path=db_path)
     return _complete_with_artifact(
         task,
@@ -587,6 +605,7 @@ def _run_compose(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pat
         root,
         mock=mock,
     )
+    _record_tool_cost(task, result, "ffmpeg_compose", db_path=db_path)
     return _complete_with_artifact(
         task,
         root,
@@ -785,6 +804,32 @@ def _execute_tool(
     if not result.ok and not allow_failure:
         raise RuntimeError(f"{name} failed: {result.error}")
     return result
+
+
+def _priced_tool_for_stage(stage: str) -> str | None:
+    return {
+        "analysis": "doubao_analyze",
+        "script": "doubao_script",
+        "script_review": "doubao_review",
+        "storyboard": "doubao_shotplan",
+        "production": "seedance_shot",
+        "compose": "ffmpeg_compose",
+    }.get(stage)
+
+
+def _record_tool_cost(task: queue.Task, result: Any, tool_name: str, *, db_path: str | Path | None) -> None:
+    if float(result.cost_cny or 0) <= 0:
+        return
+    cost_tracker.reconcile(
+        project_id=task.project_id,
+        task_id=task.id,
+        agent=task.agent,
+        tool=tool_name,
+        cost_cny=float(result.cost_cny),
+        model=result.meta.get("model"),
+        meta=result.meta,
+        db_path=db_path,
+    )
 
 
 def _enqueue_stage(

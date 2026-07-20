@@ -28,6 +28,7 @@ from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, engine, queue, user_store
 from orchestrator.capabilities import capability_map
 from tools import tool_registry
+from tools.base_tool import ToolContext
 from tools.collect import manual_import, product_library, tiktok_oembed
 
 
@@ -89,6 +90,8 @@ class PipelineRunRequest(BaseModel):
     source_text: str | None = None
     link_id: str | int | None = None
     mock: bool = True
+    budget_cny: float = 35.0
+    budget_mode: str = "enforce"
 
 
 class ManualCollectRequest(BaseModel):
@@ -429,6 +432,7 @@ def runtime_status() -> dict[str, Any]:
     apify_ready = bool(os.environ.get("APIFY_API_TOKEN"))
     yt_dlp_ready = bool(shutil.which("yt-dlp"))
     cookies_ready = bool(os.environ.get("TIKTOK_COOKIES_FILE"))
+    context = ToolContext.from_mapping()
     return {
         "status": "ok",
         "real_ready": bool(os.environ.get("DOUBAO_API_KEY") and os.environ.get("SEEDANCE_API_KEY")),
@@ -454,7 +458,7 @@ def runtime_status() -> dict[str, Any]:
             {"id": "yt_dlp", "ready": yt_dlp_ready, "supports": ["account", "direct_url"], "cookies_file": cookies_ready},
             {"id": "manual_url", "ready": yt_dlp_ready, "supports": ["direct_url"]},
         ],
-        "budget_mode": "observe",
+        "budget_mode": str((context.config.get("runtime") or {}).get("budget_mode") or "enforce"),
         "pricing_calibrated": _pricing_calibrated(),
     }
 
@@ -1558,6 +1562,10 @@ def collect_material_file(material_id: str, relative_path: str) -> FileResponse:
 @app.post("/api/v2/pipeline/run")
 def run_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
     project_id = _validate_project_id(request.project_id or _new_project_id())
+    if request.budget_cny <= 0:
+        raise HTTPException(status_code=422, detail="项目预算必须大于 0 元")
+    if request.budget_mode not in {"observe", "enforce"}:
+        raise HTTPException(status_code=422, detail="预算模式只能是 enforce（强制）或 observe（观察）")
     if not request.mock:
         missing = [name for name in ("DOUBAO_API_KEY", "SEEDANCE_API_KEY") if not os.environ.get(name)]
         if missing:
@@ -1583,6 +1591,8 @@ def run_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
         db_path=_db_path(),
         run_root=run_root,
         mock=request.mock,
+        budget_cny=request.budget_cny,
+        budget_mode=request.budget_mode,
     )
     status = engine.run_until_blocked(
         project_id,
@@ -2260,11 +2270,10 @@ _PRICING_TOOLS = ("doubao_analyze", "doubao_script", "doubao_shotplan", "doubao_
 
 
 def _pricing_calibrated() -> bool:
-    """True once every metered tool has a numeric price configured."""
-    from tools.base_tool import load_config
-
-    pricing = (load_config().get("pricing") or {})
-    return all(isinstance(pricing.get(name), (int, float)) for name in _PRICING_TOOLS)
+    """Require positive provider prices while allowing zero-cost local compose."""
+    context = ToolContext.from_mapping()
+    provider_tools = tuple(name for name in _PRICING_TOOLS if name != "ffmpeg_compose")
+    return all(context.pricing_for(name) > 0 for name in provider_tools) and context.pricing_for("ffmpeg_compose") >= 0
 
 
 def _material_library_root() -> Path:

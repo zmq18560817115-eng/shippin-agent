@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -94,9 +95,10 @@ def run_a8_batch(
     )
 
     results: list[VideoResult] = []
+    batch_id = uuid.uuid4().hex[:8]
     for index, item in enumerate(imported["items"], start=1):
         started = time.monotonic()
-        project_id = f"a8-{index:02d}-{item['video_id'][-6:]}"
+        project_id = f"a8-{batch_id}-{index:02d}-{item['video_id'][-6:]}"
         run_root = runs_root / project_id
         engine.start_pipeline(
             project_id,

@@ -115,17 +115,20 @@ def ensure_project(
     product_id: str | None = None,
     source_link_id: int | None = None,
     budget_cny: float = 35.0,
+    budget_mode: str = "enforce",
     payload: dict[str, Any] | None = None,
     db_path: str | os.PathLike[str] | None = None,
 ) -> None:
+    if budget_mode not in {"observe", "enforce"}:
+        raise ValueError("budget_mode must be observe or enforce")
     now = utc_now()
     with get_conn(db_path) as conn:
         conn.execute(
             """
             INSERT INTO projects (
-                id, product_id, source_link_id, budget_cny, payload_json, created_at, updated_at
+                id, product_id, source_link_id, budget_cny, budget_mode, payload_json, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 product_id = COALESCE(excluded.product_id, projects.product_id),
                 source_link_id = COALESCE(excluded.source_link_id, projects.source_link_id),
@@ -136,6 +139,7 @@ def ensure_project(
                 product_id,
                 source_link_id,
                 budget_cny,
+                budget_mode,
                 _dumps(payload or {}),
                 now,
                 now,

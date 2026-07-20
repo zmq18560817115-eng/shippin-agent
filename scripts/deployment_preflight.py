@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from tools.base_tool import ToolContext
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,6 +115,13 @@ def main() -> int:
     data_root = Path(os.environ.get("VAF_DATA_ROOT", ROOT / "data"))
     db_path = Path(os.environ.get("VAF_DB_PATH", data_root / "video_agent_factory.db"))
     cookies = os.environ.get("TIKTOK_COOKIES_FILE", "").strip()
+    tool_context = ToolContext.from_mapping()
+    priced_tools = (
+        "doubao_analyze", "doubao_script", "doubao_shotplan",
+        "doubao_review", "seedance_shot", "ffmpeg_compose",
+    )
+    pricing = {name: tool_context.pricing_for(name) for name in priced_tools}
+    budget_mode = str((tool_context.config.get("runtime") or {}).get("budget_mode") or "enforce")
     checks = {
         "ffmpeg": application_ffmpeg(),
         "system_ffprobe": command_version("ffprobe", ["-version"]),
@@ -127,9 +136,18 @@ def main() -> int:
         },
         "doubao_key": {"ok": bool(os.environ.get("DOUBAO_API_KEY")), "detail": "configured" if os.environ.get("DOUBAO_API_KEY") else "missing"},
         "seedance_key": {"ok": bool(os.environ.get("SEEDANCE_API_KEY")), "detail": "configured" if os.environ.get("SEEDANCE_API_KEY") else "missing"},
+        "pricing_calibrated": {
+            "ok": all(value > 0 for name, value in pricing.items() if name != "ffmpeg_compose")
+            and pricing.get("ffmpeg_compose", -1) >= 0,
+            "detail": pricing,
+        },
+        "budget_enforced": {"ok": budget_mode == "enforce", "detail": f"budget_mode={budget_mode}"},
     }
     checks.update(security_checks())
-    required = ["ffmpeg", "yt_dlp", "playwright", "database", "materials_volume", "runs_volume", "auth_enabled", "session_secret"]
+    required = [
+        "ffmpeg", "yt_dlp", "playwright", "database", "materials_volume", "runs_volume",
+        "auth_enabled", "session_secret", "pricing_calibrated", "budget_enforced",
+    ]
     report = {
         "status": "pass" if all(bool(checks[name]["ok"]) for name in required) else "fail",
         "checks": checks,

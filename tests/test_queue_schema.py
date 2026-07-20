@@ -28,7 +28,7 @@ def test_v2_task_defaults_and_project_budget(tmp_path: Path) -> None:
         ).fetchone()
 
     assert project["budget_cny"] == 35.0
-    assert project["budget_mode"] == "observe"
+    assert project["budget_mode"] == "enforce"
 
 
 def test_agent_enum_rejects_unknown_agent(tmp_path: Path) -> None:
