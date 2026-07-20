@@ -7,7 +7,31 @@
     "project_id": {"type": "string"},
     "author": {"type": "string"},
     "text": {"type": "string", "minLength": 1, "maxLength": 1000},
-    "created_at": {"type": "string"}
+    "created_at": {"type": "string"},
+    "creative_brief": {
+      "type": "object",
+      "required": ["style", "audience", "freedom", "freedom_instruction"],
+      "properties": {
+        "style": {"type": "string"},
+        "audience": {"type": "string"},
+        "freedom": {"enum": ["strict", "balanced", "exploratory"]},
+        "freedom_instruction": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "insights": {
+      "type": "object",
+      "required": ["summary", "priority", "categories", "recommended_actions", "reusable_rule_candidate", "requires_human_adoption"],
+      "properties": {
+        "summary": {"type": "string"},
+        "priority": {"enum": ["medium", "high"]},
+        "categories": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "recommended_actions": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "reusable_rule_candidate": {"type": "string"},
+        "requires_human_adoption": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

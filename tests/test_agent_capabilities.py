@@ -147,7 +147,14 @@ def test_standalone_analysis_review_and_feedback_are_downloadable(tmp_path: Path
         )
         feedback = client.post(
             "/api/v2/agents/run",
-            json={"action": "feedback", "source_text": "减少空镜头，明确展示独立奶瓶与正确倒液方向。", "mock": True},
+            json={
+                "action": "feedback",
+                "source_text": "减少空镜头，明确展示独立奶瓶与正确倒液方向。",
+                "creative_style": "真实生活方式广告",
+                "target_audience": "夜间喂养的新手父母",
+                "creative_freedom": "exploratory",
+                "mock": True,
+            },
         )
 
         analysis_download = client.get(analysis.json()["download_url"])
@@ -160,6 +167,10 @@ def test_standalone_analysis_review_and_feedback_are_downloadable(tmp_path: Path
     assert analysis.json()["artifact_name"] == "analysis_report"
     assert review.json()["artifact_name"] == "review_report"
     assert feedback.json()["artifact_name"] == "feedback_record"
+    assert feedback.json()["artifact"]["insights"]["priority"] == "medium"
+    assert "product_accuracy" in feedback.json()["artifact"]["insights"]["categories"]
+    assert feedback.json()["meta"]["agent_contract"]["identity"]
+    assert feedback.json()["meta"]["creative_brief"]["freedom"] == "exploratory"
     assert all(response.status_code == 200 for response in (analysis_download, review_download, feedback_download))
 
 
@@ -193,6 +204,9 @@ def test_orchestrator_and_asset_are_independently_runnable(tmp_path: Path, monke
                 "action": "orchestrator",
                 "product_id": "便携恒温杯",
                 "prompt": "规划一条 30 秒恒温杯产品视频生产任务。",
+                "creative_style": "电影感叙事",
+                "target_audience": "新手父母",
+                "creative_freedom": "balanced",
                 "mock": True,
             },
         )
@@ -210,10 +224,31 @@ def test_orchestrator_and_asset_are_independently_runnable(tmp_path: Path, monke
     assert orchestrator.status_code == 200, orchestrator.text
     assert orchestrator.json()["artifact_name"] == "orchestration_plan"
     assert len(orchestrator.json()["artifact"]["route"]) == 6
+    assert orchestrator.json()["artifact"]["creative_brief"]["style"] == "电影感叙事"
+    assert orchestrator.json()["meta"]["agent_contract"]["identity"]
     assert asset.status_code == 200, asset.text
     assert asset.json()["artifact_name"] == "asset_manifest"
     assert asset.json()["artifact"]["hero_frames"][0]["status"] == "generated"
     assert asset_download.status_code == 200
+
+
+def test_independent_agent_rejects_unknown_creative_freedom(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "creative-controls.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "script",
+                "source_text": "生成一条产品短视频脚本。",
+                "creative_freedom": "unlimited",
+                "mock": True,
+            },
+        )
+
+    assert response.status_code == 422
+    assert "creative_freedom" in response.json()["detail"]
 
 
 def test_standalone_script_promotes_to_a_gated_production_project(tmp_path: Path, monkeypatch) -> None:

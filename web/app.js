@@ -139,13 +139,29 @@ function renderAgentResult(host, payload) {
     ? `<button type="button" class="promoteStandalone" data-project-id="${escapeAttr(payload.project_id)}" data-artifact-name="${escapeAttr(payload.artifact_name)}">用此产物创建生产项目</button>`
     : "";
   const artifact = payload.artifact || {};
+  const contract = payload.meta?.agent_contract || {};
+  const brief = payload.meta?.creative_brief || {};
+  const executionContext = contract.identity ? `
+    <div class="agentExecutionContext">
+      <strong>${escapeHtml(contract.identity)}</strong>
+      <span>${escapeHtml(brief.style || "自动匹配风格")} · ${escapeHtml(brief.audience || "通用受众")} · ${escapeHtml(brief.freedom_instruction || "平衡创作")}</span>
+    </div>` : "";
   host.className = "nodeResult complete";
   host.innerHTML = `
     <div class="resultHead"><strong>${escapeHtml(artifactLabel(payload.artifact_name))}</strong>${download}${promote}</div>
+    ${executionContext}
     ${payload.project_id && payload.project_id.startsWith("scratch-") ? "<p>独立工作区产物已保存，不会出现在生产项目列表中。</p>" : ""}
     <div class="agentFriendlyResult">${renderFriendlyArtifact(payload.artifact_name, artifact)}</div>
     <details class="rawArtifact"><summary>查看 JSON</summary><pre>${escapeHtml(JSON.stringify(artifact, null, 2))}</pre></details>
   `;
+}
+
+function creativeRequestFields() {
+  return {
+    creative_style: $("#independentCreativeStyle")?.value || "",
+    target_audience: $("#independentTargetAudience")?.value.trim() || "",
+    creative_freedom: $("#independentCreativeFreedom")?.value || "balanced",
+  };
 }
 
 function artifactLabel(name) {
@@ -374,6 +390,7 @@ async function runStandaloneLauncher(button) {
         source_text: prompt,
         provider: "auto",
         mock: $("#runtimeMode").value !== "real",
+        ...creativeRequestFields(),
       }),
     });
     renderAgentResult(resultHost, payload);
@@ -432,6 +449,7 @@ async function runIndependentAgent() {
         target_type: "keyword",
         provider: "auto",
         mock: $("#runtimeMode").value !== "real",
+        ...creativeRequestFields(),
       }),
     });
     renderAgentResult(resultHost, payload);

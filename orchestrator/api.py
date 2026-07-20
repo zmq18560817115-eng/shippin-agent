@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from libshared import artifacts, checkpoint, creative_quality
+from libshared.agent_contracts import agent_contract
 from libshared.local_env import load_local_env
 from libshared.paths import DATA_ROOT, ROOT, RUNS_ROOT
 from orchestrator import cost_tracker, engine, queue, user_store
@@ -234,6 +235,9 @@ class AgentRunRequest(BaseModel):
     limit: int = 6
     persist: bool = True
     mock: bool = True
+    creative_style: str = ""
+    target_audience: str = ""
+    creative_freedom: str = "balanced"
 
 
 class PipelineResumeRequest(BaseModel):
@@ -616,6 +620,71 @@ def reject_registration_request(request_id: int, request: RegistrationReviewRequ
     return {"ok": True, "registration": item}
 
 
+def _creative_brief(request: AgentRunRequest) -> dict[str, str]:
+    freedom = request.creative_freedom.strip().casefold() or "balanced"
+    if freedom not in {"strict", "balanced", "exploratory"}:
+        raise HTTPException(status_code=422, detail="creative_freedom must be strict, balanced, or exploratory")
+    labels = {
+        "strict": "严格执行输入结构，只做必要的专业优化",
+        "balanced": "在产品硬约束内主动优化叙事、节奏和视觉表达",
+        "exploratory": "在产品硬约束内提出更大胆的剧情、镜头和风格方案",
+    }
+    return {
+        "style": request.creative_style.strip()[:200],
+        "audience": request.target_audience.strip()[:200],
+        "freedom": freedom,
+        "freedom_instruction": labels[freedom],
+    }
+
+
+def _apply_creative_brief(text: str, brief: dict[str, str]) -> str:
+    additions = [
+        f"创意风格：{brief['style']}" if brief["style"] else "",
+        f"目标受众：{brief['audience']}" if brief["audience"] else "",
+        f"创作自由度：{brief['freedom_instruction']}",
+        "创作参数不得覆盖产品事实、品牌合规、人物与场景连续性以及人工闸门。",
+    ]
+    return "\n".join([text.strip(), *(item for item in additions if item)]).strip()
+
+
+def _agent_execution_meta(action: str, brief: dict[str, str], **extra: Any) -> dict[str, Any]:
+    return {
+        **extra,
+        "agent_contract": agent_contract(action if action != "script_breakdown" else "script"),
+        "creative_brief": brief,
+    }
+
+
+def _feedback_insights(text: str) -> dict[str, Any]:
+    category_terms = {
+        "product_accuracy": ("产品", "品牌", "温标", "温度", "倒液", "外观"),
+        "visual_continuity": ("连续", "人物", "场景", "镜头", "画面"),
+        "story_quality": ("脚本", "剧情", "叙事", "台词", "节奏"),
+        "collection_relevance": ("抓取", "采集", "关键词", "素材", "TikTok"),
+        "runtime_stability": ("失败", "报错", "卡顿", "超时", "稳定"),
+    }
+    categories = [name for name, terms in category_terms.items() if any(term in text for term in terms)]
+    if not categories:
+        categories = ["general_quality"]
+    high_priority_terms = ("错误", "违规", "失败", "不可用", "阻断", "温标", "品牌")
+    priority = "high" if any(term in text for term in high_priority_terms) else "medium"
+    actions = ["将反馈加入对应 Agent 的下一轮输入并重新验收"]
+    if "product_accuracy" in categories:
+        actions.append("对照产品知识库和硬性护栏复核产品外观与使用动作")
+    if "visual_continuity" in categories:
+        actions.append("逐镜抽帧检查人物、场景、道具和动作连续性")
+    if "collection_relevance" in categories:
+        actions.append("复核采集关键词、来源链接和素材相关性评分")
+    return {
+        "summary": text,
+        "priority": priority,
+        "categories": categories,
+        "recommended_actions": actions,
+        "reusable_rule_candidate": text[:240],
+        "requires_human_adoption": True,
+    }
+
+
 @app.post("/api/v2/agents/run")
 def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     standalone = not request.project_id
@@ -631,6 +700,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     project = _project_summary(project_id) if action not in {"collector", "orchestrator"} else {}
     root = _run_root(project_id)
     payload: dict[str, Any] = {"project_id": project_id}
+    creative_brief = _creative_brief(request)
 
     if action == "orchestrator":
         goal = (request.prompt or request.source_text or "").strip()
@@ -639,6 +709,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         plan = {
             "goal": goal,
             "product_id": request.product_id,
+            "creative_brief": creative_brief,
             "operating_principle": "逐节点耐心核对输入、产物、人工闸门和预算，不替专业 Agent 擅自改写内容。",
             "route": [
                 {"agent": "Collector", "task": "采集并登记可追溯参考素材"},
@@ -657,7 +728,9 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             "action": action,
             "artifact_name": "orchestration_plan",
             "artifact": plan,
-            "meta": {"standalone": True, "agent": "orchestrator"},
+            "meta": _agent_execution_meta(
+                "orchestrator", creative_brief, standalone=True, agent="orchestrator"
+            ),
         }
     if action == "collector":
         if not request.target:
@@ -679,7 +752,12 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
                 "action": action,
                 "artifact_name": "tiktok_capture",
                 "artifact": captured,
-                "meta": {"persisted": True, "provider": captured.get("provider")},
+                "meta": _agent_execution_meta(
+                    "collector",
+                    creative_brief,
+                    persisted=True,
+                    provider=captured.get("provider"),
+                ),
             }
         result = tool_registry.execute_tool(
             "tiktok_crawler",
@@ -688,7 +766,14 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         )
         if not result.ok:
             raise HTTPException(status_code=422, detail=(result.error or {}).get("message") or result.error)
-        return {"ok": True, "project_id": project_id if not standalone else None, "action": action, "artifact_name": "tiktok_discovery", "artifact": result.data, "meta": result.meta}
+        return {
+            "ok": True,
+            "project_id": project_id if not standalone else None,
+            "action": action,
+            "artifact_name": "tiktok_discovery",
+            "artifact": result.data,
+            "meta": _agent_execution_meta("collector", creative_brief, **result.meta),
+        }
     if action == "analysis":
         source = (request.source_text or request.prompt or "").strip()
         payload.update(
@@ -714,6 +799,8 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         tool_name, artifact_name = "competitor_research", "research_brief"
     elif action == "strategy":
         direct_research = (request.source_text or request.prompt or "").strip()
+        if direct_research:
+            direct_research = _apply_creative_brief(direct_research, creative_brief)
         research_brief = request.input_json or (
             {
                 "version": "1.0",
@@ -736,7 +823,9 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         )
         tool_name, artifact_name = "content_strategy", "strategy_brief"
     elif action == "script":
-        source = (request.source_text or request.prompt or "").strip()
+        source = _apply_creative_brief(
+            (request.source_text or request.prompt or "").strip(), creative_brief
+        )
         payload.update({
             "product_id": request.product_id,
             "analysis_report": {"project_id": project_id, "voiceover_text": source, "hook_3s": source[:120], "structure": []},
@@ -744,7 +833,9 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         })
         tool_name, artifact_name = "doubao_script", "script_copy"
     elif action == "storyboard":
-        base_prompt = (request.prompt or request.source_text or "Product scene").strip()
+        base_prompt = _apply_creative_brief(
+            (request.prompt or request.source_text or "Product scene").strip(), creative_brief
+        )
         script = request.input_json
         if script is None:
             script_result = tool_registry.execute_tool(
@@ -775,7 +866,9 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         tool_name, artifact_name = "doubao_shotplan", "shot_plan"
     elif action == "asset":
         source = product_library.resolve_seedance_source(request.product_id)
-        shot_text = (request.prompt or request.source_text or "产品身份关键帧").strip()
+        shot_text = _apply_creative_brief(
+            (request.prompt or request.source_text or "产品身份关键帧").strip(), creative_brief
+        )
         payload.update(
             {
                 "product_id": request.product_id,
@@ -794,7 +887,10 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         )
         tool_name, artifact_name = "hero_frame", "asset_manifest"
     elif action == "production":
-        prompt = (request.prompt or request.source_text or "Create a product-safe vertical shot").strip()
+        prompt = _apply_creative_brief(
+            (request.prompt or request.source_text or "Create a product-safe vertical shot").strip(),
+            creative_brief,
+        )
         source = product_library.resolve_seedance_source(request.product_id)
         references = product_library.resolve_generation_references(request.product_id)
         payload.update({
@@ -810,7 +906,9 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     elif action == "script_breakdown":
         script = request.input_json
         if script is None:
-            source = (request.source_text or request.prompt or "").strip()
+            source = _apply_creative_brief(
+                (request.source_text or request.prompt or "").strip(), creative_brief
+            )
             if source:
                 script_result = tool_registry.execute_tool(
                     "doubao_script",
@@ -888,6 +986,8 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             "author": "operator",
             "text": text,
             "created_at": queue.utc_now(),
+            "insights": _feedback_insights(text),
+            "creative_brief": creative_brief,
         }
         artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
         # Standalone (scratch) runs stay isolated in their own run root and must not
@@ -911,7 +1011,12 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             "artifact_name": artifact_name,
             "artifact": artifact,
             "download_url": f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
-            "meta": {"tool": "feedback_library", "standalone": standalone},
+            "meta": _agent_execution_meta(
+                "feedback",
+                creative_brief,
+                tool="feedback_library",
+                standalone=standalone,
+            ),
         }
     else:
         raise HTTPException(status_code=400, detail="action must be orchestrator, collector, analysis, research, strategy, script, script_breakdown, storyboard, asset, production, review, or feedback")
@@ -940,7 +1045,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         "artifact_name": artifact_name,
         "artifact": artifact,
         "download_url": f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
-        "meta": result.meta,
+        "meta": _agent_execution_meta(action, creative_brief, **result.meta),
     }
 
 

@@ -33,7 +33,13 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert "生成第一个候选 Take" in script
     assert 'api("/api/v2/takes/select"' in script
     assert 'id="independentAgentContract"' in html
+    assert 'id="independentCreativeStyle"' in html
+    assert 'id="independentTargetAudience"' in html
+    assert 'id="independentCreativeFreedom"' in html
     assert "state.agentContracts[action]" in script
+    assert "function creativeRequestFields()" in script
+    assert "...creativeRequestFields()" in script
+    assert "agentExecutionContext" in script
     assert "function renderCreativeQuality" in script
 
 

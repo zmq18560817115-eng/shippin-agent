@@ -2201,6 +2201,34 @@ pre {
   margin-top: 8px;
 }
 
+.agentExecutionContext {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.agentExecutionContext span {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .agentExecutionContext {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .agentExecutionContext span {
+    text-align: left;
+  }
+}
+
 .agentResultCards {
   display: grid;
   gap: 8px;
