@@ -69,6 +69,11 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert 'id="projectOverviewContinue"' in script
     assert "function renderProjectOverview()" in script
     assert 'data-project-stage-view' in script
+    assert 'id="projectContextBar"' in html
+    assert 'id="contextBackToProject"' in html
+    assert "const projectStageViews" in script
+    assert "function renderProjectContextBar()" in script
+    assert "function moveProjectStage(direction)" in script
 
 
 def test_video_project_navigation_exposes_every_production_stage() -> None:

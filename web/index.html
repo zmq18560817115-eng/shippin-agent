@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260721-5" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260721-6" />
   </head>
   <body>
     <header class="topbar">
@@ -54,6 +54,19 @@
           <p id="viewDescription">创建任务，或打开一个在制项目继续工作。</p>
         </div>
         <span id="currentStage" class="currentStage">暂无在制项目</span>
+      </div>
+      <div class="projectContextBar" id="projectContextBar" hidden>
+        <button type="button" class="contextBack" id="contextBackToProject"><i data-lucide="folder-kanban"></i><span>项目概览</span></button>
+        <div class="contextIdentity">
+          <strong id="contextProductName">未选择项目</strong>
+          <span id="contextProjectMeta"></span>
+        </div>
+        <div class="contextStatus" id="contextProjectStatus"></div>
+        <div class="contextNavigation">
+          <button type="button" class="iconOnly" id="contextPrevious" title="上一个阶段" aria-label="上一个阶段"><i data-lucide="chevron-left"></i></button>
+          <span id="contextPosition">1 / 6</span>
+          <button type="button" class="iconOnly" id="contextNext" title="下一个阶段" aria-label="下一个阶段"><i data-lucide="chevron-right"></i></button>
+        </div>
       </div>
       <section class="homeDashboard" id="homeDashboard" data-view-section="home">
         <div class="homeHero">
@@ -441,6 +454,6 @@
 
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260721-5"></script>
+    <script src="/static/app.js?v=20260721-6"></script>
   </body>
 </html>

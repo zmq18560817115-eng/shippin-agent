@@ -46,6 +46,8 @@ const views = {
   delivery: { step: "06 / 06", title: "交付", description: "检查质检结果，下载交付包并记录反馈。" },
 };
 
+const projectStageViews = ["strategy", "script", "storyboard", "production", "review", "archive"];
+
 const $ = (selector) => document.querySelector(selector);
 const statusGlyph = {
   idle: "○",
@@ -757,6 +759,7 @@ function showView(view, { updateUrl = true } = {}) {
   $("#viewStep").textContent = meta.step;
   $("#viewTitle").textContent = meta.title;
   $("#viewDescription").textContent = meta.description;
+  renderProjectContextBar();
   if (updateUrl) history.replaceState(null, "", `#view=${next}`);
   renderPanels();
   if (next === "assets") {
@@ -767,6 +770,30 @@ function showView(view, { updateUrl = true } = {}) {
   if (next === "tasks") renderTaskCenter();
   if (["archive", "delivery"].includes(next)) loadDeliveryDownloads();
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderProjectContextBar() {
+  const bar = $("#projectContextBar");
+  if (!bar) return;
+  const index = projectStageViews.indexOf(state.currentView);
+  const visible = Boolean(state.selected && index >= 0);
+  bar.hidden = !visible;
+  if (!visible) return;
+
+  const project = state.selected;
+  const current = project.current_gate || project.current_stage || project.status;
+  $("#contextProductName").textContent = project.product_id || "未命名产品";
+  $("#contextProjectMeta").textContent = `${project.mock ? "演练模式" : "真实运行"} · ${project.project_id} · ¥${Number(project.cost?.total_cost_cny || 0).toFixed(2)}`;
+  $("#contextProjectStatus").innerHTML = `<span class="stageTag ${statusClass(project.status)}">${escapeHtml(stageLabel(current))}</span>`;
+  $("#contextPosition").textContent = `${index + 1} / ${projectStageViews.length}`;
+  $("#contextPrevious").disabled = index === 0;
+  $("#contextNext").disabled = index === projectStageViews.length - 1;
+}
+
+function moveProjectStage(direction) {
+  const index = projectStageViews.indexOf(state.currentView);
+  const target = projectStageViews[index + direction];
+  if (target) showView(target);
 }
 
 function viewForStage(stage) {
@@ -1715,6 +1742,7 @@ function renderPanels() {
   $("#currentStage").textContent = state.selected
     ? `当前节点：${stageLabels[stage] || stage}`
     : "暂无在制项目";
+  renderProjectContextBar();
   if (state.currentView === "projects") renderProjectOverview();
   if (state.currentView === "strategy") renderStrategyNode();
   if (state.currentView === "script") renderScriptGate();
@@ -2558,5 +2586,9 @@ function escapeHtml(value) {
 function escapeAttr(value) {
   return escapeHtml(value);
 }
+
+$("#contextBackToProject")?.addEventListener("click", () => showView("projects"));
+$("#contextPrevious")?.addEventListener("click", () => moveProjectStage(-1));
+$("#contextNext")?.addEventListener("click", () => moveProjectStage(1));
 
 boot();
