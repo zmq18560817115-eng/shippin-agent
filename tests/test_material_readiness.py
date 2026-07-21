@@ -1,6 +1,10 @@
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
 from orchestrator import api
+from orchestrator.api import app
+from tools.collect import manual_import
 
 
 def test_material_readiness_requires_complete_relevant_local_asset(tmp_path: Path) -> None:
@@ -31,10 +35,45 @@ def test_material_readiness_quarantines_metadata_only_or_irrelevant_asset(tmp_pa
     )
 
     assert result["ready"] is False
-    assert result["lane"] == "cleanup"
+    assert result["lane"] == "quarantine"
     assert "与采集关键词不匹配" in result["missing"]
     assert "未下载原视频" in result["missing"]
     assert "缺少转写" in result["missing"]
+
+
+def test_material_readiness_keeps_relevant_incomplete_asset_in_processing(tmp_path: Path) -> None:
+    result = api._material_production_readiness(
+        {"video_title": "便携恒温杯夜间喂养", "source_keyword": "恒温杯", "processing_status": "captured"},
+        tmp_path,
+    )
+
+    assert result["ready"] is False
+    assert result["lane"] == "processing"
+    assert "与采集关键词不匹配" not in result["missing"]
+
+
+def test_pipeline_rejects_material_that_has_not_passed_admission(tmp_path: Path, monkeypatch) -> None:
+    material_root = tmp_path / "materials"
+    monkeypatch.setenv("VAF_MATERIAL_LIBRARY_ROOT", str(material_root))
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "agentflow.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+    imported = manual_import.import_links(
+        [{"url": "https://www.tiktok.com/@demo/video/7000000000000000123", "title": "QR code tutorial"}],
+        product_id="便携恒温杯",
+        source_keyword="恒温杯",
+        library_root=material_root,
+    )
+    material_id = imported["items"][0]["material_id"]
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/pipeline/run",
+            json={"project_id": "blocked-material", "product_id": "便携恒温杯", "source_material_id": material_id, "mock": True},
+        )
+
+    assert response.status_code == 409
+    assert "隔离区" in response.json()["detail"]
+    assert "与采集关键词不匹配" in response.json()["detail"]
 
 
 def test_corrupted_take_note_is_detected() -> None:

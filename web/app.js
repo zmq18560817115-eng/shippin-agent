@@ -1476,7 +1476,7 @@ function renderMaterialLibrary() {
   host.className = "materialLibraryView";
   host.innerHTML = `<div class="materialFilters">
       <input id="materialSearch" type="search" placeholder="搜索标题、作者或关键词" aria-label="搜索素材" />
-      <select id="materialReadiness" aria-label="筛选素材状态"><option value="all">全部素材</option><option value="ready">可生产</option><option value="cleanup">待清洗</option></select>
+      <select id="materialReadiness" aria-label="筛选素材状态"><option value="all">全部素材</option><option value="production">生产可用</option><option value="processing">待处理</option><option value="quarantine">隔离区</option></select>
       <span id="materialCount"></span>
     </div><div class="materialList" id="materialListInner"></div>`;
   const draw = () => {
@@ -1485,8 +1485,8 @@ function renderMaterialLibrary() {
     const filtered = state.materials.filter((item) => {
       const meta = item.material_meta || {};
       const searchable = [meta.video_title, meta.caption, meta.author_name, meta.source_keyword].join(" ").toLowerCase();
-      const ready = Boolean(meta.production_readiness?.ready);
-      return (!query || searchable.includes(query)) && (readiness === "all" || (readiness === "ready" ? ready : !ready));
+      const lane = meta.production_readiness?.lane || "processing";
+      return (!query || searchable.includes(query)) && (readiness === "all" || readiness === lane);
     });
     $("#materialCount").textContent = `${filtered.length} / ${state.materials.length} 条`;
     $("#materialListInner").innerHTML = filtered.map(renderMaterialItem).join("") || '<div class="emptyState">没有符合条件的素材</div>';
@@ -1513,6 +1513,9 @@ function renderMaterialItem(item) {
   const analysis = materialAnalysisSummary(meta);
   const readiness = meta.production_readiness || {};
   const ready = Boolean(readiness.ready);
+  const lane = readiness.lane || (ready ? "production" : "processing");
+  const laneLabel = { production: "生产可用", processing: "待处理", quarantine: "隔离" }[lane] || "待处理";
+  const missingText = Array.isArray(readiness.missing) ? readiness.missing.join("、") : "";
   const sourceUrl = meta.source_url || meta.video_url || "";
   const videoName = String(meta.local_video_path || "").split(/[\\/]/).pop();
   const localVideo = videoName
@@ -1530,16 +1533,17 @@ function renderMaterialItem(item) {
       <div class="materialBody">
         <strong>${escapeHtml(title)}</strong>
         <span>${escapeHtml(meta.author_name || "未知创作者")} · ${escapeHtml(meta.source_keyword || "manual_tiktok")} · ${escapeHtml(materialStatusLabel(meta.processing_status || item.status))}</span>
-        <span class="materialReadiness ${ready ? "ready" : "cleanup"}">${ready ? "可生产" : "待清洗"}${Number.isFinite(Number(readiness.relevance_score)) ? ` · 相关度 ${Math.round(Number(readiness.relevance_score) * 100)}%` : ""}</span>
+        <span class="materialReadiness ${escapeAttr(lane)}">${escapeHtml(laneLabel)}${Number.isFinite(Number(readiness.relevance_score)) ? ` · 相关度 ${Math.round(Number(readiness.relevance_score) * 100)}%` : ""}</span>
         <p>${escapeHtml(caption)}</p>
         <p class="materialAnalysis">${escapeHtml(analysis)}</p>
+        ${missingText ? `<p class="materialMissing">${lane === "quarantine" ? "隔离原因" : "待补项目"}：${escapeHtml(missingText)}</p>` : ""}
         ${sourceUrl ? `<a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener">打开 TikTok 来源</a>` : ""}
         <div class="materialActions">
           <button type="button" data-material-detail="${escapeAttr(item.material_id)}">查看转写与拆解</button>
           ${localVideo ? `<a class="buttonLink" href="${escapeAttr(localVideo)}" download>下载原视频</a>` : ""}
         </div>
       </div>
-      <button type="button" data-start-material="${escapeAttr(item.material_id)}" ${ready ? "" : "disabled"} title="${ready ? "使用该素材创建生产项目" : escapeAttr((readiness.missing || []).join("、") || "素材尚未完成下载、转写与分析")}">${ready ? "发起项目" : "补齐后可生产"}</button>
+      <button type="button" data-start-material="${escapeAttr(item.material_id)}" ${ready ? "" : "disabled"} title="${ready ? "使用该素材创建生产项目" : escapeAttr(missingText || "素材尚未完成下载、转写与分析")}">${ready ? "发起项目" : lane === "quarantine" ? "已隔离" : "补齐后可生产"}</button>
     </article>
   `;
 }

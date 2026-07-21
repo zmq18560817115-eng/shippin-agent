@@ -1996,6 +1996,18 @@ def run_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
             raise HTTPException(status_code=422, detail=f"真实运行缺少配置：{', '.join(missing)}。请在服务器 .env.local 配置后重试。")
     source_link_id = _normalize_source_link_id(request.source_link_id, request.link_id)
     source_meta = _source_material_or_none(request.source_material_id)
+    if source_meta is not None:
+        readiness = _material_production_readiness(
+            source_meta,
+            _material_library_root() / str(request.source_material_id),
+        )
+        if not readiness["ready"]:
+            lane_label = "隔离区" if readiness["lane"] == "quarantine" else "待处理区"
+            missing = "、".join(readiness["missing"])
+            raise HTTPException(
+                status_code=409,
+                detail=f"该参考素材位于{lane_label}，暂不能用于生产：{missing}。请先补齐处理后重试。",
+            )
     if not request.mock and source_meta and str(source_meta.get("source_mode") or "") == "mock":
         raise HTTPException(status_code=409, detail="真实运行不能使用演练素材，请重新抓取真实 TikTok 来源")
     product_id = request.product_id or str((source_meta or {}).get("product_id") or "便携恒温杯")
@@ -3369,11 +3381,13 @@ def _material_production_readiness(meta: dict[str, Any], material_dir: Path) -> 
         missing.append("缺少转写")
     if not analysis_ready:
         missing.append("缺少镜头拆解")
+    ready = not missing
+    lane = "production" if ready else "quarantine" if relevance_score < 0.5 else "processing"
     return {
-        "ready": not missing,
+        "ready": ready,
         "relevance_score": round(relevance_score, 3),
         "missing": missing,
-        "lane": "production" if not missing else "cleanup",
+        "lane": lane,
     }
 
 

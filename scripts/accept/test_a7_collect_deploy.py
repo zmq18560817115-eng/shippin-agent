@@ -44,6 +44,21 @@ def test_a7_manual_import_five_links_can_start_pipelines(tmp_path: Path, monkeyp
         assert all(item["material_meta"]["asset_intake"]["approval_status"] == "needs_review" for item in items)
 
         for index, item in enumerate(items, start=1):
+            material_dir = tmp_path / "materials" / item["material_id"]
+            (material_dir / "source.mp4").write_bytes(b"admission-ready-video")
+            (material_dir / "cover.jpg").write_bytes(b"admission-ready-cover")
+            manual_import.update_material_meta(
+                item["material_id"],
+                {
+                    "video_title": "night_feed_manual 便携恒温杯参考视频",
+                    "local_video_path": "source.mp4",
+                    "local_cover_path": "cover.jpg",
+                    "transcript_text": "夜间使用便携恒温杯准备奶液的完整转写。",
+                    "ai_analysis_json": '{"analysis":{"hook_3s":"夜间准备不再手忙脚乱","shot_breakdown":[{"shot":1}]}}',
+                    "processing_status": "analyzed",
+                },
+                tmp_path / "materials",
+            )
             response = client.post(
                 "/api/v2/pipeline/run",
                 json={

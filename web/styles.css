@@ -2188,8 +2188,10 @@ button.quietButton {
 }
 
 .materialReadiness { width: fit-content; font-size: 12px; font-weight: 700; }
-.materialReadiness.ready, .takeResolved { color: var(--green); }
-.materialReadiness.cleanup, .takeRejected { color: var(--red); }
+.materialReadiness.production, .materialReadiness.ready, .takeResolved { color: var(--green); }
+.materialReadiness.processing { color: var(--warning); }
+.materialReadiness.quarantine, .materialReadiness.cleanup, .takeRejected { color: var(--red); }
+.materialMissing { color: var(--red) !important; font-size: 12px !important; }
 
 .takeList,
 .takeCandidates {
