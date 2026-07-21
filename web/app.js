@@ -139,7 +139,7 @@ async function api(path, options = {}) {
     let detail = `${response.status} ${response.statusText}`;
     try {
       const payload = await response.json();
-      detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail);
+      detail = formatApiDetail(payload.detail);
     } catch {
       detail = await response.text();
     }
@@ -147,6 +147,18 @@ async function api(path, options = {}) {
   }
   const contentType = response.headers.get("content-type") || "";
   return contentType.includes("application/json") ? response.json() : response;
+}
+
+function formatApiDetail(detail) {
+  if (typeof detail === "string") return detail;
+  if (detail?.message === "分镜安全预检未通过" && Array.isArray(detail.errors)) {
+    const shots = detail.errors.map((item) => `镜头 ${item.shot_index}：${(item.missing || []).join("、")}`);
+    return `分镜安全预检未通过。${shots.join("；")}。请保存分镜以自动补齐旧版安全规则，再重新确认。`;
+  }
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.message || item?.msg || JSON.stringify(item)).join("；");
+  }
+  return detail?.message || JSON.stringify(detail);
 }
 
 function toast(message, kind = "ok") {
@@ -157,7 +169,7 @@ function toast(message, kind = "ok") {
   toast.timer = window.setTimeout(() => {
     node.textContent = "";
     delete node.dataset.kind;
-  }, 2800);
+  }, kind === "error" ? 7000 : 2800);
 }
 
 function renderAgentResult(host, payload) {

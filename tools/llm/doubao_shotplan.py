@@ -168,7 +168,14 @@ def _lock_prompt(
     # Idempotent: never stack the safety lock if the prompt already carries it
     # (e.g. re-saving an edited shot plan). The lock is a hard product-identity
     # requirement, so it is always guaranteed on the seedance_prompt.
-    if "white-background hero" in prompt.casefold():
+    lowered_prompt = prompt.casefold()
+    required_markers = ["continuity lock:", "product identity lock:", "separate products", "never insert"]
+    display_markers = (
+        ["temperature proof contract:", "fahrenheit", "never show celsius"]
+        if shot_index in {4, 5}
+        else ["not a temperature proof shot", "fully unlit", "do not render any digits"]
+    )
+    if all(marker in lowered_prompt for marker in [*required_markers, *display_markers]):
         return prompt
     display_contract = (
         "This shot is not a temperature proof shot. Keep the temperature display fully unlit, blank, "

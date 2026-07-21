@@ -2704,6 +2704,7 @@ def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
     if gate not in GATE_STAGES:
         raise HTTPException(status_code=422, detail=f"未知闸门：{gate}")
     if gate == "hero_gate":
+        _upgrade_storyboard_safety_locks(project_id)
         preflight_errors = _storyboard_preflight_errors(project_id)
         if preflight_errors:
             raise HTTPException(
@@ -3130,8 +3131,10 @@ def _storyboard_preflight_errors(project_id: str) -> list[dict[str, Any]]:
         if warming_cup:
             if "separate products" not in lowered or "never insert" not in lowered:
                 missing.append("恒温杯与奶瓶分离规则")
-            if "fahrenheit" not in lowered or "never celsius" not in lowered:
-                missing.append("98°F 华氏温标规则")
+            temperature_proof = number in {4, 5} or "temperature proof contract:" in lowered
+            if temperature_proof:
+                if "fahrenheit" not in lowered or "never celsius" not in lowered:
+                    missing.append("98°F 华氏温标规则")
             if any(token in prompt for token in ("掳F", "Â°F", "锟斤拷F")):
                 missing.append("98°F 温标文本编码")
             if number == 4:
@@ -3145,6 +3148,26 @@ def _storyboard_preflight_errors(project_id: str) -> list[dict[str, Any]]:
         if missing:
             errors.append({"shot_index": number, "missing": missing})
     return errors
+
+
+def _upgrade_storyboard_safety_locks(project_id: str) -> None:
+    """Migrate older saved prompts before applying the current gate checks."""
+    from tools.llm.doubao_shotplan import ensure_shot_locks
+
+    shot_plan = _load_artifact(project_id, "shot_plan")
+    before = json.dumps(shot_plan, ensure_ascii=False, sort_keys=True)
+    script_copy = _load_artifact_or_none(project_id, "script_copy")
+    ensure_shot_locks(shot_plan, script_copy)
+    if json.dumps(shot_plan, ensure_ascii=False, sort_keys=True) == before:
+        return
+    shot_plan["quality_assessment"] = creative_quality.assess_storyboard(shot_plan, script_copy)
+    artifacts.save_artifact(
+        project_id,
+        "shot_plan",
+        shot_plan,
+        run_root=_run_root(project_id),
+        script_copy=script_copy,
+    )
 
 
 def _run_root(project_id: str) -> Path:

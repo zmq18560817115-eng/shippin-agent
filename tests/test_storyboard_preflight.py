@@ -4,9 +4,10 @@ from fastapi.testclient import TestClient
 
 from orchestrator import engine, queue
 from orchestrator.api import app
+from tools.llm.doubao_shotplan import ensure_shot_locks
 
 
-def test_hero_gate_blocks_unsafe_storyboard_prompt(tmp_path: Path, monkeypatch) -> None:
+def test_hero_gate_repairs_an_older_incomplete_storyboard_prompt(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "agentflow.db"
     runs_root = tmp_path / "runs"
     run_root = runs_root / "preflight-demo"
@@ -28,11 +29,12 @@ def test_hero_gate_blocks_unsafe_storyboard_prompt(tmp_path: Path, monkeypatch) 
             json={"project_id": "preflight-demo", "stage": "hero_gate", "approver": "test", "mock": True},
         )
 
-    assert response.status_code == 409
-    detail = response.json()["detail"]
-    assert detail["message"] == "分镜安全预检未通过"
-    assert detail["errors"][0]["shot_index"] == 1
-    assert "场景与人物连续性" in detail["errors"][0]["missing"]
+    assert response.status_code == 200
+    with TestClient(app) as client:
+        repaired = client.get("/api/v2/artifacts/preflight-demo/shot_plan").json()
+    prompt = repaired["shots"][0]["seedance_prompt"].casefold()
+    assert "continuity lock:" in prompt
+    assert "fully unlit" in prompt
 
 
 def test_hero_gate_blocks_corrupt_temperature_and_mismatched_pour(tmp_path: Path, monkeypatch) -> None:
@@ -62,3 +64,45 @@ def test_hero_gate_blocks_corrupt_temperature_and_mismatched_pour(tmp_path: Path
     missing = response.json()["detail"]["errors"][0]["missing"]
     assert "98°F 温标文本编码" in missing
     assert "第4镜倒液动作一致性" in missing
+
+
+def test_non_temperature_shots_use_a_hidden_display_contract(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "agentflow.db"
+    runs_root = tmp_path / "runs"
+    run_root = runs_root / "preflight-hidden-display"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    queue.init_db(db_path)
+    engine.start_pipeline("preflight-hidden-display", product_id="便携恒温杯", db_path=db_path, run_root=run_root, mock=True)
+    engine.run_until_blocked("preflight-hidden-display", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("preflight-hidden-display", "script_gate", approver="test", db_path=db_path, run_root=run_root)
+    engine.run_until_blocked("preflight-hidden-display", db_path=db_path, run_root=run_root, mock=True)
+
+    with TestClient(app) as client:
+        plan = client.get("/api/v2/artifacts/preflight-hidden-display/shot_plan").json()
+        response = client.post(
+            "/api/v2/gates/approve",
+            json={"project_id": "preflight-hidden-display", "stage": "hero_gate", "approver": "test", "mock": True},
+        )
+
+    assert response.status_code == 200
+    first_prompt = plan["shots"][0]["seedance_prompt"].casefold()
+    assert "never celsius" in first_prompt
+
+
+def test_saving_an_older_locked_prompt_adds_the_current_display_contract() -> None:
+    plan = {
+        "shots": [
+            {
+                "number": 1,
+                "seedance_prompt": "Product appearance must match the approved white-background hero reference exactly.",
+            }
+        ]
+    }
+
+    updated = ensure_shot_locks(plan)
+
+    prompt = updated["shots"][0]["seedance_prompt"].casefold()
+    assert "product identity lock:" in prompt
+    assert "fully unlit" in prompt
+    assert "do not render any digits" in prompt
