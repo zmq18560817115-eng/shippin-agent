@@ -14,7 +14,7 @@
     <string>uvicorn</string>
     <string>orchestrator.api:app</string>
     <string>--host</string>
-    <string>127.0.0.1</string>
+    <string>0.0.0.0</string>
     <string>--port</string>
     <string>__VAF_PORT__</string>
   </array>
