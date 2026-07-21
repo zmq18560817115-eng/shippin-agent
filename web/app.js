@@ -32,6 +32,8 @@ const state = {
   collectionJobs: [],
   selectedCollectionJobId: null,
   agentContracts: {},
+  productionShotNumber: null,
+  productionDrafts: {},
 };
 
 const views = {
@@ -2194,14 +2196,28 @@ function renderProductionNode() {
   }
   host.className = "editor";
   const takeByShot = new Map((state.takeManifest?.shots || []).map((item) => [Number(item.number), item]));
-  host.innerHTML = `<div class="takeList">${state.shotPlan.shots.map((shot) => {
+  const shots = state.shotPlan.shots || [];
+  const shotNumbers = shots.map((shot) => Number(shot.number));
+  if (!shotNumbers.includes(Number(state.productionShotNumber))) {
+    state.productionShotNumber = shotNumbers.find((number) => !takeByShot.get(number)?.selected_take_id) || shotNumbers[0];
+  }
+  const shotTabs = shots.map((shot) => {
+    const entry = takeByShot.get(Number(shot.number));
+    const selected = Boolean(entry?.selected_take_id);
+    const hasCandidates = Boolean(entry?.takes?.length);
+    const status = selected ? "selected" : hasCandidates ? "review" : "empty";
+    const statusText = selected ? `已选 ${entry.selected_take_id}` : hasCandidates ? `${entry.takes.length} 个候选` : "待生成";
+    return `<button type="button" data-production-shot="${shot.number}" class="${Number(shot.number) === Number(state.productionShotNumber) ? "active" : ""} ${status}"><strong>镜头 ${shot.number}</strong><span>${escapeHtml(statusText)}</span></button>`;
+  }).join("");
+  host.innerHTML = `<nav class="productionShotTabs" aria-label="制作镜头">${shotTabs}</nav><div class="takeList">${shots.filter((shot) => Number(shot.number) === Number(state.productionShotNumber)).map((shot) => {
     const entry = takeByShot.get(Number(shot.number));
     const takes = entry?.takes || [];
     const existingTakeIds = new Set(takes.map((take) => String(take.take_id)));
     let nextTakeIndex = 0;
     while (existingTakeIds.has(String.fromCharCode(65 + nextTakeIndex))) nextTakeIndex += 1;
     const nextTakeId = String.fromCharCode(65 + nextTakeIndex);
-    const prompt = shot.seedance_prompt_zh || shot.seedance_prompt || shot.visual_prompt || "";
+    const draft = state.productionDrafts[productionDraftKey(shot.number)] || {};
+    const prompt = draft.prompt ?? shot.seedance_prompt_zh ?? shot.seedance_prompt ?? shot.visual_prompt ?? "";
     const candidates = takes.map((take) => {
       const status = String(take.status || "needs_review");
       const note = safeTakeNote(take);
@@ -2225,11 +2241,18 @@ function renderProductionNode() {
     return `<section class="takeShot">
       <strong>镜头 ${shot.number} · ${shot.camera_motion?.duration_sec || 6}s</strong>
       <label class="takePromptLabel">生成提示词（可针对本镜修改后再生成）<textarea class="promptField" data-production-prompt="${shot.number}">${escapeHtml(prompt)}</textarea></label>
-      <label class="takePromptLabel">返工说明（仅在“不通过并重做”时写入新 Take）<textarea data-rework-notes="${shot.number}" placeholder="例如：删除虚构 Logo；温度只显示 98°F；杯嘴向独立奶瓶倒液。"></textarea></label>
+      <label class="takePromptLabel">返工说明（仅在“不通过并重做”时写入新 Take）<textarea data-rework-notes="${shot.number}" placeholder="例如：删除虚构 Logo；温度只显示 98°F；杯嘴向独立奶瓶倒液。">${escapeHtml(draft.rework || "")}</textarea></label>
       <div class="actionBar"><button type="button" data-run-shot="${shot.number}" data-take-id="${escapeAttr(nextTakeId)}">${takes.length ? `生成新的候选 Take ${escapeHtml(nextTakeId)}` : "生成第一个候选 Take"}</button></div>
       <div class="takeCandidates">${candidates || "尚未生成候选"}</div>
     </section>`;
   }).join("")}</div>`;
+  host.querySelectorAll("[data-production-shot]").forEach((button) => {
+    button.addEventListener("click", () => {
+      captureProductionDraft();
+      state.productionShotNumber = Number(button.dataset.productionShot);
+      renderProductionNode();
+    });
+  });
   host.querySelectorAll("[data-run-shot]").forEach((button) => {
     button.addEventListener("click", async () => {
       await saveShotPlan();
@@ -2246,6 +2269,23 @@ function renderProductionNode() {
     button.addEventListener("click", () => rejectAndRegenerate(Number(button.dataset.reviewRejectShot), button.dataset.reviewRejectTake));
   });
   bindVideoPreviewStates(host, "镜头预览不可播放，请重新生成该 Take 后再选用。");
+}
+
+function productionDraftKey(shotNumber) {
+  return `${state.selectedId || "project"}:${Number(shotNumber)}`;
+}
+
+function captureProductionDraft() {
+  const prompt = $("[data-production-prompt]");
+  if (!prompt) return;
+  const shotNumber = Number(prompt.dataset.productionPrompt);
+  const rework = $(`[data-rework-notes="${shotNumber}"]`);
+  state.productionDrafts[productionDraftKey(shotNumber)] = { prompt: prompt.value, rework: rework?.value || "" };
+  const shot = state.shotPlan?.shots?.find((item) => Number(item.number) === shotNumber);
+  if (shot) {
+    shot.seedance_prompt_zh = prompt.value.trim();
+    shot.seedance_prompt = prompt.value.trim();
+  }
 }
 
 function renderComposeNode() {

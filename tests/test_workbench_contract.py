@@ -34,6 +34,10 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert 'api("/api/v2/takes/select"' in script
     assert '"needs_review", "succeeded", "qa_pass", "selected"' in script
     assert "重新质检并保持选用" in script
+    assert 'class="productionShotTabs"' in script
+    assert "productionShotNumber" in script
+    assert "captureProductionDraft" in script
+    assert "productionDraftKey" in script
     assert 'id="projectSearch"' in html
     assert 'id="projectStatusFilter"' in html
     assert 'id="projectPagination"' in html
