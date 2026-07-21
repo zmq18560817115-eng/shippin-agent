@@ -17,7 +17,7 @@ const state = {
   runtime: null,
   refreshing: false,
   operation: null,
-  currentView: "projects",
+  currentView: "home",
   selectedRevision: "",
   showAllProjects: false,
   collectionJobs: [],
@@ -25,14 +25,57 @@ const state = {
   agentContracts: {},
 };
 
+const NAV = [
+  { key: "home", label: "工作首页", icon: "layout-dashboard", views: ["home"] },
+  { key: "project", label: "视频项目", icon: "folder-kanban",
+    views: ["proj_overview", "proj_strategy", "proj_script", "proj_storyboard", "proj_production", "proj_qa", "proj_archive"] },
+  { key: "tools", label: "快速工具", icon: "wand-sparkles",
+    views: ["tool_research", "tool_strategy", "tool_script", "tool_breakdown", "tool_storyboard", "tool_shot"] },
+  { key: "materials", label: "素材中心", icon: "database",
+    views: ["mat_product", "mat_reference", "mat_collect", "mat_analysis", "mat_favorites"] },
+  { key: "tasks", label: "任务中心", icon: "list-checks",
+    views: ["task_running", "task_todo", "task_failed", "task_done"] },
+  { key: "delivery", label: "交付中心", icon: "package-check",
+    views: ["del_pending", "del_passed", "del_archived", "del_downloads"] },
+];
+
 const views = {
-  projects: { step: "01 / 06", title: "项目", description: "创建任务，或打开一个在制项目继续工作。" },
-  assets: { step: "02 / 06", title: "素材采集", description: "管理产品事实素材，采集并分析参考视频。" },
-  script: { step: "03 / 06", title: "脚本", description: "审阅内容策略、脚本拆解与文案，确认后进入分镜。" },
-  storyboard: { step: "04 / 06", title: "分镜", description: "调整镜头计划，确认产品关键帧与视觉连续性。" },
-  production: { step: "05 / 06", title: "制作", description: "逐镜生成、选择最佳 Take，并合成为 30 秒成片。" },
-  delivery: { step: "06 / 06", title: "交付", description: "检查质检结果，下载交付包并记录反馈。" },
+  home: { group: "home", label: "工作首页", title: "工作首页", description: "继续上次任务，或从这里开始一段新的生产。", sections: ["homeDashboard"] },
+
+  proj_overview: { group: "project", label: "项目概览", title: "项目概览", description: "创建任务，或打开一个在制项目继续工作。", sections: ["projectSetup", "projectQueue"] },
+  proj_strategy: { group: "project", label: "内容策略", title: "内容策略", description: "审阅研究简报转化的内容方向与卖点优先级。", sections: ["scriptGate"] },
+  proj_script: { group: "project", label: "脚本", title: "脚本", description: "审阅脚本拆解与文案，确认后进入分镜。", sections: ["scriptGate"] },
+  proj_storyboard: { group: "project", label: "分镜", title: "分镜", description: "调整镜头计划，确认产品关键帧与视觉连续性。", sections: ["storyboardNode", "heroGate"] },
+  proj_production: { group: "project", label: "镜头制作", title: "镜头制作", description: "逐镜生成、选择最佳 Take，并合成为 30 秒成片。", sections: ["productionNode", "composeNode"] },
+  proj_qa: { group: "project", label: "成片验收", title: "成片验收", description: "检查质检结果与人工目检，决定是否放行交付。", sections: ["deliveryNode"] },
+  proj_archive: { group: "project", label: "交付归档", title: "交付归档", description: "下载交付包，记录反馈并归档。", sections: ["deliveryNode"] },
+
+  tool_research: { group: "tools", label: "视频研究分析", title: "视频研究分析", description: "独立运行研究分析 Agent，不创建生产项目。", sections: ["toolsSection"], tool: "research" },
+  tool_strategy: { group: "tools", label: "内容策略生成", title: "内容策略生成", description: "独立运行内容策略 Agent。", sections: ["toolsSection"], tool: "strategy" },
+  tool_script: { group: "tools", label: "脚本生成", title: "脚本生成", description: "独立运行脚本生成 Agent。", sections: ["toolsSection"], tool: "script" },
+  tool_breakdown: { group: "tools", label: "脚本拆解", title: "脚本拆解", description: "独立运行脚本拆解 Agent。", sections: ["toolsSection"], tool: "script_breakdown" },
+  tool_storyboard: { group: "tools", label: "分镜生成", title: "分镜生成", description: "独立运行分镜生成 Agent。", sections: ["toolsSection"], tool: "storyboard" },
+  tool_shot: { group: "tools", label: "单镜视频生成", title: "单镜视频生成", description: "独立运行单镜制作 Agent，生成 720P 竖屏 Take。", sections: ["toolsSection"], tool: "production" },
+
+  mat_product: { group: "materials", label: "产品素材", title: "产品素材", description: "管理产品事实素材库。", sections: ["productAssets"] },
+  mat_reference: { group: "materials", label: "TikTok参考素材", title: "TikTok 参考素材", description: "浏览已入库的参考视频素材。", sections: ["referenceLibrarySection"] },
+  mat_collect: { group: "materials", label: "素材采集", title: "素材采集", description: "设置后台自动采集，或补充导入链接。", sections: ["collectSection"] },
+  mat_analysis: { group: "materials", label: "素材分析", title: "素材分析", description: "独立运行研究分析，理解结构与节奏。", sections: ["analysisSection"] },
+  mat_favorites: { group: "materials", label: "收藏与项目素材包", title: "收藏与项目素材包", description: "查看当前项目选用的产品与参考素材。", sections: ["favoritesSection"] },
+
+  task_running: { group: "tasks", label: "运行中", title: "运行中", description: "正在排队或执行的任务。", sections: ["taskCenter"], taskFilter: "running" },
+  task_todo: { group: "tasks", label: "待我处理", title: "待我处理", description: "等待人工确认的闸门与复核。", sections: ["taskCenter"], taskFilter: "todo" },
+  task_failed: { group: "tasks", label: "失败任务", title: "失败任务", description: "失败或被阻塞、需要处理的任务。", sections: ["taskCenter"], taskFilter: "failed" },
+  task_done: { group: "tasks", label: "已完成", title: "已完成", description: "已交付或已完成的项目。", sections: ["taskCenter"], taskFilter: "done" },
+
+  del_pending: { group: "delivery", label: "待验收", title: "待验收", description: "等待成片人工验收的项目。", sections: ["deliveryCenter"], deliveryFilter: "pending" },
+  del_passed: { group: "delivery", label: "已通过", title: "已通过", description: "通过验收、可交付的项目。", sections: ["deliveryCenter"], deliveryFilter: "passed" },
+  del_archived: { group: "delivery", label: "已归档", title: "已归档", description: "已归档的交付项目。", sections: ["deliveryCenter"], deliveryFilter: "archived" },
+  del_downloads: { group: "delivery", label: "下载记录", title: "下载记录", description: "可下载的交付包与运行报告。", sections: ["deliveryCenter"], deliveryFilter: "downloads" },
 };
+
+const DEFAULT_VIEW = "home";
+const MATERIAL_VIEW_SECTIONS = new Set(["referenceLibrarySection", "analysisSection", "favoritesSection"]);
 
 const $ = (selector) => document.querySelector(selector);
 const statusGlyph = {
@@ -292,7 +335,7 @@ async function boot() {
   installCommandIcons();
   await loadWorkbenchSession();
   const initialView = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
-  showView(views[initialView] ? initialView : "projects", { updateUrl: false });
+  showView(views[initialView] ? initialView : DEFAULT_VIEW, { updateUrl: false });
   await checkHealth();
   await loadIndependentAgentActions();
   await loadProductLibrary();
@@ -379,9 +422,13 @@ function bindEvents() {
   document.querySelectorAll("[data-run-standalone]").forEach((button) => {
     button.addEventListener("click", () => runStandaloneLauncher(button));
   });
-  document.querySelectorAll("[data-view]").forEach((button) => {
-    button.addEventListener("click", () => showView(button.dataset.view));
+  $("#navToggle")?.addEventListener("click", () => {
+    document.body.classList.toggle("navOpen");
+    const open = document.body.classList.contains("navOpen");
+    $("#navToggle").setAttribute("aria-expanded", open ? "true" : "false");
   });
+  $("#refreshTaskCenter")?.addEventListener("click", () => refreshProjects({ force: true }));
+  $("#refreshDeliveryCenter")?.addEventListener("click", () => refreshProjects({ force: true }));
   document.addEventListener("click", (event) => {
     const button = event.target.closest(".promoteStandalone");
     if (button) promoteStandaloneArtifact(button);
@@ -590,32 +637,73 @@ function updateCrawlTargetUI() {
 }
 
 function showView(view, { updateUrl = true } = {}) {
-  const next = views[view] ? view : "projects";
-  state.currentView = next;
-  document.querySelectorAll("[data-view-section]").forEach((section) => {
-    section.hidden = section.dataset.viewSection !== next;
-  });
-  document.querySelectorAll(".workflowNav [data-view]").forEach((button) => {
-    const active = button.dataset.view === next;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-current", active ? "page" : "false");
-  });
+  const next = views[view] ? view : DEFAULT_VIEW;
   const meta = views[next];
-  $("#viewStep").textContent = meta.step;
+  state.currentView = next;
+  const visible = new Set(meta.sections);
+  document.querySelectorAll("[data-section]").forEach((section) => {
+    section.hidden = !visible.has(section.dataset.section);
+  });
+  renderNav();
+  $("#viewStep").textContent = "";
   $("#viewTitle").textContent = meta.title;
   $("#viewDescription").textContent = meta.description;
   if (updateUrl) history.replaceState(null, "", `#view=${next}`);
+  if (meta.tool) presetToolAction(meta.tool);
   renderPanels();
-  if (next === "assets") loadMaterials();
+  if (meta.sections.some((section) => MATERIAL_VIEW_SECTIONS.has(section))) loadMaterials();
+  document.body.classList.remove("navOpen");
+  $("#navToggle")?.setAttribute("aria-expanded", "false");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+function renderNav() {
+  const host = $("#appNav");
+  if (!host) return;
+  const current = state.currentView;
+  const activeGroup = views[current]?.group || "home";
+  host.innerHTML = NAV.map((group) => {
+    const isActive = group.key === activeGroup;
+    const hasItems = group.views.length > 1;
+    const items = isActive && hasItems
+      ? `<div class="navGroupItems">${group.views.map((view) => `
+          <button type="button" data-nav-view="${view}" class="navItem ${view === current ? "active" : ""}" aria-current="${view === current ? "page" : "false"}">${views[view].label}</button>`).join("")}</div>`
+      : "";
+    return `
+      <div class="navGroup ${isActive ? "open" : ""}">
+        <button type="button" data-nav-group="${group.key}" class="navGroupHead ${isActive ? "active" : ""}">
+          <i data-lucide="${group.icon}"></i><strong>${group.label}</strong>
+        </button>
+        ${items}
+      </div>`;
+  }).join("");
+  host.querySelectorAll("[data-nav-group]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = NAV.find((entry) => entry.key === button.dataset.navGroup);
+      if (target) showView(target.views[0]);
+    });
+  });
+  host.querySelectorAll("[data-nav-view]").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.navView));
+  });
+  window.lucide?.createIcons({ attrs: { "stroke-width": 1.8 } });
+}
+
+function presetToolAction(action) {
+  const select = $("#independentAgentAction");
+  if (!select) return;
+  if ([...select.options].some((option) => option.value === action)) {
+    select.value = action;
+    updateIndependentAgentUI();
+  }
+}
+
 function viewForStage(stage) {
-  if (["analysis", "research", "strategy", "script", "script_breakdown", "script_review", "script_gate"].includes(stage)) return "script";
-  if (["storyboard", "asset", "hero_gate"].includes(stage)) return "storyboard";
-  if (["production", "take_gate", "compose", "final_qa"].includes(stage)) return "production";
-  if (["archive", "succeeded"].includes(stage)) return "delivery";
-  return "projects";
+  if (["analysis", "research", "strategy", "script", "script_breakdown", "script_review", "script_gate"].includes(stage)) return "proj_script";
+  if (["storyboard", "asset", "hero_gate"].includes(stage)) return "proj_storyboard";
+  if (["production", "take_gate", "compose", "final_qa"].includes(stage)) return "proj_production";
+  if (["archive", "succeeded"].includes(stage)) return "proj_archive";
+  return "proj_overview";
 }
 
 function continueCurrentProject() {
@@ -1120,7 +1208,7 @@ async function refreshProjects({ silent = false, force = false } = {}) {
     } else if (!state.selectedId) {
       renderPanels();
     }
-    if (state.currentView === "assets" && !(silent && activeEditor)) await loadMaterials();
+    if (views[state.currentView]?.group === "materials" && !(silent && activeEditor)) await loadMaterials();
   } catch (error) {
     if (!silent) toast(error.message, "error");
   } finally {
@@ -1501,17 +1589,200 @@ function renderPanels() {
   $("#currentStage").textContent = state.selected
     ? `当前节点：${stageLabels[stage] || stage}`
     : "暂无在制项目";
-  if (state.currentView === "script") renderScriptGate();
-  if (state.currentView === "storyboard") {
-    renderStoryboardNode();
-    renderHeroGate();
-  }
-  if (state.currentView === "production") {
-    renderProductionNode();
-    renderComposeNode();
-  }
-  if (state.currentView === "delivery") renderDelivery();
+  const sections = new Set(views[state.currentView]?.sections || []);
+  if (sections.has("scriptGate")) renderScriptGate();
+  if (sections.has("storyboardNode")) renderStoryboardNode();
+  if (sections.has("heroGate")) renderHeroGate();
+  if (sections.has("productionNode")) renderProductionNode();
+  if (sections.has("composeNode")) renderComposeNode();
+  if (sections.has("deliveryNode")) renderDelivery();
+  if (sections.has("projectQueue")) renderProjectRows();
+  if (sections.has("homeDashboard")) renderHome();
+  if (sections.has("taskCenter")) renderTaskCenter();
+  if (sections.has("deliveryCenter")) renderDeliveryCenter();
+  if (sections.has("favoritesSection")) renderFavorites();
   installCommandIcons();
+}
+
+function projectStageLabel(project) {
+  return stageLabel(project.current_gate || project.current_stage || project.status);
+}
+
+function renderHome() {
+  const host = $("#homeDashboard");
+  if (!host) return;
+  const projects = state.projects || [];
+  const active = projects.filter((project) => !["succeeded", "failed", "cancelled"].includes(project.status));
+  const awaiting = projects.filter((project) => project.status === "awaiting_human" || project.current_gate);
+  const delivered = projects.filter((project) => project.status === "succeeded");
+  const recent = delivered.slice(0, 5);
+  const resume = state.selected || active[0] || null;
+  $("#homeState").textContent = projects.length ? `${projects.length} 个项目 · ${active.length} 在制` : "";
+  host.className = "homeGrid";
+  host.innerHTML = `
+    <button type="button" class="homeCard" data-home="resume">
+      <span class="homeCardIcon"><i data-lucide="arrow-right"></i></span>
+      <strong>继续上次任务</strong>
+      <small>${resume ? `${escapeHtml(resume.project_id)} · ${escapeHtml(projectStageLabel(resume))}` : "暂无在制项目"}</small>
+    </button>
+    <button type="button" class="homeCard" data-home="new">
+      <span class="homeCardIcon"><i data-lucide="plus"></i></span>
+      <strong>新建视频项目</strong>
+      <small>选择产品与运行模式，开始一条新的生产链路</small>
+    </button>
+    <button type="button" class="homeCard" data-home="tools">
+      <span class="homeCardIcon"><i data-lucide="wand-sparkles"></i></span>
+      <strong>使用快速工具</strong>
+      <small>不建项目，直接运行研究、脚本、分镜或单镜生成</small>
+    </button>
+    <button type="button" class="homeCard" data-home="review">
+      <span class="homeCardIcon"><i data-lucide="clipboard-check"></i></span>
+      <strong>我的待审核</strong>
+      <small>${awaiting.length ? `${awaiting.length} 项等待人工确认` : "暂无待审核项目"}</small>
+    </button>
+    <button type="button" class="homeCard" data-home="delivery">
+      <span class="homeCardIcon"><i data-lucide="package-check"></i></span>
+      <strong>最近交付</strong>
+      <small>${delivered.length ? `${delivered.length} 个已交付，查看下载与报告` : "暂无已交付成片"}</small>
+    </button>
+    <div class="homeRecent">
+      <strong>最近交付明细</strong>
+      ${recent.length ? recent.map((project) => `
+        <button type="button" class="homeRecentRow" data-open="${escapeAttr(project.project_id)}">
+          <span>${escapeHtml(project.product_id || "未命名产品")}</span>
+          <small>${escapeHtml(project.project_id)} · ${escapeHtml(formatProjectTime(project.updated_at))}</small>
+        </button>`).join("") : '<small class="muted">完成一条成片后会显示在这里。</small>'}
+    </div>
+  `;
+  host.querySelectorAll("[data-home]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.home;
+      if (action === "resume") {
+        if (resume) { state.selectedId = resume.project_id; refreshProjects().then(continueCurrentProject); }
+        else showView("proj_overview");
+      } else if (action === "new") showView("proj_overview");
+      else if (action === "tools") showView("tool_research");
+      else if (action === "review") showView("task_todo");
+      else if (action === "delivery") showView("del_passed");
+    });
+  });
+  host.querySelectorAll("[data-open]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.selectedId = button.dataset.open;
+      await refreshProjects();
+      continueCurrentProject();
+    });
+  });
+}
+
+function taskCenterBuckets() {
+  const projects = state.projects || [];
+  return {
+    running: projects.filter((project) => ["running", "queued"].includes(project.status)),
+    todo: projects.filter((project) => project.status === "awaiting_human" || (project.current_gate && project.status !== "succeeded")),
+    failed: projects.filter((project) => ["failed", "blocked"].includes(project.status)),
+    done: projects.filter((project) => project.status === "succeeded"),
+  };
+}
+
+function renderTaskCenter() {
+  const host = $("#taskCenter");
+  if (!host) return;
+  const filter = views[state.currentView]?.taskFilter || "running";
+  const buckets = taskCenterBuckets();
+  const list = buckets[filter] || [];
+  $("#taskCenterTitle").textContent = views[state.currentView]?.title || "任务中心";
+  $("#taskCenterCount").textContent = `${list.length} 项`;
+  if (!list.length) {
+    host.className = "emptyState";
+    host.textContent = "该分类暂无任务。";
+    return;
+  }
+  host.className = "taskCenterList";
+  host.innerHTML = list.map((project) => `
+    <button type="button" class="taskCenterRow" data-open="${escapeAttr(project.project_id)}">
+      <span class="stageTag ${statusClass(project.status)}">${escapeHtml(projectStageLabel(project))}</span>
+      <span class="taskCenterMain">
+        <strong>${escapeHtml(project.project_id)}</strong>
+        <small>${escapeHtml(project.product_id || "")} · ${escapeHtml(formatProjectTime(project.updated_at))} · ¥${Number(project.cost.total_cost_cny || 0).toFixed(2)}</small>
+      </span>
+      <i data-lucide="chevron-right"></i>
+    </button>`).join("");
+  host.querySelectorAll("[data-open]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.selectedId = button.dataset.open;
+      await refreshProjects();
+      continueCurrentProject();
+    });
+  });
+  installCommandIcons();
+}
+
+function deliveryCenterBuckets() {
+  const projects = state.projects || [];
+  const succeeded = projects.filter((project) => project.status === "succeeded");
+  return {
+    pending: projects.filter((project) => project.current_gate === "take_gate" || project.current_stage === "final_qa" || project.current_stage === "compose"),
+    passed: succeeded.filter((project) => project.delivery_ready),
+    archived: succeeded,
+    downloads: succeeded.filter((project) => project.delivery_ready),
+  };
+}
+
+function renderDeliveryCenter() {
+  const host = $("#deliveryCenter");
+  if (!host) return;
+  const filter = views[state.currentView]?.deliveryFilter || "pending";
+  const list = deliveryCenterBuckets()[filter] || [];
+  $("#deliveryCenterTitle").textContent = views[state.currentView]?.title || "交付中心";
+  $("#deliveryCenterCount").textContent = `${list.length} 项`;
+  if (!list.length) {
+    host.className = "emptyState";
+    host.textContent = "该分类暂无记录。";
+    return;
+  }
+  host.className = "deliveryCenterList";
+  const downloads = filter === "downloads";
+  host.innerHTML = list.map((project) => `
+    <div class="deliveryCenterRow">
+      <button type="button" class="deliveryCenterOpen" data-open="${escapeAttr(project.project_id)}">
+        <strong>${escapeHtml(project.product_id || "未命名产品")}</strong>
+        <small>${escapeHtml(project.project_id)} · ${escapeHtml(formatProjectTime(project.updated_at))} · ${project.mock ? "演练" : "真实"}</small>
+      </button>
+      <div class="deliveryCenterActions">
+        ${downloads
+          ? `<a class="buttonLink" href="/api/v2/download/${encodeURIComponent(project.project_id)}">下载 zip</a>
+             <a class="buttonLink" target="_blank" rel="noopener" href="/api/v2/reports/${encodeURIComponent(project.project_id)}">运行报告</a>`
+          : `<span class="stageTag ${statusClass(project.status)}">${escapeHtml(projectStageLabel(project))}</span>`}
+      </div>
+    </div>`).join("");
+  host.querySelectorAll("[data-open]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.selectedId = button.dataset.open;
+      await refreshProjects();
+      showView("proj_archive");
+    });
+  });
+}
+
+function renderFavorites() {
+  const host = $("#favoritesPanel");
+  if (!host) return;
+  const project = state.selected;
+  if (!project) {
+    host.className = "emptyState";
+    host.textContent = "从项目列表打开一个项目后，这里汇总它选用的产品素材与参考素材。";
+    return;
+  }
+  const assets = state.assetManifest?.assets || state.assetManifest?.items || [];
+  host.className = "favoritesPanel";
+  host.innerHTML = `
+    <div class="favoritesHead"><strong>${escapeHtml(project.project_id)}</strong><small>${escapeHtml(project.product_id || "")}</small></div>
+    <div class="favoritesBody">
+      ${assets.length
+        ? assets.map((asset) => `<span class="favoriteTag">${escapeHtml(asset.name || asset.title || asset.material_id || "素材")}</span>`).join("")
+        : '<small class="muted">该项目暂无已选用的素材记录。</small>'}
+    </div>`;
 }
 
 function renderScriptGate() {
@@ -1642,7 +1913,7 @@ async function approveScriptGate() {
     });
     toast(`已进入 ${payload.engine.stage}`);
     await refreshProjects();
-    showView("storyboard");
+    showView("proj_storyboard");
   } catch (error) {
     toast(error.message, "error");
   }
@@ -1696,7 +1967,7 @@ function renderStoryboardNode() {
   `;
   $("#saveShots").addEventListener("click", () => saveShotPlan().catch((error) => toast(error.message, "error")));
   $("#saveShotsAndContinue").addEventListener("click", async () => {
-    try { await saveShotPlan(); showView("production"); } catch (error) { toast(error.message, "error"); }
+    try { await saveShotPlan(); showView("proj_production"); } catch (error) { toast(error.message, "error"); }
   });
   $("#regenerateStoryboard").addEventListener("click", () => runManualStage("storyboard"));
 }
@@ -1840,7 +2111,7 @@ async function submitVisualReview() {
     });
     toast("视觉验收已记录，成片已进入交付检查");
     await refreshProjects();
-    showView("delivery");
+    showView("proj_archive");
   } catch (error) {
     toast(error.message, "error");
   } finally {
@@ -2073,7 +2344,7 @@ function renderDelivery() {
   if (!delivered.length) {
     host.className = "emptyState";
     const current = state.selected;
-    const nextView = current?.current_gate === "take_gate" || current?.current_stage === "production" ? "production" : current?.current_gate === "script_gate" ? "script" : "storyboard";
+    const nextView = current?.current_gate === "take_gate" || current?.current_stage === "production" ? "proj_production" : current?.current_gate === "script_gate" ? "proj_script" : "proj_storyboard";
     host.innerHTML = `<div class="emptyGuide"><strong>暂无可交付项目</strong><span>${current ? `当前项目停在“${escapeHtml(stageLabel(current.current_gate || current.current_stage || current.status))}”。完成该节点后即可继续交付。` : "请先创建或打开一个项目。"}</span>${current ? `<button type="button" data-go-next>前往下一步</button>` : ""}</div>`;
     host.querySelector("[data-go-next]")?.addEventListener("click", () => showView(nextView));
     return;

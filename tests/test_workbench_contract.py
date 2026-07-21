@@ -48,9 +48,25 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
 def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     html = Path("web/index.html").read_text(encoding="utf-8")
     script = Path("web/app.js").read_text(encoding="utf-8")
-    for view in ("projects", "assets", "script", "storyboard", "production", "delivery"):
-        assert f'data-view="{view}"' in html
-        assert f'data-view-section="{view}"' in html
+    # Hierarchical information architecture: six top-level groups with sub-views,
+    # rendered into a single accordion sidebar.
+    for group in ("home", "project", "tools", "materials", "tasks", "delivery"):
+        assert f'key: "{group}"' in script
+    assert 'id="appNav"' in html
+    assert "function renderNav()" in script
+    # The workflow-node sections are preserved and toggled via data-section.
+    for section in (
+        "projectSetup",
+        "projectQueue",
+        "scriptGate",
+        "storyboardNode",
+        "heroGate",
+        "productionNode",
+        "composeNode",
+        "deliveryNode",
+    ):
+        assert f'data-section="{section}"' in html
+        assert f'"{section}"' in script
     assert 'id="continueProject"' in html
     assert "function viewForStage(stage)" in script
     assert "function continueCurrentProject()" in script

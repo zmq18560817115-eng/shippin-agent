@@ -2,7 +2,7 @@ name: viral-imitate
 version: "2.0"
 description: "爆款跟拍（七Agent版）：拆解 -> 文案 -> 评审+闸门① -> 分镜 -> 素材硬闸+关键帧闸门② -> 镜头级出片 -> 合成 -> 质检 -> 归档反馈"
 default_budget_cny: 35.0
-budget_mode: observe
+budget_mode: enforce
 
 defaults:
   max_retries: 2

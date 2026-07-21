@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260720-2" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260721-1" />
   </head>
   <body>
     <header class="topbar">
       <div class="brandBlock">
+        <button type="button" class="navToggle iconAction" id="navToggle" aria-label="切换导航" aria-expanded="false"><i data-lucide="menu"></i></button>
         <span class="brandMark" aria-hidden="true">VF</span>
         <div>
           <h1>视频内容工厂</h1>
@@ -25,26 +26,29 @@
       </div>
     </header>
 
-    <nav class="workflowNav" aria-label="制作流程">
-      <div class="navLabel">生产流程</div>
-      <button type="button" data-view="projects" class="active"><i data-lucide="folder-kanban"></i><strong>项目</strong></button>
-      <button type="button" data-view="assets"><i data-lucide="database"></i><strong>素材采集</strong></button>
-      <button type="button" data-view="script"><i data-lucide="file-pen-line"></i><strong>脚本</strong></button>
-      <button type="button" data-view="storyboard"><i data-lucide="layout-grid"></i><strong>分镜</strong></button>
-      <button type="button" data-view="production"><i data-lucide="clapperboard"></i><strong>制作</strong></button>
-      <button type="button" data-view="delivery"><i data-lucide="package-check"></i><strong>交付</strong></button>
-    </nav>
+    <nav class="workflowNav appNav" id="appNav" aria-label="主导航"></nav>
 
     <main class="workspace">
       <div class="viewIntro">
         <div>
-          <span id="viewStep">01 / 06</span>
-          <h2 id="viewTitle">项目</h2>
-          <p id="viewDescription">创建任务，或打开一个在制项目继续工作。</p>
+          <span id="viewStep"></span>
+          <h2 id="viewTitle">工作首页</h2>
+          <p id="viewDescription">继续上次任务，或从这里开始一段新的生产。</p>
         </div>
         <span id="currentStage" class="currentStage">暂无在制项目</span>
       </div>
-      <section class="band" id="projectSetup" data-view-section="projects">
+
+      <!-- 工作首页 -->
+      <section class="band" data-section="homeDashboard" hidden>
+        <div class="sectionHead">
+          <h2>工作首页</h2>
+          <span id="homeState"></span>
+        </div>
+        <div id="homeDashboard" class="homeGrid"><div class="emptyState">正在加载工作台概览...</div></div>
+      </section>
+
+      <!-- 视频项目 · 项目概览 -->
+      <section class="band" data-section="projectSetup" hidden>
         <div class="sectionHead">
           <h2>新建项目</h2>
           <span id="startState"></span>
@@ -70,7 +74,173 @@
         </form>
       </section>
 
-      <section class="band" id="productAssets" data-view-section="assets" hidden>
+      <section class="band" data-section="projectQueue" hidden>
+        <div class="sectionHead">
+          <h2>项目列表</h2>
+          <div class="headActions">
+            <span id="projectCount"></span>
+            <button type="button" id="toggleProjects">显示全部</button>
+            <button type="button" id="refreshButton">刷新</button>
+          </div>
+        </div>
+        <div class="tableWrap">
+          <table class="projectTable">
+            <thead>
+              <tr>
+                <th>项目编号</th>
+                <th>节点</th>
+                <th>当前</th>
+                <th>成本</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="projectRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 视频项目 · 内容策略 / 脚本 -->
+      <section class="band gate" id="scriptGate" data-section="scriptGate" hidden>
+        <div class="sectionHead">
+          <h2>闸门① 脚本确认</h2>
+          <span id="scriptGateState"></span>
+        </div>
+        <div class="nodeTools splitNodes">
+          <div class="nodeTool">
+            <div class="nodeToolHead">
+              <div><strong>内容策略智能体</strong><span>研究简报转内容方向与卖点优先级</span></div>
+              <button type="button" id="runStrategy">重跑策略</button>
+            </div>
+            <div id="strategyResult" class="nodeResult">自动流程会在脚本生成前运行</div>
+          </div>
+          <div class="nodeTool">
+            <div class="nodeToolHead">
+              <div><strong>脚本拆解智能体</strong><span>脚本逐段意图与画面要求</span></div>
+              <button type="button" id="runScriptBreakdown">重跑拆解</button>
+            </div>
+            <div id="scriptBreakdownResult" class="nodeResult">脚本生成后自动拆解，也可独立重跑</div>
+          </div>
+        </div>
+        <div class="standaloneLauncher" data-standalone-action="script">
+          <div><strong>独立脚本生成</strong><span>不依赖当前项目，直接输入需求生成中文脚本</span></div>
+          <textarea data-standalone-prompt placeholder="输入产品、受众、平台和内容要求"></textarea>
+          <button type="button" class="primary" data-run-standalone>运行脚本 Agent</button>
+          <div class="nodeResult" data-standalone-result>等待输入</div>
+        </div>
+        <div id="scriptEditor" class="emptyState">等待脚本闸门项目</div>
+      </section>
+
+      <!-- 视频项目 · 分镜 -->
+      <section class="band" id="storyboardNode" data-section="storyboardNode" hidden>
+        <div class="sectionHead">
+          <h2>分镜节点</h2>
+          <span id="storyboardNodeState"></span>
+        </div>
+        <div class="standaloneLauncher" data-standalone-action="storyboard">
+          <div><strong>独立分镜生成</strong><span>直接输入场景与动作，生成可编辑镜头计划</span></div>
+          <textarea data-standalone-prompt placeholder="输入场景、人物、动作、镜头运动和风格"></textarea>
+          <button type="button" class="primary" data-run-standalone>运行分镜 Agent</button>
+          <div class="nodeResult" data-standalone-result>等待输入</div>
+        </div>
+        <div id="shotEditor" class="emptyState">选择已有分镜的项目</div>
+      </section>
+
+      <section class="band gate" id="heroGate" data-section="heroGate" hidden>
+        <div class="sectionHead">
+          <h2>闸门② 关键帧确认</h2>
+          <span id="heroGateState"></span>
+        </div>
+        <div id="heroEditor" class="emptyState">等待关键帧闸门项目</div>
+      </section>
+
+      <!-- 视频项目 · 镜头制作 -->
+      <section class="band" id="productionNode" data-section="productionNode" hidden>
+        <div class="sectionHead">
+          <h2>单镜生产</h2>
+          <span id="productionNodeState"></span>
+        </div>
+        <div class="standaloneLauncher" data-standalone-action="production">
+          <div><strong>独立单镜生成</strong><span>使用产品素材库生成 720P 竖屏视频 Take</span></div>
+          <textarea data-standalone-prompt placeholder="输入本镜头画面、动作、产品和环境要求"></textarea>
+          <button type="button" class="primary" data-run-standalone>运行制作 Agent</button>
+          <div class="nodeResult" data-standalone-result>等待输入</div>
+        </div>
+        <div id="productionPanel" class="emptyState">等待分镜</div>
+      </section>
+
+      <section class="band" id="composeNode" data-section="composeNode" hidden>
+        <div class="sectionHead">
+          <h2>成片合成</h2>
+          <span>目标成片 30 秒</span>
+        </div>
+        <div id="composePanel" class="emptyState">等待成功镜头</div>
+      </section>
+
+      <!-- 视频项目 · 成片验收 / 交付归档 -->
+      <section class="band" id="deliveryNode" data-section="deliveryNode" hidden>
+        <div class="sectionHead">
+          <h2>交付</h2>
+          <span id="deliveryState"></span>
+        </div>
+        <div id="deliveryPanel" class="emptyState">暂无可交付项目</div>
+      </section>
+
+      <!-- 快速工具 -->
+      <section class="band" data-section="toolsSection" hidden>
+        <div class="sectionHead">
+          <h2>快速工具</h2>
+          <span id="toolsState">不创建生产项目，直接运行并下载单项产物</span>
+        </div>
+        <div class="nodeTools" id="independentAgentWorkbench">
+          <div class="nodeToolHead">
+            <div><strong>独立 Agent 工作台</strong><span>采集、研究、策略、脚本、拆解、分镜和单镜制作均可单独运行</span></div>
+            <span id="independentAgentState"></span>
+          </div>
+          <div id="independentAgentContract" class="agentContract" hidden></div>
+          <div class="agentWorkbenchGrid">
+            <label>功能
+              <select id="independentAgentAction">
+                <option value="collector">加载可用 Agent...</option>
+              </select>
+            </label>
+            <label>输入 Prompt / 关键词
+              <textarea id="independentAgentPrompt" placeholder="例如：为便携恒温杯写一条 30 秒夜间喂养短视频，或输入要生成的镜头画面"></textarea>
+            </label>
+            <label id="independentTargetLabel">抓取目标
+              <input id="independentAgentTarget" placeholder="关键词或 TikTok 账号主页 URL" />
+            </label>
+            <details class="creativeOptions">
+              <summary>创作偏好</summary>
+              <div>
+                <label>创意风格
+                  <select id="independentCreativeStyle">
+                    <option value="">由 Agent 自动匹配</option>
+                    <option value="真实生活方式广告">真实生活方式广告</option>
+                    <option value="电影感叙事">电影感叙事</option>
+                    <option value="高转化 UGC">高转化 UGC</option>
+                    <option value="极简产品展示">极简产品展示</option>
+                  </select>
+                </label>
+                <label>目标受众
+                  <input id="independentTargetAudience" placeholder="例如：夜间喂养的新手父母" />
+                </label>
+                <label>创作自由度
+                  <select id="independentCreativeFreedom">
+                    <option value="balanced">平衡创作</option>
+                    <option value="strict">严格执行</option>
+                    <option value="exploratory">探索创作</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+          </div>
+          <button type="button" id="runIndependentAgent" class="primary">运行独立 Agent</button>
+          <div id="independentAgentResult" class="nodeResult">结果会在这里展示，可继续保存到项目。</div>
+        </div>
+      </section>
+
+      <!-- 素材中心 · 产品素材 -->
+      <section class="band" id="productAssets" data-section="productAssets" hidden>
         <div class="sectionHead">
           <h2>产品素材库</h2>
           <div class="headActions">
@@ -81,9 +251,19 @@
         <div id="productLibraryPanel" class="emptyState">等待产品素材库索引</div>
       </section>
 
-      <section class="band" id="referenceIntake" data-view-section="assets" hidden>
+      <!-- 素材中心 · TikTok 参考素材 -->
+      <section class="band" data-section="referenceLibrarySection" hidden>
         <div class="sectionHead">
-          <h2>TikTok 参考素材采集</h2>
+          <h2>TikTok 参考素材</h2>
+          <span id="referenceLibraryState"></span>
+        </div>
+        <div id="materialLibrary" class="emptyState">暂无参考素材</div>
+      </section>
+
+      <!-- 素材中心 · 素材采集 -->
+      <section class="band" id="referenceIntake" data-section="collectSection" hidden>
+        <div class="sectionHead">
+          <h2>素材采集</h2>
           <span id="collectState"></span>
         </div>
         <div id="collectorBackendState" class="backendStrip">正在检测服务器采集后端...</div>
@@ -162,7 +342,14 @@
             </div>
           </form>
         </details>
-        <div id="materialLibrary" class="emptyState">暂无参考素材</div>
+      </section>
+
+      <!-- 素材中心 · 素材分析 -->
+      <section class="band" data-section="analysisSection" hidden>
+        <div class="sectionHead">
+          <h2>素材分析</h2>
+          <span id="analysisState"></span>
+        </div>
         <div class="nodeTools" id="researchNode">
           <div class="nodeToolHead">
             <div><strong>研究分析智能体</strong><span>TikTok 结构、节奏与受众洞察</span></div>
@@ -172,168 +359,46 @@
             视频转写（可选）
             <textarea id="researchSourceText" placeholder="留空则读取当前项目的来源与分析产物"></textarea>
           </label>
-        <div id="researchResult" class="nodeResult">从素材卡发起项目后，可在此独立重跑研究分析</div>
-      </div>
-      <details class="advancedIntake agentDetails" open><summary><span><strong>独立 Agent 工作台</strong><small>不创建生产项目，直接运行并下载单项产物</small></span><span>收起</span></summary>
-      <div class="nodeTools" id="independentAgentWorkbench">
-        <div class="nodeToolHead">
-          <div><strong>独立 Agent 工作台</strong><span>采集、研究、策略、脚本、拆解、分镜和单镜制作均可单独运行</span></div>
-          <span id="independentAgentState"></span>
+          <div id="researchResult" class="nodeResult">从素材卡发起项目后，可在此独立重跑研究分析</div>
         </div>
-        <div id="independentAgentContract" class="agentContract" hidden></div>
-        <div class="agentWorkbenchGrid">
-          <label>功能
-            <select id="independentAgentAction">
-              <option value="collector">加载可用 Agent...</option>
-            </select>
-          </label>
-          <label>输入 Prompt / 关键词
-            <textarea id="independentAgentPrompt" placeholder="例如：为便携恒温杯写一条 30 秒夜间喂养短视频，或输入要生成的镜头画面"></textarea>
-          </label>
-          <label id="independentTargetLabel">抓取目标
-            <input id="independentAgentTarget" placeholder="关键词或 TikTok 账号主页 URL" />
-          </label>
-          <details class="creativeOptions">
-            <summary>创作偏好</summary>
-            <div>
-              <label>创意风格
-                <select id="independentCreativeStyle">
-                  <option value="">由 Agent 自动匹配</option>
-                  <option value="真实生活方式广告">真实生活方式广告</option>
-                  <option value="电影感叙事">电影感叙事</option>
-                  <option value="高转化 UGC">高转化 UGC</option>
-                  <option value="极简产品展示">极简产品展示</option>
-                </select>
-              </label>
-              <label>目标受众
-                <input id="independentTargetAudience" placeholder="例如：夜间喂养的新手父母" />
-              </label>
-              <label>创作自由度
-                <select id="independentCreativeFreedom">
-                  <option value="balanced">平衡创作</option>
-                  <option value="strict">严格执行</option>
-                  <option value="exploratory">探索创作</option>
-                </select>
-              </label>
-            </div>
-          </details>
-        </div>
-        <button type="button" id="runIndependentAgent" class="primary">运行独立 Agent</button>
-        <div id="independentAgentResult" class="nodeResult">结果会在这里展示，可继续保存到项目。</div>
-      </div>
-      </details>
       </section>
 
-      <section class="band" id="projectQueue" data-view-section="projects">
+      <!-- 素材中心 · 收藏与项目素材包 -->
+      <section class="band" data-section="favoritesSection" hidden>
         <div class="sectionHead">
-          <h2>项目列表</h2>
+          <h2>收藏与项目素材包</h2>
+          <span id="favoritesState"></span>
+        </div>
+        <div id="favoritesPanel" class="emptyState">从项目列表打开一个项目后，这里汇总它选用的产品素材与参考素材。</div>
+      </section>
+
+      <!-- 任务中心 -->
+      <section class="band" data-section="taskCenter" hidden>
+        <div class="sectionHead">
+          <h2 id="taskCenterTitle">任务中心</h2>
           <div class="headActions">
-            <span id="projectCount"></span>
-            <button type="button" id="toggleProjects">显示全部</button>
-            <button type="button" id="refreshButton">刷新</button>
+            <span id="taskCenterCount"></span>
+            <button type="button" id="refreshTaskCenter">刷新</button>
           </div>
         </div>
-        <div class="tableWrap">
-          <table class="projectTable">
-            <thead>
-              <tr>
-                <th>项目编号</th>
-                <th>节点</th>
-                <th>当前</th>
-                <th>成本</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="projectRows"></tbody>
-          </table>
-        </div>
+        <div id="taskCenter" class="emptyState">正在加载任务...</div>
       </section>
 
-      <section class="band gate" id="scriptGate" data-view-section="script" hidden>
+      <!-- 交付中心 -->
+      <section class="band" data-section="deliveryCenter" hidden>
         <div class="sectionHead">
-          <h2>闸门① 脚本确认</h2>
-          <span id="scriptGateState"></span>
-        </div>
-        <div class="nodeTools splitNodes">
-          <div class="nodeTool">
-            <div class="nodeToolHead">
-              <div><strong>内容策略智能体</strong><span>研究简报转内容方向与卖点优先级</span></div>
-              <button type="button" id="runStrategy">重跑策略</button>
-            </div>
-            <div id="strategyResult" class="nodeResult">自动流程会在脚本生成前运行</div>
-          </div>
-          <div class="nodeTool">
-            <div class="nodeToolHead">
-              <div><strong>脚本拆解智能体</strong><span>脚本逐段意图与画面要求</span></div>
-              <button type="button" id="runScriptBreakdown">重跑拆解</button>
-            </div>
-            <div id="scriptBreakdownResult" class="nodeResult">脚本生成后自动拆解，也可独立重跑</div>
+          <h2 id="deliveryCenterTitle">交付中心</h2>
+          <div class="headActions">
+            <span id="deliveryCenterCount"></span>
+            <button type="button" id="refreshDeliveryCenter">刷新</button>
           </div>
         </div>
-        <div class="standaloneLauncher" data-standalone-action="script">
-          <div><strong>独立脚本生成</strong><span>不依赖当前项目，直接输入需求生成中文脚本</span></div>
-          <textarea data-standalone-prompt placeholder="输入产品、受众、平台和内容要求"></textarea>
-          <button type="button" class="primary" data-run-standalone>运行脚本 Agent</button>
-          <div class="nodeResult" data-standalone-result>等待输入</div>
-        </div>
-        <div id="scriptEditor" class="emptyState">等待脚本闸门项目</div>
-      </section>
-
-      <section class="band" id="storyboardNode" data-view-section="storyboard" hidden>
-        <div class="sectionHead">
-          <h2>分镜节点</h2>
-          <span id="storyboardNodeState"></span>
-        </div>
-        <div class="standaloneLauncher" data-standalone-action="storyboard">
-          <div><strong>独立分镜生成</strong><span>直接输入场景与动作，生成可编辑镜头计划</span></div>
-          <textarea data-standalone-prompt placeholder="输入场景、人物、动作、镜头运动和风格"></textarea>
-          <button type="button" class="primary" data-run-standalone>运行分镜 Agent</button>
-          <div class="nodeResult" data-standalone-result>等待输入</div>
-        </div>
-        <div id="shotEditor" class="emptyState">选择已有分镜的项目</div>
-      </section>
-
-      <section class="band gate" id="heroGate" data-view-section="storyboard" hidden>
-        <div class="sectionHead">
-          <h2>闸门② 关键帧确认</h2>
-          <span id="heroGateState"></span>
-        </div>
-        <div id="heroEditor" class="emptyState">等待关键帧闸门项目</div>
-      </section>
-
-      <section class="band" id="productionNode" data-view-section="production" hidden>
-        <div class="sectionHead">
-          <h2>单镜生产</h2>
-          <span id="productionNodeState"></span>
-        </div>
-        <div class="standaloneLauncher" data-standalone-action="production">
-          <div><strong>独立单镜生成</strong><span>使用产品素材库生成 720P 竖屏视频 Take</span></div>
-          <textarea data-standalone-prompt placeholder="输入本镜头画面、动作、产品和环境要求"></textarea>
-          <button type="button" class="primary" data-run-standalone>运行制作 Agent</button>
-          <div class="nodeResult" data-standalone-result>等待输入</div>
-        </div>
-        <div id="productionPanel" class="emptyState">等待分镜</div>
-      </section>
-
-      <section class="band" id="composeNode" data-view-section="production" hidden>
-        <div class="sectionHead">
-          <h2>成片合成</h2>
-          <span>目标成片 30 秒</span>
-        </div>
-        <div id="composePanel" class="emptyState">等待成功镜头</div>
-      </section>
-
-      <section class="band" id="deliveryNode" data-view-section="delivery" hidden>
-        <div class="sectionHead">
-          <h2>交付</h2>
-          <span id="deliveryState"></span>
-        </div>
-        <div id="deliveryPanel" class="emptyState">暂无可交付项目</div>
+        <div id="deliveryCenter" class="emptyState">正在加载交付记录...</div>
       </section>
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260720-2"></script>
+    <script src="/static/app.js?v=20260721-1"></script>
   </body>
 </html>
