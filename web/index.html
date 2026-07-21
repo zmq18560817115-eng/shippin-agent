@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260720-2" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260721-3" />
   </head>
   <body>
     <header class="topbar">
@@ -25,14 +25,25 @@
       </div>
     </header>
 
-    <nav class="workflowNav" aria-label="制作流程">
-      <div class="navLabel">生产流程</div>
-      <button type="button" data-view="projects" class="active"><i data-lucide="folder-kanban"></i><strong>项目</strong></button>
-      <button type="button" data-view="assets"><i data-lucide="database"></i><strong>素材采集</strong></button>
-      <button type="button" data-view="script"><i data-lucide="file-pen-line"></i><strong>脚本</strong></button>
-      <button type="button" data-view="storyboard"><i data-lucide="layout-grid"></i><strong>分镜</strong></button>
-      <button type="button" data-view="production"><i data-lucide="clapperboard"></i><strong>制作</strong></button>
-      <button type="button" data-view="delivery"><i data-lucide="package-check"></i><strong>交付</strong></button>
+    <nav class="workflowNav" aria-label="视频内容工厂导航">
+      <button type="button" data-view="home" class="active"><i data-lucide="house"></i><strong>工作首页</strong></button>
+      <div class="navGroup">
+        <div class="navLabel">视频项目</div>
+        <button type="button" data-view="projects"><i data-lucide="folder-kanban"></i><strong>项目概览</strong></button>
+        <button type="button" data-view="strategy"><i data-lucide="target"></i><strong>内容策略</strong></button>
+        <button type="button" data-view="script"><i data-lucide="file-pen-line"></i><strong>脚本</strong></button>
+        <button type="button" data-view="storyboard"><i data-lucide="layout-grid"></i><strong>分镜</strong></button>
+        <button type="button" data-view="production"><i data-lucide="clapperboard"></i><strong>镜头制作</strong></button>
+        <button type="button" data-view="review"><i data-lucide="shield-check"></i><strong>成片验收</strong></button>
+        <button type="button" data-view="archive"><i data-lucide="archive"></i><strong>交付归档</strong></button>
+      </div>
+      <div class="navGroup">
+        <div class="navLabel">工作中心</div>
+        <button type="button" data-view="tools"><i data-lucide="wand-sparkles"></i><strong>快速工具</strong></button>
+        <button type="button" data-view="assets"><i data-lucide="database"></i><strong>素材中心</strong></button>
+        <button type="button" data-view="tasks"><i data-lucide="list-checks"></i><strong>任务中心</strong></button>
+        <button type="button" data-view="delivery"><i data-lucide="package-check"></i><strong>交付中心</strong></button>
+      </div>
     </nav>
 
     <main class="workspace">
@@ -44,7 +55,53 @@
         </div>
         <span id="currentStage" class="currentStage">暂无在制项目</span>
       </div>
-      <section class="band" id="projectSetup" data-view-section="projects">
+      <section class="homeDashboard" id="homeDashboard" data-view-section="home">
+        <div class="homeHero">
+          <div><span class="eyebrow">今日工作</span><h2>从这里继续生产</h2><p>继续在制任务，或快速创建一条新视频。</p></div>
+          <button type="button" class="primary iconAction" id="homeNewProject"><i data-lucide="plus"></i>新建视频项目</button>
+        </div>
+        <div class="homeActionGrid">
+          <button type="button" class="homeAction primaryAction" id="homeContinue"><i data-lucide="play"></i><span><strong>继续上次任务</strong><small id="homeContinueHint">暂无在制任务</small></span></button>
+          <button type="button" class="homeAction" data-home-view="tools"><i data-lucide="wand-sparkles"></i><span><strong>使用快速工具</strong><small>脚本、分镜与单镜生成</small></span></button>
+          <button type="button" class="homeAction" data-home-view="tasks"><i data-lucide="circle-alert"></i><span><strong>我的待审核</strong><small id="homeReviewCount">0 项待处理</small></span></button>
+          <button type="button" class="homeAction" data-home-view="delivery"><i data-lucide="package-check"></i><span><strong>最近交付</strong><small id="homeDeliveryCount">0 条可查看</small></span></button>
+        </div>
+        <div class="homeColumns">
+          <section class="homePanel"><div class="sectionHead"><h2>在制项目</h2><button type="button" data-home-view="projects">查看全部</button></div><div id="homeProjects" class="compactList emptyState">暂无在制项目</div></section>
+          <section class="homePanel"><div class="sectionHead"><h2>需要处理</h2><button type="button" data-home-view="tasks">进入任务中心</button></div><div id="homeTasks" class="compactList emptyState">暂无待处理任务</div></section>
+        </div>
+      </section>
+
+      <section class="band quickToolsView" id="quickToolsView" data-view-section="tools" hidden>
+        <div class="sectionHead"><h2>快速工具</h2><span>不创建完整项目，直接完成单项工作</span></div>
+        <div class="quickToolGrid">
+          <article class="quickToolCard" data-tool-action="analysis"><i data-lucide="scan-search"></i><strong>视频研究分析</strong><p>拆解结构、节奏、镜头与受众。</p><button type="button">开始使用</button></article>
+          <article class="quickToolCard" data-tool-action="strategy"><i data-lucide="target"></i><strong>内容策略生成</strong><p>生成卖点、钩子和内容方向。</p><button type="button">开始使用</button></article>
+          <article class="quickToolCard" data-tool-action="script"><i data-lucide="file-pen-line"></i><strong>脚本生成</strong><p>生成可编辑的中文视频脚本。</p><button type="button">开始使用</button></article>
+          <article class="quickToolCard" data-tool-action="script_breakdown"><i data-lucide="list-tree"></i><strong>脚本拆解</strong><p>拆分意图、场景、动作和旁白。</p><button type="button">开始使用</button></article>
+          <article class="quickToolCard" data-tool-action="storyboard"><i data-lucide="layout-grid"></i><strong>分镜生成</strong><p>把内容转换为连续镜头计划。</p><button type="button">开始使用</button></article>
+          <article class="quickToolCard" data-tool-action="production"><i data-lucide="clapperboard"></i><strong>单镜视频生成</strong><p>用 Prompt 生成 720P 竖屏镜头。</p><button type="button">开始使用</button></article>
+        </div>
+        <div class="quickToolRunner" id="quickToolRunner" hidden>
+          <div class="sectionHead"><div><span class="eyebrow">当前工具</span><h2 id="quickToolTitle">脚本生成</h2></div><button type="button" id="closeQuickTool">关闭</button></div>
+          <textarea id="quickToolPrompt" placeholder="输入需求、素材转写、脚本或画面描述"></textarea>
+          <div class="formActions"><button type="button" class="primary" id="runQuickTool">运行工具</button></div>
+          <div id="quickToolResult" class="nodeResult">结果会在这里展示。</div>
+        </div>
+      </section>
+
+      <section class="band taskCenter" id="taskCenter" data-view-section="tasks" hidden>
+        <div class="sectionHead"><h2>任务中心</h2><button type="button" id="refreshTasks">刷新</button></div>
+        <div class="taskTabs" role="tablist">
+          <button type="button" class="active" data-task-filter="running">运行中 <span id="taskRunningCount">0</span></button>
+          <button type="button" data-task-filter="human">待我处理 <span id="taskHumanCount">0</span></button>
+          <button type="button" data-task-filter="failed">失败任务 <span id="taskFailedCount">0</span></button>
+          <button type="button" data-task-filter="done">已完成 <span id="taskDoneCount">0</span></button>
+        </div>
+        <div id="taskCenterList" class="taskList emptyState">暂无任务</div>
+      </section>
+
+      <section class="band" id="projectSetup" data-view-section="projects" hidden>
         <div class="sectionHead">
           <h2>新建项目</h2>
           <span id="startState"></span>
@@ -70,7 +127,17 @@
         </form>
       </section>
 
-      <section class="band" id="productAssets" data-view-section="assets" hidden>
+      <section class="assetCenterNav" id="assetCenterNav" data-view-section="assets" hidden>
+        <div class="subnavTabs" role="tablist" aria-label="素材中心分类">
+          <button type="button" class="active" data-asset-area="products"><i data-lucide="package-open"></i>产品素材</button>
+          <button type="button" data-asset-area="references"><i data-lucide="play-square"></i>TikTok 参考素材</button>
+          <button type="button" data-asset-area="collection"><i data-lucide="cloud-download"></i>素材采集</button>
+          <button type="button" data-asset-area="analysis"><i data-lucide="scan-search"></i>素材分析</button>
+          <button type="button" data-asset-area="packages"><i data-lucide="folder-heart"></i>收藏与项目素材包</button>
+        </div>
+      </section>
+
+      <section class="band" id="productAssets" data-view-section="assets" data-asset-panel="products" hidden>
         <div class="sectionHead">
           <h2>产品素材库</h2>
           <div class="headActions">
@@ -82,12 +149,12 @@
       </section>
 
       <section class="band" id="referenceIntake" data-view-section="assets" hidden>
-        <div class="sectionHead">
+        <div class="sectionHead" data-asset-panel="collection">
           <h2>TikTok 参考素材采集</h2>
           <span id="collectState"></span>
         </div>
-        <div id="collectorBackendState" class="backendStrip">正在检测服务器采集后端...</div>
-        <form class="crawlForm autoCrawlForm" id="crawlForm">
+        <div id="collectorBackendState" class="backendStrip" data-asset-panel="collection">正在检测服务器采集后端...</div>
+        <form class="crawlForm autoCrawlForm" id="crawlForm" data-asset-panel="collection">
           <button type="button" id="stopAutoCrawl" hidden>停止后台自动采集</button>
           <div class="nodeToolHead">
             <div><strong>自动发现与后台采集</strong><span>主动爬取任务：设置一次后由服务器按频率发现、下载、入库并分析；也可立即执行一轮。</span></div>
@@ -134,8 +201,8 @@
             <button type="button" id="saveAutoCrawl">启动后台自动采集</button>
           </div>
         </form>
-        <div id="autoCrawlStatus" class="autoCrawlStatus">正在读取后台自动采集状态...</div>
-        <section class="collectionQueue" aria-labelledby="collectionQueueTitle">
+        <div id="autoCrawlStatus" class="autoCrawlStatus" data-asset-panel="collection">正在读取后台自动采集状态...</div>
+        <section class="collectionQueue" aria-labelledby="collectionQueueTitle" data-asset-panel="collection">
           <div class="collectionQueueHead">
             <div>
               <strong id="collectionQueueTitle">后台采集任务</strong>
@@ -146,7 +213,7 @@
           <div id="collectionJobList" class="collectionJobList emptyState">暂无采集任务</div>
           <div id="collectionJobDetail" class="collectionJobDetail" hidden></div>
         </section>
-        <details class="advancedIntake directIntake">
+        <details class="advancedIntake directIntake" data-asset-panel="collection">
           <summary><span><strong>补充：直接导入视频链接</strong><small>仅用于已知链接、临时补充或单条快速分析</small></span><span>展开</span></summary>
           <form class="collectForm quickIntake" id="collectForm">
             <input type="hidden" id="collectMode" value="official" />
@@ -162,8 +229,8 @@
             </div>
           </form>
         </details>
-        <div id="materialLibrary" class="emptyState">暂无参考素材</div>
-        <div class="nodeTools" id="researchNode">
+        <div id="materialLibrary" class="emptyState" data-asset-panel="references">暂无参考素材</div>
+        <div class="nodeTools" id="researchNode" data-asset-panel="analysis">
           <div class="nodeToolHead">
             <div><strong>研究分析智能体</strong><span>TikTok 结构、节奏与受众洞察</span></div>
             <button type="button" id="runResearch">运行研究分析</button>
@@ -174,7 +241,7 @@
           </label>
         <div id="researchResult" class="nodeResult">从素材卡发起项目后，可在此独立重跑研究分析</div>
       </div>
-      <details class="advancedIntake agentDetails" open><summary><span><strong>独立 Agent 工作台</strong><small>不创建生产项目，直接运行并下载单项产物</small></span><span>收起</span></summary>
+      <details class="advancedIntake agentDetails" data-asset-panel="analysis"><summary><span><strong>独立 Agent 工作台</strong><small>不创建生产项目，直接运行并下载单项产物</small></span><span>展开</span></summary>
       <div class="nodeTools" id="independentAgentWorkbench">
         <div class="nodeToolHead">
           <div><strong>独立 Agent 工作台</strong><span>采集、研究、策略、脚本、拆解、分镜和单镜制作均可单独运行</span></div>
@@ -224,6 +291,14 @@
       </details>
       </section>
 
+      <section class="band projectAssetPackages" id="projectAssetPackages" data-view-section="assets" data-asset-panel="packages" hidden>
+        <div class="sectionHead">
+          <h2>收藏与项目素材包</h2>
+          <span id="projectAssetPackageState">请选择项目</span>
+        </div>
+        <div id="projectAssetPackagePanel" class="emptyState">打开一个项目后，可在这里查看该项目使用的产品素材与参考视频。</div>
+      </section>
+
       <section class="band" id="projectQueue" data-view-section="projects">
         <div class="sectionHead">
           <h2>项目列表</h2>
@@ -249,19 +324,34 @@
         </div>
       </section>
 
+      <section class="band" id="strategyNode" data-view-section="strategy" hidden>
+        <div class="sectionHead">
+          <h2>内容策略</h2>
+          <span>研究洞察转化为受众、卖点、钩子与行动号召</span>
+        </div>
+        <div class="nodeTools">
+          <div class="nodeTool">
+            <div class="nodeToolHead">
+              <div><strong>内容策略智能体</strong><span>研究简报转内容方向与卖点优先级</span></div>
+              <button type="button" id="runStrategy">重新生成策略</button>
+            </div>
+            <div id="strategyResult" class="nodeResult">自动流程会在脚本生成前运行，也可在此单独调整。</div>
+          </div>
+        </div>
+        <div class="standaloneLauncher" data-standalone-action="strategy">
+          <div><strong>独立内容策略生成</strong><span>输入产品事实、目标用户或研究结论，直接生成内容方向</span></div>
+          <textarea data-standalone-prompt placeholder="输入产品卖点、受众、平台和内容目标"></textarea>
+          <button type="button" class="primary" data-run-standalone>运行策略 Agent</button>
+          <div class="nodeResult" data-standalone-result>等待输入</div>
+        </div>
+      </section>
+
       <section class="band gate" id="scriptGate" data-view-section="script" hidden>
         <div class="sectionHead">
           <h2>闸门① 脚本确认</h2>
           <span id="scriptGateState"></span>
         </div>
-        <div class="nodeTools splitNodes">
-          <div class="nodeTool">
-            <div class="nodeToolHead">
-              <div><strong>内容策略智能体</strong><span>研究简报转内容方向与卖点优先级</span></div>
-              <button type="button" id="runStrategy">重跑策略</button>
-            </div>
-            <div id="strategyResult" class="nodeResult">自动流程会在脚本生成前运行</div>
-          </div>
+        <div class="nodeTools">
           <div class="nodeTool">
             <div class="nodeToolHead">
               <div><strong>脚本拆解智能体</strong><span>脚本逐段意图与画面要求</span></div>
@@ -315,17 +405,17 @@
         <div id="productionPanel" class="emptyState">等待分镜</div>
       </section>
 
-      <section class="band" id="composeNode" data-view-section="production" hidden>
+      <section class="band" id="composeNode" data-view-section="review" hidden>
         <div class="sectionHead">
-          <h2>成片合成</h2>
-          <span>目标成片 30 秒</span>
+          <h2>成片验收</h2>
+          <span>合成 30 秒成片并完成人工视觉终审</span>
         </div>
         <div id="composePanel" class="emptyState">等待成功镜头</div>
       </section>
 
-      <section class="band" id="deliveryNode" data-view-section="delivery" hidden>
+      <section class="band" id="deliveryNode" data-view-section="archive delivery" hidden>
         <div class="sectionHead">
-          <h2>交付</h2>
+          <h2>交付归档</h2>
           <span id="deliveryState"></span>
         </div>
         <div id="deliveryPanel" class="emptyState">暂无可交付项目</div>
@@ -334,6 +424,6 @@
 
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260720-2"></script>
+    <script src="/static/app.js?v=20260721-3"></script>
   </body>
 </html>

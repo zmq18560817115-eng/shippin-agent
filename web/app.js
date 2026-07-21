@@ -17,7 +17,10 @@ const state = {
   runtime: null,
   refreshing: false,
   operation: null,
-  currentView: "projects",
+  currentView: "home",
+  assetArea: "products",
+  taskFilter: "running",
+  quickToolAction: "analysis",
   selectedRevision: "",
   showAllProjects: false,
   collectionJobs: [],
@@ -26,11 +29,17 @@ const state = {
 };
 
 const views = {
+  home: { step: "工作台", title: "工作首页", description: "继续任务、快速创作与处理审核。" },
   projects: { step: "01 / 06", title: "项目", description: "创建任务，或打开一个在制项目继续工作。" },
-  assets: { step: "02 / 06", title: "素材采集", description: "管理产品事实素材，采集并分析参考视频。" },
+  strategy: { step: "项目 · 01", title: "内容策略", description: "把研究洞察转化为受众、卖点、钩子、内容方向与行动号召。" },
+  tools: { step: "工具", title: "快速工具", description: "独立运行研究、策略、脚本、分镜与单镜制作。" },
+  assets: { step: "素材", title: "素材中心", description: "管理产品素材、TikTok 参考内容、采集任务、分析结果与项目素材包。" },
+  tasks: { step: "任务", title: "任务中心", description: "集中查看运行中、待处理、失败与已完成任务。" },
   script: { step: "03 / 06", title: "脚本", description: "审阅内容策略、脚本拆解与文案，确认后进入分镜。" },
   storyboard: { step: "04 / 06", title: "分镜", description: "调整镜头计划，确认产品关键帧与视觉连续性。" },
   production: { step: "05 / 06", title: "制作", description: "逐镜生成、选择最佳 Take，并合成为 30 秒成片。" },
+  review: { step: "项目 · 06", title: "成片验收", description: "合成已选镜头，检查产品、温标、使用方式与人物场景连续性。" },
+  archive: { step: "项目 · 07", title: "交付归档", description: "查看质检结果，下载项目交付包并完成归档。" },
   delivery: { step: "06 / 06", title: "交付", description: "检查质检结果，下载交付包并记录反馈。" },
 };
 
@@ -292,7 +301,7 @@ async function boot() {
   installCommandIcons();
   await loadWorkbenchSession();
   const initialView = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
-  showView(views[initialView] ? initialView : "projects", { updateUrl: false });
+  showView(views[initialView] ? initialView : "home", { updateUrl: false });
   await checkHealth();
   await loadIndependentAgentActions();
   await loadProductLibrary();
@@ -369,6 +378,8 @@ function bindEvents() {
   $("#toggleProjects").addEventListener("click", () => {
     state.showAllProjects = !state.showAllProjects;
     renderProjectRows();
+    renderHomeDashboard();
+    renderTaskCenter();
   });
   $("#refreshProductLibrary").addEventListener("click", refreshProductLibrary);
   $("#runResearch").addEventListener("click", (event) => runFlowCapability("research", event.currentTarget, "#researchResult"));
@@ -387,6 +398,26 @@ function bindEvents() {
     if (button) promoteStandaloneArtifact(button);
   });
   $("#continueProject").addEventListener("click", continueCurrentProject);
+  $("#homeContinue").addEventListener("click", continueCurrentProject);
+  $("#homeNewProject").addEventListener("click", () => showView("projects"));
+  document.querySelectorAll("[data-home-view]").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.homeView));
+  });
+  document.querySelectorAll("[data-tool-action]").forEach((card) => {
+    card.querySelector("button").addEventListener("click", () => openQuickTool(card.dataset.toolAction));
+  });
+  $("#closeQuickTool").addEventListener("click", closeQuickTool);
+  $("#runQuickTool").addEventListener("click", runQuickTool);
+  $("#refreshTasks").addEventListener("click", () => refreshProjects());
+  document.querySelectorAll("[data-task-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.taskFilter = button.dataset.taskFilter;
+      renderTaskCenter();
+    });
+  });
+  document.querySelectorAll("#assetCenterNav [data-asset-area]").forEach((button) => {
+    button.addEventListener("click", () => setAssetArea(button.dataset.assetArea));
+  });
   window.addEventListener("hashchange", () => {
     const view = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
     if (views[view]) showView(view, { updateUrl: false });
@@ -589,11 +620,123 @@ function updateCrawlTargetUI() {
   if (type === "trending") input.value = "";
 }
 
+function openQuickTool(action) {
+  state.quickToolAction = action;
+  const runner = $("#quickToolRunner");
+  runner.hidden = false;
+  $("#quickToolTitle").textContent = independentActionLabels[action] || "快速工具";
+  $("#quickToolPrompt").placeholder = independentActionHints[action] || "输入需求";
+  $("#quickToolPrompt").focus();
+  runner.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeQuickTool() {
+  $("#quickToolRunner").hidden = true;
+}
+
+async function runQuickTool() {
+  const prompt = $("#quickToolPrompt").value.trim();
+  const host = $("#quickToolResult");
+  if (!prompt) {
+    toast("请先输入需求、素材或 Prompt", "error");
+    $("#quickToolPrompt").focus();
+    return;
+  }
+  const button = $("#runQuickTool");
+  button.disabled = true;
+  host.className = "nodeResult";
+  host.textContent = "正在运行，请稍候...";
+  beginOperation(`正在运行${independentActionLabels[state.quickToolAction] || "快速工具"}`, state.quickToolAction === "production" ? 90 : 35);
+  try {
+    const payload = await api("/api/v2/agents/run", {
+      method: "POST",
+      body: JSON.stringify({
+        action: state.quickToolAction,
+        product_id: $("#productSelect").value || "便携恒温杯",
+        prompt,
+        source_text: prompt,
+        provider: "auto",
+        mock: $("#runtimeMode").value !== "real",
+      }),
+    });
+    renderAgentResult(host, payload);
+    toast("快速工具已运行完成");
+  } catch (error) {
+    host.className = "nodeResult error";
+    host.textContent = error.message;
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    endOperation();
+  }
+}
+
+function projectBucket(project) {
+  const status = String(project.status || "");
+  const gate = String(project.current_gate || "");
+  if (status === "succeeded") return "done";
+  if (["failed", "blocked"].includes(status) || (project.tasks || []).some((task) => task.status === "failed" && isUnresolvedTask(project, task))) return "failed";
+  if (status === "awaiting_human" || gate) return "human";
+  return "running";
+}
+
+function renderHomeDashboard() {
+  if (!$("#homeDashboard")) return;
+  const active = state.projects.filter((project) => ["running", "human"].includes(projectBucket(project))).slice(0, 4);
+  const human = state.projects.filter((project) => projectBucket(project) === "human");
+  const delivered = state.projects.filter((project) => projectBucket(project) === "done");
+  $("#homeContinue").disabled = !state.selected;
+  $("#homeContinueHint").textContent = state.selected
+    ? `${state.selected.product_id || "未命名产品"} · ${stageLabel(state.selected.current_gate || state.selected.current_stage || state.selected.status)}`
+    : "暂无在制任务";
+  $("#homeReviewCount").textContent = `${human.length} 项待处理`;
+  $("#homeDeliveryCount").textContent = `${delivered.length} 条可查看`;
+  $("#homeProjects").className = active.length ? "compactList" : "compactList emptyState";
+  $("#homeProjects").innerHTML = active.length ? active.map((project) => `
+    <button type="button" data-home-project="${escapeAttr(project.project_id)}"><span><strong>${escapeHtml(project.product_id || "未命名产品")}</strong><small>${escapeHtml(project.project_id)}</small></span><em>${escapeHtml(stageLabel(project.current_gate || project.current_stage || project.status))}</em></button>
+  `).join("") : "暂无在制项目";
+  $("#homeTasks").className = human.length ? "compactList" : "compactList emptyState";
+  $("#homeTasks").innerHTML = human.length ? human.slice(0, 5).map((project) => `
+    <button type="button" data-home-project="${escapeAttr(project.project_id)}"><span><strong>${escapeHtml(stageLabel(project.current_gate || project.current_stage))}</strong><small>${escapeHtml(project.product_id || project.project_id)}</small></span><em>去处理</em></button>
+  `).join("") : "暂无待处理任务";
+  document.querySelectorAll("[data-home-project]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.selectedId = button.dataset.homeProject;
+      await refreshProjects({ force: true });
+      continueCurrentProject();
+    });
+  });
+}
+
+function renderTaskCenter() {
+  if (!$("#taskCenterList")) return;
+  const buckets = { running: [], human: [], failed: [], done: [] };
+  state.projects.forEach((project) => buckets[projectBucket(project)].push(project));
+  $("#taskRunningCount").textContent = buckets.running.length;
+  $("#taskHumanCount").textContent = buckets.human.length;
+  $("#taskFailedCount").textContent = buckets.failed.length;
+  $("#taskDoneCount").textContent = buckets.done.length;
+  document.querySelectorAll("[data-task-filter]").forEach((button) => button.classList.toggle("active", button.dataset.taskFilter === state.taskFilter));
+  const items = buckets[state.taskFilter] || [];
+  const host = $("#taskCenterList");
+  host.className = items.length ? "taskList" : "taskList emptyState";
+  host.innerHTML = items.length ? items.map((project) => `
+    <article><div><span class="statusTag ${statusClass(project.status)}">${escapeHtml(stageLabel(project.status))}</span><strong>${escapeHtml(project.product_id || "未命名产品")}</strong><small>${escapeHtml(project.project_id)} · ${escapeHtml(formatProjectTime(project.updated_at))}</small></div><div><span>${escapeHtml(stageLabel(project.current_gate || project.current_stage || project.status))}</span><button type="button" data-task-project="${escapeAttr(project.project_id)}">打开</button></div></article>
+  `).join("") : "当前分类暂无任务";
+  host.querySelectorAll("[data-task-project]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.selectedId = button.dataset.taskProject;
+      await refreshProjects({ force: true });
+      continueCurrentProject();
+    });
+  });
+}
+
 function showView(view, { updateUrl = true } = {}) {
-  const next = views[view] ? view : "projects";
+  const next = views[view] ? view : "home";
   state.currentView = next;
   document.querySelectorAll("[data-view-section]").forEach((section) => {
-    section.hidden = section.dataset.viewSection !== next;
+    section.hidden = !section.dataset.viewSection.split(/\s+/).includes(next);
   });
   document.querySelectorAll(".workflowNav [data-view]").forEach((button) => {
     const active = button.dataset.view === next;
@@ -606,21 +749,52 @@ function showView(view, { updateUrl = true } = {}) {
   $("#viewDescription").textContent = meta.description;
   if (updateUrl) history.replaceState(null, "", `#view=${next}`);
   renderPanels();
-  if (next === "assets") loadMaterials();
+  if (next === "assets") {
+    setAssetArea(state.assetArea, { focus: false });
+    loadMaterials();
+  }
+  if (next === "home") renderHomeDashboard();
+  if (next === "tasks") renderTaskCenter();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function viewForStage(stage) {
-  if (["analysis", "research", "strategy", "script", "script_breakdown", "script_review", "script_gate"].includes(stage)) return "script";
+  if (["analysis", "research", "strategy"].includes(stage)) return "strategy";
+  if (["script", "script_breakdown", "script_review", "script_gate"].includes(stage)) return "script";
   if (["storyboard", "asset", "hero_gate"].includes(stage)) return "storyboard";
-  if (["production", "take_gate", "compose", "final_qa"].includes(stage)) return "production";
-  if (["archive", "succeeded"].includes(stage)) return "delivery";
+  if (["production", "take_gate"].includes(stage)) return "production";
+  if (["compose", "final_qa"].includes(stage)) return "review";
+  if (["archive", "succeeded"].includes(stage)) return "archive";
   return "projects";
 }
 
 function continueCurrentProject() {
-  if (!state.selected) return;
+  if (!state.selected) {
+    showView("projects");
+    return;
+  }
   showView(viewForStage(state.selected.current_stage || state.selected.status));
+}
+
+function setAssetArea(area, { focus = true } = {}) {
+  const allowed = new Set(["products", "references", "collection", "analysis", "packages"]);
+  const next = allowed.has(area) ? area : "products";
+  state.assetArea = next;
+  document.querySelectorAll("#assetCenterNav [data-asset-area]").forEach((button) => {
+    const active = button.dataset.assetArea === next;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  const referenceIntake = $("#referenceIntake");
+  if (referenceIntake) referenceIntake.hidden = !["references", "collection", "analysis"].includes(next);
+  document.querySelectorAll("[data-asset-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.assetPanel !== next;
+  });
+  if (next === "packages") renderProjectAssetPackages();
+  if (focus && state.currentView === "assets") {
+    const target = next === "products" ? $("#productAssets") : next === "packages" ? $("#projectAssetPackages") : referenceIntake;
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 async function checkHealth() {
@@ -779,6 +953,32 @@ async function loadMaterials() {
     state.materials = [];
   }
   renderMaterialLibrary();
+  renderProjectAssetPackages();
+}
+
+function renderProjectAssetPackages() {
+  const host = $("#projectAssetPackagePanel");
+  const status = $("#projectAssetPackageState");
+  if (!host || !status) return;
+  if (!state.selected) {
+    status.textContent = "请选择项目";
+    host.className = "emptyState";
+    host.innerHTML = '请先在“视频项目”中打开一个项目，再查看该项目的素材包。';
+    return;
+  }
+  const productId = state.selected.product_id || "未命名产品";
+  const referenceCount = state.materials.length;
+  const matchedCount = (state.assetManifest?.frames || state.assetManifest?.shots || []).length;
+  status.textContent = `${productId} · ${referenceCount} 条参考素材`;
+  host.className = "projectAssetPackageGrid";
+  host.innerHTML = `
+    <article><i data-lucide="package-open"></i><span><strong>产品素材</strong><small>${escapeHtml(productId)}</small></span><button type="button" data-package-area="products">查看</button></article>
+    <article><i data-lucide="play-square"></i><span><strong>TikTok 参考素材</strong><small>${referenceCount} 条已入库</small></span><button type="button" data-package-area="references">查看</button></article>
+    <article><i data-lucide="layout-grid"></i><span><strong>镜头素材匹配</strong><small>${matchedCount} 个镜头已建立记录</small></span><button type="button" data-package-view="storyboard">打开分镜</button></article>
+  `;
+  host.querySelectorAll("[data-package-area]").forEach((button) => button.addEventListener("click", () => setAssetArea(button.dataset.packageArea)));
+  host.querySelectorAll("[data-package-view]").forEach((button) => button.addEventListener("click", () => showView(button.dataset.packageView)));
+  window.lucide?.createIcons();
 }
 
 async function startProject(event) {
@@ -1511,6 +1711,8 @@ function renderPanels() {
     renderComposeNode();
   }
   if (state.currentView === "delivery") renderDelivery();
+  if (state.currentView === "home") renderHomeDashboard();
+  if (state.currentView === "tasks") renderTaskCenter();
   installCommandIcons();
 }
 
@@ -1840,7 +2042,7 @@ async function submitVisualReview() {
     });
     toast("视觉验收已记录，成片已进入交付检查");
     await refreshProjects();
-    showView("delivery");
+    showView("archive");
   } catch (error) {
     toast(error.message, "error");
   } finally {

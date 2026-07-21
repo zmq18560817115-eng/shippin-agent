@@ -331,8 +331,8 @@ textarea {
   padding: 24px 4px;
 }
 
-.band[hidden] {
-  display: none;
+[hidden] {
+  display: none !important;
 }
 
 .sectionHead {
@@ -1611,6 +1611,355 @@ button.quietButton {
 
 .crawlForm .nodeToolHead {
   grid-column: 1 / -1;
+}
+
+/* P0 information architecture: home, project workflow and work centers. */
+.workflowNav {
+  overflow-y: auto;
+}
+
+.workflowNav .navGroup {
+  display: grid;
+  gap: 3px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.workflowNav .navGroup .navLabel {
+  margin-bottom: 4px;
+}
+
+.workflowNav button {
+  min-height: 40px;
+}
+
+.homeDashboard {
+  display: grid;
+  gap: 16px;
+  padding-top: 18px;
+}
+
+.assetCenterNav {
+  margin-bottom: 14px;
+}
+
+.subnavTabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  scrollbar-width: thin;
+}
+
+.subnavTabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  white-space: nowrap;
+  color: var(--muted);
+  background: transparent;
+}
+
+.subnavTabs button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.subnavTabs button.active {
+  color: var(--blue);
+  background: #edf3ff;
+  box-shadow: inset 0 0 0 1px #c8d8fb;
+}
+
+.projectAssetPackageGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.projectAssetPackageGrid article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 104px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.projectAssetPackageGrid article > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--blue);
+}
+
+.projectAssetPackageGrid span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.projectAssetPackageGrid small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectAssetPackageGrid button {
+  grid-column: 1 / -1;
+  min-height: 36px;
+}
+
+.homeHero,
+.homePanel,
+.quickToolRunner {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.homeHero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 132px;
+  padding: 24px 28px;
+  background: linear-gradient(120deg, #ffffff 0%, #f5f8ff 100%);
+}
+
+.homeHero h2 {
+  margin: 5px 0 4px;
+  font-size: 24px;
+}
+
+.homeHero p,
+.quickToolCard p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.eyebrow {
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.homeActionGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.homeAction {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border-color: var(--line);
+  padding: 16px;
+  text-align: left;
+  white-space: normal;
+}
+
+.homeAction > svg,
+.quickToolCard > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--blue);
+}
+
+.homeAction span {
+  display: grid;
+  gap: 5px;
+}
+
+.homeAction small,
+.compactList small,
+.taskList small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 450;
+}
+
+.homeAction.primaryAction {
+  border-color: #bfd0f5;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.homeColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+  gap: 16px;
+}
+
+.homePanel {
+  min-height: 260px;
+  padding: 20px;
+}
+
+.compactList {
+  display: grid;
+  gap: 2px;
+}
+
+.compactList button {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 10px 2px;
+  text-align: left;
+}
+
+.compactList button span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.compactList button em {
+  color: var(--blue);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.quickToolGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.quickToolCard {
+  min-height: 190px;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  justify-items: start;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+  background: var(--surface-subtle);
+}
+
+.quickToolCard strong {
+  font-size: 15px;
+}
+
+.quickToolRunner {
+  margin-top: 16px;
+  padding: 20px;
+}
+
+.quickToolRunner textarea {
+  min-height: 132px;
+}
+
+.taskTabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.taskTabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+}
+
+.taskTabs button.active {
+  border-bottom-color: var(--blue);
+  color: var(--blue);
+}
+
+.taskTabs span {
+  display: inline-grid;
+  min-width: 20px;
+  place-items: center;
+  margin-left: 5px;
+  border-radius: 999px;
+  padding: 2px 5px;
+  background: #eef2f7;
+  font-size: 11px;
+}
+
+.taskList {
+  display: grid;
+}
+
+.taskList article {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 2px;
+}
+
+.taskList article > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.taskList article > div:first-child {
+  display: grid;
+  grid-template-columns: auto 1fr;
+}
+
+.taskList article > div:first-child small {
+  grid-column: 2;
+}
+
+@media (max-width: 1100px) {
+  .homeActionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quickToolGrid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .workflowNav {
+    display: flex;
+    overflow-x: auto;
+    padding: 8px 10px;
+  }
+  .workflowNav .navGroup { display: contents; }
+  .workflowNav .navLabel { display: none; }
+  .workflowNav button { flex: 0 0 auto; min-height: 44px; }
+  .homeColumns { grid-template-columns: 1fr; }
+  .homeHero { min-height: 0; padding: 20px; }
+  .quickToolGrid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 620px) {
+  .homeHero { align-items: stretch; flex-direction: column; }
+  .homeActionGrid { grid-template-columns: 1fr; }
+  .homeAction { min-height: 72px; }
+  .taskList article,
+  .taskList article > div { align-items: flex-start; flex-direction: column; }
 }
 
 .crawlForm label {
@@ -3007,6 +3356,10 @@ pre {
   }
 
   .startBar {
+    grid-template-columns: 1fr;
+  }
+
+  .projectAssetPackageGrid {
     grid-template-columns: 1fr;
   }
 
