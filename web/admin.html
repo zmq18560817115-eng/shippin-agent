@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂 · 管理后台</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/portal.css?v=20260720-2" />
+    <link rel="stylesheet" href="/static/portal.css?v=20260721-3" />
   </head>
   <body class="adminPage">
     <header class="adminTopbar">
@@ -15,6 +15,11 @@
     <main class="adminWorkspace">
       <section class="adminIntro"><div><span>OVERVIEW</span><h2>系统总览</h2></div><button class="iconAction" id="refreshAdmin"><i data-lucide="refresh-cw"></i>刷新</button></section>
       <section id="stats" class="statsGrid"></section>
+      <section class="analyticsGrid" id="adminAnalytics">
+        <div class="adminPanel analyticsPanel"><div class="panelHead"><div><i data-lucide="chart-column"></i><h3>近 7 天生产趋势</h3></div><span>项目 / 成本</span></div><div id="dailyTrend" class="dailyTrend"></div></div>
+        <div class="adminPanel analyticsPanel"><div class="panelHead"><div><i data-lucide="chart-pie"></i><h3>项目状态分布</h3></div><span id="statusDistributionTotal"></span></div><div id="statusDistribution" class="distributionPanel"></div></div>
+        <div class="adminPanel analyticsPanel"><div class="panelHead"><div><i data-lucide="database"></i><h3>存储结构</h3></div><span id="storageDistributionTotal"></span></div><div id="storageDistribution" class="distributionPanel"></div></div>
+      </section>
       <section class="adminColumns">
         <div class="adminPanel"><div class="panelHead"><div><i data-lucide="activity"></i><h3>项目状态</h3></div><span id="projectTotal"></span></div><div id="projectStates" class="stateBars"></div></div>
         <div class="adminPanel"><div class="panelHead"><div><i data-lucide="server-cog"></i><h3>服务状态</h3></div><span>实时</span></div><div id="backendStates" class="backendList"></div></div>
@@ -42,6 +47,6 @@
       </form>
     </dialog>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/admin.js?v=20260720-2"></script>
+    <script src="/static/admin.js?v=20260721-3"></script>
   </body>
 </html>

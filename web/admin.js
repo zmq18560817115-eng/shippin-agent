@@ -2,7 +2,38 @@ const statusNames = { idle: "未开始", queued: "排队中", running: "运行�
 const providerNames = { tiktok_api: "TikTok 自建采集", apify: "Apify 采集", yt_dlp: "视频下载", manual_url: "人工链接", doubao: "豆包文本模型", seedance: "Seedance 视频模型", speech_to_text: "语音转写" };
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 const formatBytes = (bytes) => { const units = ["B", "KB", "MB", "GB", "TB"]; let value = Number(bytes || 0); let index = 0; while (value >= 1024 && index < units.length - 1) { value /= 1024; index += 1; } return `${value.toFixed(index ? 1 : 0)} ${units[index]}`; };
+const chartColors = ["#2563eb", "#7c3aed", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#64748b", "#94a3b8"];
 const refreshIcons = () => window.lucide?.createIcons({ attrs: { "stroke-width": 1.8 } });
+
+function renderDailyTrend(items) {
+  const rows = items || [];
+  const maxProjects = Math.max(1, ...rows.map((item) => Number(item.projects || 0)));
+  const maxCost = Math.max(0.01, ...rows.map((item) => Number(item.cost_cny || 0)));
+  document.querySelector("#dailyTrend").innerHTML = rows.map((item) => {
+    const label = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(new Date(`${item.date}T00:00:00`));
+    const projectHeight = Number(item.projects || 0) / maxProjects * 100;
+    const costHeight = Number(item.cost_cny || 0) / maxCost * 100;
+    return `<div class="trendDay" title="${escapeHtml(label)}：${Number(item.projects || 0)} 个项目，¥${Number(item.cost_cny || 0).toFixed(2)}">
+      <div class="trendBars"><i style="height:${projectHeight}%"></i><i style="height:${costHeight}%"></i></div>
+      <strong>${Number(item.projects || 0)}</strong><span>${escapeHtml(label)}</span>
+    </div>`;
+  }).join("") || '<p class="emptyMessage">暂无趋势数据</p>';
+}
+
+function renderDistribution(hostSelector, entries, options = {}) {
+  const host = document.querySelector(hostSelector);
+  const rows = entries.filter(([, value]) => Number(value || 0) > 0);
+  const total = rows.reduce((sum, [, value]) => sum + Number(value || 0), 0);
+  if (!total) { host.innerHTML = '<p class="emptyMessage">暂无数据</p>'; return; }
+  let cursor = 0;
+  const segments = rows.map(([, value], index) => {
+    const start = cursor;
+    cursor += Number(value) / total * 100;
+    return `${chartColors[index % chartColors.length]} ${start}% ${cursor}%`;
+  });
+  host.innerHTML = `<div class="donutChart" style="--segments:${segments.join(",")}"><strong>${options.center || total}</strong><span>${escapeHtml(options.centerLabel || "合计")}</span></div>
+    <div class="chartLegend">${rows.map(([key, value], index) => `<div><i style="background:${chartColors[index % chartColors.length]}"></i><span>${escapeHtml(options.labels?.[key] || key)}</span><strong>${options.format ? options.format(value) : value}</strong></div>`).join("")}</div>`;
+}
 function installAdminActionIcons() {
   const rules = [[/通过/, "check"], [/拒绝/, "x"], [/重置/, "key-round"], [/停用/, "user-x"], [/启用/, "user-check"]];
   document.querySelectorAll("button:not([data-icon-ready])").forEach((button) => {
@@ -45,6 +76,11 @@ async function loadAdmin() {
   document.querySelector("#projectTotal").textContent = `${projectTotal} 个项目`;
   const stateOrder = ["failed", "blocked", "needs_review", "awaiting_human", "running", "queued", "idle", "succeeded"];
   document.querySelector("#projectStates").innerHTML = stateOrder.filter((status) => Number(payload.projects[status] || 0) > 0).map((status) => `<div><span>${statusNames[status] || status}</span><strong>${payload.projects[status]}</strong><i style="--width:${projectTotal ? Math.max(3, Number(payload.projects[status]) / projectTotal * 100) : 0}%"></i></div>`).join("") || "暂无项目";
+  renderDailyTrend(payload.analytics?.daily || []);
+  document.querySelector("#statusDistributionTotal").textContent = `${projectTotal} 个项目`;
+  renderDistribution("#statusDistribution", Object.entries(payload.analytics?.project_status || payload.projects), { labels: statusNames, center: projectTotal, centerLabel: "项目" });
+  document.querySelector("#storageDistributionTotal").textContent = formatBytes(storageTotal);
+  renderDistribution("#storageDistribution", Object.entries(payload.storage_bytes || {}), { labels: { database: "数据库", materials: "素材库", runs: "运行产物" }, center: formatBytes(storageTotal), centerLabel: "总占用", format: formatBytes });
   const providers = [...(payload.runtime.collector_backends || []), ...Object.entries(payload.runtime.providers || {}).filter(([id]) => ["doubao", "seedance", "speech_to_text"].includes(id)).map(([id, value]) => ({ id, ready: value.configured }))];
   document.querySelector("#backendStates").innerHTML = providers.map((provider) => `<div><span>${escapeHtml(providerNames[provider.id] || provider.id)}</span><strong class="${provider.ready ? "ready" : "missing"}">${provider.ready ? "可用" : "未配置"}</strong></div>`).join("");
   document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(formatTime(project.updated_at))}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';

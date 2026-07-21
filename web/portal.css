@@ -103,6 +103,27 @@ button, a { border-radius: 6px; }
 .statsGrid span, .statsGrid small { color: var(--muted); font-size: 12px; }
 .statsGrid strong { font-size: 24px; }
 .adminColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; }
+.analyticsGrid { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(240px, .85fr)); gap: 14px; margin-top: 14px; }
+.analyticsGrid .adminPanel { margin-top: 0; }
+.analyticsPanel { min-height: 280px; }
+.dailyTrend { height: 190px; display: grid; grid-template-columns: repeat(7, minmax(34px, 1fr)); align-items: end; gap: 8px; padding-top: 12px; }
+.trendDay { min-width: 0; display: grid; grid-template-rows: 130px auto auto; justify-items: center; gap: 4px; }
+.trendBars { height: 130px; display: flex; align-items: end; gap: 3px; }
+.trendBars i { width: 10px; min-height: 2px; border-radius: 3px 3px 0 0; background: #2563eb; }
+.trendBars i + i { background: #7c3aed; }
+.trendDay strong { font-size: 12px; }
+.trendDay span { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.distributionPanel { min-height: 190px; display: grid; grid-template-columns: 116px minmax(0, 1fr); align-items: center; gap: 20px; }
+.donutChart { width: 116px; aspect-ratio: 1; display: grid; place-content: center; position: relative; border-radius: 50%; background: conic-gradient(var(--segments)); text-align: center; }
+.donutChart::after { content: ""; position: absolute; inset: 18px; border-radius: 50%; background: #fff; }
+.donutChart strong, .donutChart span { position: relative; z-index: 1; }
+.donutChart strong { max-width: 80px; overflow: hidden; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.donutChart span { color: var(--muted); font-size: 11px; }
+.chartLegend { display: grid; align-content: center; gap: 8px; }
+.chartLegend div { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 7px; min-width: 0; }
+.chartLegend i { width: 8px; height: 8px; border-radius: 2px; }
+.chartLegend span { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.chartLegend strong { font-size: 12px; }
 .adminPanel { margin-top: 18px; border: 1px solid var(--line); background: #fff; padding: 18px; }
 .panelHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .panelHead h3 { margin: 0; font-size: 15px; }
@@ -257,10 +278,16 @@ dialog { border: 0; border-radius: 8px; }
 
 @media (max-width: 1100px) {
   .statsGrid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .analyticsGrid { grid-template-columns: 1fr 1fr; }
+  .analyticsGrid .analyticsPanel:first-child { grid-column: 1 / -1; }
 }
 @media (max-width: 700px) {
   .adminWorkspace { padding: 18px 14px 40px; }
   .statsGrid { grid-template-columns: 1fr; }
   .statsGrid article.metricCard { min-height: 96px; }
   .adminColumns { grid-template-columns: 1fr; }
+  .analyticsGrid { grid-template-columns: 1fr; }
+  .analyticsGrid .analyticsPanel:first-child { grid-column: auto; }
+  .distributionPanel { grid-template-columns: 100px minmax(0, 1fr); }
+  .donutChart { width: 100px; }
 }

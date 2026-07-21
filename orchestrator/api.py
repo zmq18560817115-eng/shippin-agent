@@ -491,6 +491,7 @@ def admin_summary() -> dict[str, Any]:
         project_rows = conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall()
         task_rows = conn.execute("SELECT status, COUNT(*) AS count FROM tasks GROUP BY status").fetchall()
         total_cost = float(conn.execute("SELECT COALESCE(SUM(cost_cny), 0) FROM cost_entries").fetchone()[0])
+        cost_rows = conn.execute("SELECT cost_cny, created_at FROM cost_entries ORDER BY created_at").fetchall()
         failures = [
             dict(row)
             for row in conn.execute(
@@ -504,6 +505,18 @@ def admin_summary() -> dict[str, Any]:
     project_counts: dict[str, int] = {}
     for summary in summaries:
         project_counts[summary["status"]] = project_counts.get(summary["status"], 0) + 1
+    today = datetime.now(timezone.utc).date()
+    day_keys = [(today - timedelta(days=offset)).isoformat() for offset in range(6, -1, -1)]
+    project_daily = {day: 0 for day in day_keys}
+    cost_daily = {day: 0.0 for day in day_keys}
+    for summary in summaries:
+        day = str(summary.get("created_at") or "")[:10]
+        if day in project_daily:
+            project_daily[day] += 1
+    for row in cost_rows:
+        day = str(row["created_at"] or "")[:10]
+        if day in cost_daily:
+            cost_daily[day] += float(row["cost_cny"] or 0)
     recent = [
         {
             "id": summary["project_id"],
@@ -526,6 +539,13 @@ def admin_summary() -> dict[str, Any]:
             "database": _path_size(queue.resolve_db_path(_db_path())),
             "materials": _path_size(_material_library_root()),
             "runs": _path_size(runs_root),
+        },
+        "analytics": {
+            "daily": [
+                {"date": day, "projects": project_daily[day], "cost_cny": round(cost_daily[day], 4)}
+                for day in day_keys
+            ],
+            "project_status": project_counts,
         },
         "recent_projects": recent,
         "recent_failures": failures,
@@ -1603,6 +1623,8 @@ def _run_auto_collector_once(force: bool = False) -> dict[str, Any]:
 
 
 async def _auto_collector_loop() -> None:
+    # Let startup and explicit run-now requests settle before the periodic worker competes for the schedule lease.
+    await asyncio.sleep(20)
     while True:
         try:
             await asyncio.to_thread(_run_auto_collector_once)
