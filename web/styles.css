@@ -2193,7 +2193,8 @@ button.quietButton {
 
 .materialList {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
   margin-top: 12px;
 }
 
@@ -2354,17 +2355,17 @@ button.quietButton {
 
 .materialItem {
   display: grid;
-  grid-template-columns: auto 112px minmax(0, 1fr) auto;
+  grid-template-columns: auto 96px minmax(0, 1fr);
   gap: 12px;
-  align-items: center;
+  align-items: start;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
-  background: #fbfcfb;
+  background: #fff;
 }
 
 .materialCover {
-  width: 112px;
+  width: 96px;
   aspect-ratio: 9 / 16;
   object-fit: cover;
   border: 1px solid var(--line);
@@ -2381,6 +2382,11 @@ button.quietButton {
 
 .materialBody {
   min-width: 0;
+}
+
+.materialItem > button[data-start-material] {
+  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .materialItem strong,

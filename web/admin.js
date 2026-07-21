@@ -75,14 +75,17 @@ async function loadAdmin() {
   const storageTotal = Object.values(payload.storage_bytes).reduce((sum, value) => sum + Number(value), 0);
   const humanGates = Number(payload.projects.awaiting_human || 0);
   document.querySelector("#stats").innerHTML = [
-    ["folder-kanban", "项目", projectTotal, `${Number(payload.projects.running || 0)} 个运行中`, "blue"],
-    ["database", "素材", payload.material_count, "参考视频库", "cyan"],
-    ["circle-dollar-sign", "累计成本", `¥${Number(payload.total_cost_cny).toFixed(2)}`, "模型与工具", "violet"],
-    ["hard-drive", "存储", formatBytes(storageTotal), `${payload.run_count} 个运行目录`, "orange"],
-    ["triangle-alert", "失败任务", failedTasks, failedTasks ? "需要处理" : "运行正常", failedTasks ? "red" : "green"],
-    ["shield-check", "人工确认", humanGates, humanGates ? "等待确认" : "暂无待办", humanGates ? "orange" : "green"],
-    ["users", "成员", payload.users.active, `共 ${payload.users.total} 个账号`, "blue"],
-  ].map(([icon, label, value, note, tone]) => `<article class="metricCard metric-${tone}"><span class="metricIcon"><i data-lucide="${icon}"></i></span><div><span>${label}</span><strong>${value}</strong><small>${note}</small></div></article>`).join("");
+    ["folder-kanban", "项目", projectTotal, `${Number(payload.projects.running || 0)} 个运行中`, "blue", "recentProjectsPanel"],
+    ["database", "素材", payload.material_count, "参考视频库", "cyan", "backendPanel"],
+    ["circle-dollar-sign", "累计成本", `¥${Number(payload.total_cost_cny).toFixed(2)}`, "模型与工具", "violet", "adminAnalytics"],
+    ["hard-drive", "存储", formatBytes(storageTotal), `${payload.run_count} 个运行目录`, "orange", "adminAnalytics"],
+    ["triangle-alert", "失败任务", failedTasks, failedTasks ? "需要处理" : "运行正常", failedTasks ? "red" : "green", "failuresPanel"],
+    ["shield-check", "人工确认", humanGates, humanGates ? "等待确认" : "暂无待办", humanGates ? "orange" : "green", "projectStatusPanel"],
+    ["users", "成员", payload.users.active, `共 ${payload.users.total} 个账号`, "blue", "userPanel"],
+  ].map(([icon, label, value, note, tone, target]) => `<button type="button" class="metricCard metric-${tone}" data-admin-target="${target}" aria-label="查看${label}详情"><span class="metricIcon"><i data-lucide="${icon}"></i></span><div><span>${label}</span><strong>${value}</strong><small>${note}</small></div></button>`).join("");
+  document.querySelectorAll("[data-admin-target]").forEach((button) => button.addEventListener("click", () => {
+    document.getElementById(button.dataset.adminTarget)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
   document.querySelector("#projectTotal").textContent = `${projectTotal} 个项目`;
   const stateOrder = ["failed", "blocked", "needs_review", "awaiting_human", "running", "queued", "idle", "succeeded"];
   document.querySelector("#projectStates").innerHTML = stateOrder.filter((status) => Number(payload.projects[status] || 0) > 0).map((status) => `<div><span>${statusNames[status] || status}</span><strong>${payload.projects[status]}</strong><i style="--width:${projectTotal ? Math.max(3, Number(payload.projects[status]) / projectTotal * 100) : 0}%"></i></div>`).join("") || "暂无项目";
@@ -94,10 +97,12 @@ async function loadAdmin() {
   const providers = [...(payload.runtime.collector_backends || []), ...Object.entries(payload.runtime.providers || {}).filter(([id]) => ["doubao", "seedance", "speech_to_text"].includes(id)).map(([id, value]) => ({ id, ready: value.configured }))];
   document.querySelector("#backendStates").innerHTML = providers.map((provider) => `<div><span>${escapeHtml(providerNames[provider.id] || provider.id)}</span><strong class="${provider.ready ? "ready" : "missing"}">${provider.ready ? "可用" : "未配置"}</strong></div>`).join("");
   document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(formatTime(project.updated_at))}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';
+  const activeUsers = (users.items || []).filter((user) => user.status === "active");
   document.querySelector("#recentFailures").innerHTML = payload.recent_failures.map((failure) => `<article class="failureItem">
     <div class="failureSummary"><div><strong>${escapeHtml(failure.project_id)} · ${escapeHtml(failure.stage)}</strong><span>${escapeHtml(failure.agent)} · ${escapeHtml(formatTime(failure.updated_at))}</span></div><span class="statusTag status-failed">失败</span></div>
     <p>${escapeHtml(failureMessage(failure.error_json))}</p>
     <details><summary>查看原始日志</summary><pre>${escapeHtml(failure.error_json || "无错误详情")}</pre></details>
+    <div class="failureAssignment"><label for="failure-assignee-${Number(failure.task_id)}">负责人</label><select id="failure-assignee-${Number(failure.task_id)}" data-task-assignee="${Number(failure.task_id)}"><option value="">待指派</option>${activeUsers.map((user) => `<option value="${escapeHtml(user.username)}" ${failure.assignee === user.username ? "selected" : ""}>${escapeHtml(user.display_name || user.username)}</option>`).join("")}</select><button type="button" class="tableAction" data-admin-assign-task="${Number(failure.task_id)}">保存指派</button></div>
     <div class="failureActions"><a class="tableAction" href="/workbench#view=tasks">进入任务中心</a><button type="button" class="tableAction" data-admin-retry-task="${Number(failure.task_id)}" data-project-id="${escapeHtml(failure.project_id)}">重试</button><button type="button" class="tableAction danger" data-admin-ignore-task="${Number(failure.task_id)}">忽略</button></div>
   </article>`).join("") || '<p class="emptyMessage">当前没有失败节点</p>';
   bindFailureActions();
@@ -107,6 +112,19 @@ async function loadAdmin() {
 }
 
 function bindFailureActions() {
+  document.querySelectorAll("[data-admin-assign-task]").forEach((button) => button.addEventListener("click", async () => {
+    const taskId = Number(button.dataset.adminAssignTask);
+    const assignee = document.querySelector(`[data-task-assignee="${taskId}"]`)?.value || "";
+    if (!assignee) { window.alert("请选择负责人"); return; }
+    button.disabled = true;
+    try {
+      await api(`/api/v2/admin/tasks/${taskId}/assign`, { method: "POST", body: JSON.stringify({ assignee }) });
+      await loadAdmin();
+    } catch (error) {
+      window.alert(`指派失败：${error.message}`);
+      button.disabled = false;
+    }
+  }));
   document.querySelectorAll("[data-admin-retry-task]").forEach((button) => button.addEventListener("click", async () => {
     button.disabled = true;
     try {

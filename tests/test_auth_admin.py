@@ -79,6 +79,35 @@ def test_admin_can_ignore_failed_task_with_audit_event(monkeypatch, tmp_path):
         assert events[0]["task_id"] == task_id
 
 
+def test_admin_can_assign_failed_task_to_active_user(monkeypatch, tmp_path):
+    db_path = tmp_path / "assign-task.db"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_COOKIE_SECURE", "false")
+    monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
+    monkeypatch.setenv("VAF_ADMIN_USER", "admin")
+    monkeypatch.setenv("VAF_ADMIN_PASSWORD", "admin-pass")
+    queue.init_db(db_path=db_path)
+    task_id = queue.enqueue_task(project_id="assigned-project", stage="analysis", agent="analysis", db_path=db_path)
+    queue.mark_task_status(task_id, "failed", error={"message": "模型调用失败"}, db_path=db_path)
+
+    with TestClient(app) as admin:
+        assert admin.post(
+            "/api/v2/auth/login",
+            json={"username": "admin", "password": "admin-pass", "portal": "admin"},
+        ).status_code == 200
+        assigned = admin.post(f"/api/v2/admin/tasks/{task_id}/assign", json={"assignee": "admin"})
+        assert assigned.status_code == 200
+        assert assigned.json()["assignee"] == "admin"
+        summary = admin.get("/api/v2/admin/summary").json()
+        assert summary["recent_failures"][0]["assignee"] == "admin"
+        events = queue.list_events(event_type="task.assigned", db_path=db_path)
+        assert events[0]["task_id"] == task_id
+
+        missing = admin.post(f"/api/v2/admin/tasks/{task_id}/assign", json={"assignee": "missing-user"})
+        assert missing.status_code == 422
+
+
 def test_admin_can_create_and_disable_database_user(monkeypatch, tmp_path):
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "users.db"))
     monkeypatch.setenv("VAF_AUTH_ENABLED", "true")

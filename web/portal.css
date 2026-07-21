@@ -234,7 +234,7 @@ dialog::backdrop { background: rgba(17, 26, 47, .62); }
   gap: 12px;
   border: 0;
 }
-.statsGrid article.metricCard {
+.statsGrid .metricCard {
   min-height: 116px;
   display: grid;
   grid-template-columns: 42px minmax(0,1fr);
@@ -245,7 +245,13 @@ dialog::backdrop { background: rgba(17, 26, 47, .62); }
   padding: 16px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(15,23,42,.04);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
+.statsGrid .metricCard:hover { border-color: #9db8f5; box-shadow: 0 4px 12px rgba(37,99,235,.08); }
+.statsGrid .metricCard:focus-visible { outline: 3px solid rgba(37,99,235,.24); outline-offset: 2px; }
 .metricIcon {
   width: 40px;
   height: 40px;
@@ -280,6 +286,16 @@ dialog::backdrop { background: rgba(17, 26, 47, .62); }
 .backendList .ready { background: #ecfdf3; }
 .backendList .missing { background: #fef2f2; }
 
+.failureAssignment {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 220px) auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.failureAssignment label { color: var(--muted); font-size: 12px; }
+.failureAssignment select { min-height: 38px; }
+
 table { min-width: 720px; }
 th { background: #f8fafc; color: #64748b; font-weight: 650; }
 th:first-child { border-radius: 6px 0 0 6px; }
@@ -298,10 +314,11 @@ dialog { border: 0; border-radius: 8px; }
 @media (max-width: 700px) {
   .adminWorkspace { padding: 18px 14px 40px; }
   .statsGrid { grid-template-columns: 1fr; }
-  .statsGrid article.metricCard { min-height: 96px; }
+  .statsGrid .metricCard { min-height: 96px; }
   .adminColumns { grid-template-columns: 1fr; }
   .analyticsGrid { grid-template-columns: 1fr; }
   .analyticsGrid .analyticsPanel:first-child { grid-column: auto; }
   .distributionPanel { grid-template-columns: 100px minmax(0, 1fr); }
   .donutChart { width: 100px; }
+  .failureAssignment { grid-template-columns: 1fr; }
 }

@@ -244,6 +244,10 @@ class TaskIgnoreRequest(BaseModel):
     reason: str | None = None
 
 
+class TaskAssignRequest(BaseModel):
+    assignee: str
+
+
 class PipelineResumeRequest(BaseModel):
     project_id: str
     mock: bool = True
@@ -510,7 +514,15 @@ def admin_summary() -> dict[str, Any]:
         failures = [
             dict(row)
             for row in conn.execute(
-                "SELECT id AS task_id, project_id, stage, agent, error_json, updated_at FROM tasks WHERE status = 'failed' ORDER BY updated_at DESC LIMIT 12"
+                """
+                SELECT tasks.id AS task_id, tasks.project_id, tasks.stage, tasks.agent,
+                       tasks.error_json, tasks.updated_at, task_assignments.assignee
+                FROM tasks
+                LEFT JOIN task_assignments ON task_assignments.task_id = tasks.id
+                WHERE tasks.status = 'failed'
+                ORDER BY tasks.updated_at DESC
+                LIMIT 12
+                """
             ).fetchall()
         ]
     material_index = manual_import.load_library_index(_material_library_root())
@@ -2734,6 +2746,44 @@ def ignore_failed_task(task_id: int, request: TaskIgnoreRequest) -> dict[str, An
         db_path=_db_path(),
     )
     return {"ok": True, "task_id": task_id, "status": "cancelled"}
+
+
+@app.post("/api/v2/admin/tasks/{task_id}/assign")
+def assign_failed_task(task_id: int, request: TaskAssignRequest) -> dict[str, Any]:
+    assignee = request.assignee.strip()
+    if not assignee:
+        raise HTTPException(status_code=422, detail="请选择负责人")
+    try:
+        task = queue.get_task(task_id, db_path=_db_path())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="任务不存在") from exc
+    if task.status != "failed":
+        raise HTTPException(status_code=409, detail="只有失败任务可以指派负责人")
+    user = user_store.get_user_by_username(assignee, db_path=_db_path())
+    if not user or user.get("status") != "active":
+        raise HTTPException(status_code=422, detail="负责人账号不存在或已停用")
+    now = queue.utc_now()
+    with queue.get_conn(_db_path()) as conn:
+        conn.execute(
+            """
+            INSERT INTO task_assignments(task_id, assignee, assigned_by, updated_at)
+            VALUES (?, ?, 'admin', ?)
+            ON CONFLICT(task_id) DO UPDATE SET
+                assignee = excluded.assignee,
+                assigned_by = excluded.assigned_by,
+                updated_at = excluded.updated_at
+            """,
+            (task_id, user["username"], now),
+        )
+    queue.record_event(
+        project_id=task.project_id,
+        task_id=task_id,
+        event_type="task.assigned",
+        message=user["username"],
+        meta={"assignee": user["username"], "stage": task.stage},
+        db_path=_db_path(),
+    )
+    return {"ok": True, "task_id": task_id, "assignee": user["username"], "updated_at": now}
 
 
 @app.get("/api/v2/runs/{project_id}/{relative_path:path}", include_in_schema=False)

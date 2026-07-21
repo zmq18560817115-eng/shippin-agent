@@ -60,6 +60,13 @@ ON tasks(status, lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_stage
 ON tasks(project_id, stage, status);
 
+CREATE TABLE IF NOT EXISTS task_assignments (
+    task_id       INTEGER PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+    assignee      TEXT NOT NULL,
+    assigned_by   TEXT NOT NULL DEFAULT 'admin',
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE IF NOT EXISTS cost_entries (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
