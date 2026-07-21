@@ -2704,8 +2704,10 @@ def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
     if gate not in GATE_STAGES:
         raise HTTPException(status_code=422, detail=f"未知闸门：{gate}")
     if gate == "hero_gate":
-        _upgrade_storyboard_safety_locks(project_id)
-        preflight_errors = _storyboard_preflight_errors(project_id)
+        upgraded_shot_plan = _upgrade_storyboard_safety_locks(project_id)
+        # Validate the exact payload upgraded in this request. Re-reading the
+        # file here can observe stale data on a shared/persistent volume.
+        preflight_errors = _storyboard_preflight_errors(project_id, shot_plan=upgraded_shot_plan)
         if preflight_errors:
             raise HTTPException(
                 status_code=409,
@@ -3114,9 +3116,13 @@ def _require_selected_playable_takes(project_id: str, root: Path) -> None:
         raise HTTPException(status_code=409, detail=f"请先为以下镜头选用可播放 Take：{', '.join(failures)}")
 
 
-def _storyboard_preflight_errors(project_id: str) -> list[dict[str, Any]]:
+def _storyboard_preflight_errors(
+    project_id: str,
+    *,
+    shot_plan: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     project = _project_summary(project_id)
-    shot_plan = _load_artifact(project_id, "shot_plan")
+    shot_plan = shot_plan or _load_artifact(project_id, "shot_plan")
     warming_cup = "\u6052\u6e29\u676f" in str(project.get("product_id") or "")
     errors: list[dict[str, Any]] = []
     for shot in shot_plan.get("shots", []):
@@ -3133,7 +3139,8 @@ def _storyboard_preflight_errors(project_id: str) -> list[dict[str, Any]]:
                 missing.append("恒温杯与奶瓶分离规则")
             temperature_proof = number in {4, 5} or "temperature proof contract:" in lowered
             if temperature_proof:
-                if "fahrenheit" not in lowered or "never celsius" not in lowered:
+                celsius_forbidden = "never celsius" in lowered or "never show celsius" in lowered
+                if "fahrenheit" not in lowered or not celsius_forbidden:
                     missing.append("98°F 华氏温标规则")
             if any(token in prompt for token in ("掳F", "Â°F", "锟斤拷F")):
                 missing.append("98°F 温标文本编码")
@@ -3150,7 +3157,7 @@ def _storyboard_preflight_errors(project_id: str) -> list[dict[str, Any]]:
     return errors
 
 
-def _upgrade_storyboard_safety_locks(project_id: str) -> None:
+def _upgrade_storyboard_safety_locks(project_id: str) -> dict[str, Any]:
     """Migrate older saved prompts before applying the current gate checks."""
     from tools.llm.doubao_shotplan import ensure_shot_locks
 
@@ -3159,7 +3166,7 @@ def _upgrade_storyboard_safety_locks(project_id: str) -> None:
     script_copy = _load_artifact_or_none(project_id, "script_copy")
     ensure_shot_locks(shot_plan, script_copy)
     if json.dumps(shot_plan, ensure_ascii=False, sort_keys=True) == before:
-        return
+        return shot_plan
     shot_plan["quality_assessment"] = creative_quality.assess_storyboard(shot_plan, script_copy)
     artifacts.save_artifact(
         project_id,
@@ -3168,6 +3175,7 @@ def _upgrade_storyboard_safety_locks(project_id: str) -> None:
         run_root=_run_root(project_id),
         script_copy=script_copy,
     )
+    return shot_plan
 
 
 def _run_root(project_id: str) -> Path:

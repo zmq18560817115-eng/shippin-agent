@@ -23,18 +23,29 @@ def test_hero_gate_repairs_an_older_incomplete_storyboard_prompt(tmp_path: Path,
         plan = client.get("/api/v2/artifacts/preflight-demo/shot_plan").json()
         plan["shots"][0]["seedance_prompt"] = "Product appearance must match the white-background hero reference."
         plan["shots"][0]["visual_prompt"] = plan["shots"][0]["seedance_prompt"]
+        for shot in plan["shots"][3:5]:
+            shot["seedance_prompt"] = (
+                "Continuity lock: same location. Product identity lock: product appearance must match the "
+                "white-background hero reference. The warming cup and baby bottle are separate products. "
+                "Never insert the bottle into the cup."
+            )
         assert client.put("/api/v2/artifacts/preflight-demo/shot_plan", json=plan).status_code == 200
         response = client.post(
             "/api/v2/gates/approve",
             json={"project_id": "preflight-demo", "stage": "hero_gate", "approver": "test", "mock": True},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     with TestClient(app) as client:
         repaired = client.get("/api/v2/artifacts/preflight-demo/shot_plan").json()
     prompt = repaired["shots"][0]["seedance_prompt"].casefold()
     assert "continuity lock:" in prompt
     assert "fully unlit" in prompt
+    for shot in repaired["shots"][3:5]:
+        temperature_prompt = shot["seedance_prompt"].casefold()
+        assert "temperature proof contract:" in temperature_prompt
+        assert "fahrenheit" in temperature_prompt
+        assert "never show celsius" in temperature_prompt
 
 
 def test_hero_gate_blocks_corrupt_temperature_and_mismatched_pour(tmp_path: Path, monkeypatch) -> None:
