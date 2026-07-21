@@ -2245,6 +2245,7 @@ function renderStoryboardNode() {
   host.className = "editor";
   host.innerHTML = `
     ${renderCreativeQuality(state.shotPlan.quality_assessment)}
+    ${renderStoryboardContactSheet()}
     <div class="tableWrap">
       <table class="scriptTable storyboardTable">
         <thead><tr><th>#</th><th>画面</th><th>生成提示词</th><th>镜头时长（3-10 秒）</th></tr></thead>
@@ -2263,18 +2264,58 @@ function renderStoryboardNode() {
     try { await saveShotPlan(); showView("production"); } catch (error) { toast(error.message, "error"); }
   });
   $("#regenerateStoryboard").addEventListener("click", () => runManualStage("storyboard"));
+  host.querySelectorAll("[data-focus-storyboard-shot]").forEach((button) => {
+    button.addEventListener("click", () => focusStoryboardShot(Number(button.dataset.focusStoryboardShot)));
+  });
 }
 
 function renderShotRow(shot) {
   const duration = shot.camera_motion?.duration_sec || 6;
   return `
-    <tr>
+    <tr data-storyboard-shot="${Number(shot.number)}">
       <td>${Number(shot.number)}</td>
       <td><textarea class="copyField" data-shot="${shot.number}" data-shot-field="visual_zh">${escapeHtml(shot.visual_zh || shot.visual || "")}</textarea></td>
       <td><textarea class="promptField" data-shot="${shot.number}" data-shot-field="seedance_prompt_zh">${escapeHtml(shot.seedance_prompt_zh || shot.seedance_prompt || shot.visual_prompt || "")}</textarea></td>
       <td><input type="number" min="3" max="10" data-shot="${shot.number}" data-shot-field="duration" value="${Number(duration)}" /></td>
     </tr>
   `;
+}
+
+function renderStoryboardContactSheet() {
+  const frames = state.assetManifest?.hero_frames || [];
+  const gateActive = state.selected?.current_gate === "hero_gate";
+  const gateDone = Boolean(state.assetManifest) && !gateActive;
+  const frameByShot = new Map(frames.map((frame) => [Number(frame.number), frame]));
+  const tiles = (state.shotPlan?.shots || []).map((shot) => {
+    const number = Number(shot.number);
+    const frame = frameByShot.get(number);
+    const status = frame ? (gateDone ? "已确认" : "待确认") : "待生成";
+    return `
+      <button type="button" class="storyboardContactTile ${frame ? "hasFrame" : "missingFrame"}" data-focus-storyboard-shot="${number}">
+        <span class="storyboardContactMedia">
+          ${frame?.preview_url
+            ? `<img src="${escapeAttr(frame.preview_url)}" alt="镜头 ${number} 关键帧" loading="lazy" />`
+            : '<span aria-hidden="true">暂无画面</span>'}
+        </span>
+        <span class="storyboardContactMeta"><strong>镜头 ${number}</strong><small>${escapeHtml(status)} · ${Number(shot.camera_motion?.duration_sec || 6)} 秒</small></span>
+      </button>
+    `;
+  }).join("");
+  return `
+    <section class="storyboardContactSheet" aria-label="分镜关键帧预览">
+      <div class="nodeToolHead"><div><strong>关键帧总览</strong><span>${gateActive ? "待逐镜确认；点击画面可定位分镜" : gateDone ? "已完成人工确认；点击画面可继续修改分镜" : "保存分镜后生成关键帧"}</span></div><span class="gateState ${gateActive ? "pending" : gateDone ? "done" : "empty"}">${gateActive ? "待确认" : gateDone ? "已确认" : "未生成"}</span></div>
+      <div class="storyboardContactRail">${tiles}</div>
+    </section>
+  `;
+}
+
+function focusStoryboardShot(shotNumber) {
+  const row = document.querySelector(`[data-storyboard-shot="${Number(shotNumber)}"]`);
+  if (!row) return;
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.classList.remove("focusFlash");
+  requestAnimationFrame(() => row.classList.add("focusFlash"));
+  row.querySelector("textarea")?.focus({ preventScroll: true });
 }
 
 function renderProductionNode() {
@@ -2569,49 +2610,52 @@ async function rejectAndRegenerate(shotIndex, takeId) {
 
 function renderHeroGate() {
   const host = $("#heroEditor");
-  $("#heroGateState").textContent = state.selected?.current_gate === "hero_gate" ? "待确认" : "";
+  const gateActive = state.selected?.current_gate === "hero_gate";
+  $("#heroGateState").textContent = gateActive ? "待确认" : state.assetManifest ? "已确认" : "";
   if (!state.selected || !state.assetManifest) {
     host.className = "emptyState";
     host.textContent = "当前项目尚未生成可核对的关键帧。";
     return;
   }
-  if (state.selected.current_gate !== "hero_gate") {
-    host.className = "gateHistory";
-    host.innerHTML = `<strong>关键帧闸门已完成</strong><span>当前项目已进入“${escapeHtml(stageLabel(state.selected.current_gate || state.selected.current_stage))}”，可回看产品身份锚点，无需重复确认。</span>`;
-    return;
-  }
   host.className = "heroReview";
   const shots = new Map((state.shotPlan?.shots || []).map((shot) => [Number(shot.number), shot]));
-  const identityFrame = state.assetManifest.hero_frames[0];
+  const frames = state.assetManifest.hero_frames || [];
+  const identityFrame = frames[0];
   host.innerHTML = `
     <div class="identityAnchor">
-      <div class="nodeToolHead"><div><strong>产品身份锚点</strong><span>所有镜头锁定同一产品外观，不代表场景关键帧</span></div></div>
-      <div class="thumb"><img src="${escapeAttr(identityFrame?.preview_url || "")}" alt="产品身份参考" /></div>
+      <div class="nodeToolHead"><div><strong>产品身份锚点</strong><span>所有镜头锁定同一产品外观</span></div><span class="gateState ${gateActive ? "pending" : "done"}">${gateActive ? "待确认" : "已确认"}</span></div>
+      <div class="thumb">${identityFrame?.preview_url ? `<img src="${escapeAttr(identityFrame.preview_url)}" alt="产品身份参考" />` : "暂无产品锚点"}</div>
     </div>
     <div class="shotContactSheet">
       <div class="nodeToolHead"><div><strong>逐镜核对表</strong><span>确认场景、动作、温标与前后连续性</span></div></div>
-      ${state.assetManifest.hero_frames.map((frame) => renderHeroFrame(frame, shots.get(Number(frame.number)))).join("")}
+      ${frames.map((frame) => renderHeroFrame(frame, shots.get(Number(frame.number)), gateActive)).join("")}
     </div>
-    <div class="actionBar wide"><button type="button" id="approveHero">全部确认</button></div>
+    <div class="actionBar wide">${gateActive ? '<button type="button" id="approveHero" class="primary">确认全部关键帧并进入制作</button>' : `<span class="gateCompleteNote">关键帧已确认，项目当前位于“${escapeHtml(stageLabel(state.selected.current_gate || state.selected.current_stage))}”</span>`}</div>
   `;
   host.querySelectorAll("[data-regen]").forEach((button) => {
     button.addEventListener("click", () => regenHero(Number(button.dataset.regen)));
   });
-  $("#approveHero").addEventListener("click", approveHeroGate);
+  host.querySelectorAll("[data-focus-storyboard-shot]").forEach((button) => {
+    button.addEventListener("click", () => focusStoryboardShot(Number(button.dataset.focusStoryboardShot)));
+  });
+  $("#approveHero")?.addEventListener("click", approveHeroGate);
 }
 
-function renderHeroFrame(frame, shot) {
+function renderHeroFrame(frame, shot, gateActive) {
   const camera = shot?.camera_motion
     ? `${motionLabels[shot.camera_motion.type] || shot.camera_motion.type || ""} · ${shot.camera_motion.duration_sec || 3}s`
     : "";
   return `
     <article class="contactShot">
+      <button type="button" class="contactShotPreview" data-focus-storyboard-shot="${Number(frame.number)}" aria-label="定位镜头 ${Number(frame.number)} 分镜">
+        ${frame.preview_url ? `<img src="${escapeAttr(frame.preview_url)}" alt="镜头 ${Number(frame.number)} 关键帧" loading="lazy" />` : "暂无画面"}
+      </button>
       <div class="heroMeta">
         <strong>镜头 ${frame.number}</strong>
         <span>${escapeHtml(camera)}</span>
-        <p>${escapeHtml(shot?.visual || "")}</p>
+        <p>${escapeHtml(shot?.visual_zh || shot?.visual || "")}</p>
       </div>
-      <button type="button" data-regen="${frame.number}">重建锚点</button>
+      ${gateActive ? `<button type="button" data-regen="${frame.number}">重新生成</button>` : '<span class="gateState done">已确认</span>'}
     </article>
   `;
 }

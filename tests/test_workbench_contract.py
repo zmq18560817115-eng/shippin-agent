@@ -43,6 +43,11 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert "toggleScriptSectionLock" in script
     assert "undoScriptSection" in script
     assert "renderScriptVersionDiff" in script
+    assert "renderStoryboardContactSheet" in script
+    assert "focusStoryboardShot" in script
+    assert 'data-storyboard-shot="${Number(shot.number)}"' in script
+    assert 'class="contactShotPreview"' in script
+    assert "确认全部关键帧并进入制作" in script
     assert 'data-lock-section="${section.number}"' in script
     assert 'data-undo-section="${section.number}"' in script
     assert 'id="projectSearch"' in html
