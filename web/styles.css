@@ -3082,6 +3082,30 @@ pre {
   gap: 10px;
 }
 
+.deliveryModeBanner {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #a9dac8;
+  border-radius: 6px;
+  color: #0b6b4f;
+  background: #eefaf5;
+}
+
+.deliveryModeBanner.mock {
+  border-color: #f1c7c7;
+  color: #a32929;
+  background: #fff4f4;
+}
+
+.deliveryModeBanner span { font-size: 12px; }
+
+@media (max-width: 700px) {
+  .deliveryModeBanner { align-items: flex-start; flex-direction: column; }
+}
+
 .deliveryDetail video {
   width: min(360px, 100%);
   aspect-ratio: 9 / 16;

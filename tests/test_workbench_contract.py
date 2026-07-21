@@ -39,6 +39,8 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert 'id="projectPagination"' in html
     assert "state.projectStatusFilter" in script
     assert "projectBucket(project) === state.projectStatusFilter" in script
+    assert "ensureDeliverySelection" in script
+    assert "演练产物 · 禁止外发" in script
     assert 'id="independentAgentContract"' in html
     assert 'id="independentCreativeStyle"' in html
     assert 'id="independentTargetAudience"' in html

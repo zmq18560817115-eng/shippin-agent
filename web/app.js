@@ -459,7 +459,7 @@ function bindEvents() {
     button.addEventListener("click", async () => {
       state.deliveryFilter = button.dataset.deliveryFilter;
       if (state.deliveryFilter === "downloads") await loadDeliveryDownloads();
-      renderDelivery();
+      await ensureDeliverySelection();
     });
   });
   window.addEventListener("hashchange", () => {
@@ -858,7 +858,7 @@ function showView(view, { updateUrl = true } = {}) {
   }
   if (next === "home") renderHomeDashboard();
   if (next === "tasks") renderTaskCenter();
-  if (["archive", "delivery"].includes(next)) loadDeliveryDownloads();
+  if (["archive", "delivery"].includes(next)) loadDeliveryDownloads().then(ensureDeliverySelection);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -2524,6 +2524,21 @@ function deliveryBuckets() {
   return buckets;
 }
 
+async function ensureDeliverySelection() {
+  if (state.deliveryFilter === "downloads") {
+    renderDelivery();
+    return;
+  }
+  const candidates = deliveryBuckets()[state.deliveryFilter] || [];
+  const currentIsVisible = candidates.some((project) => project.project_id === state.selectedId);
+  if (candidates.length && !currentIsVisible) {
+    state.selectedId = candidates[0].project_id;
+    await loadSelectedProject(state.selectedId);
+    return;
+  }
+  renderDelivery();
+}
+
 async function loadDeliveryDownloads() {
   try {
     const payload = await api("/api/v2/delivery/downloads?limit=100");
@@ -2593,6 +2608,7 @@ function renderDelivery() {
       `).join("")}
     </div>
     <div class="deliveryDetail">
+      ${selectedDelivered ? `<div class="deliveryModeBanner ${selectedDelivered.mock ? "mock" : "real"}"><strong>${selectedDelivered.mock ? "演练产物 · 禁止外发" : "真实生产产物"}</strong><span>${selectedDelivered.mock ? "仅用于流程验证，不可作为正式广告素材。" : "请完成成片人工目检后再下载交付。"}</span></div>` : ""}
       ${selectedDelivered ? (renderUrl
         ? `<video controls preload="metadata" data-video-state src="${escapeAttr(renderUrl)}"></video><p class="mediaState" data-media-state>正在读取交付成片...</p>`
         : `<p class="mediaState error">当前项目没有可播放的交付成片，请回到“生产”完成合成与质检。</p>`
