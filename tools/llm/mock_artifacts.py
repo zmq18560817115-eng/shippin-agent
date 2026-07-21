@@ -3,7 +3,19 @@ from __future__ import annotations
 from typing import Any
 
 
-def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, provider: str = "doubao") -> dict[str, Any]:
+def mock_script_copy(
+    project_id: str,
+    product_id: str = "便携恒温杯",
+    *,
+    provider: str = "doubao",
+    creative_request: str = "",
+) -> dict[str, Any]:
+    profile = _creative_profile(creative_request)
+    place = profile["place"]
+    audience = profile["audience"]
+    opening = profile["opening"]
+    pressure = profile["pressure"]
+    cta = profile["cta"]
     return {
         "version": "2.0",
         "project_id": project_id,
@@ -13,40 +25,41 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
         "generator": {
             "provider": provider,
             "model": "mock",
-            "prompt_version": "block4-mock",
+            "prompt_version": "input-aware-mock-v1",
         },
+        "creative_request": creative_request.strip(),
         "sections": [
             {
                 "number": 1,
                 "role": "钩子",
                 "timing": "0-6s",
-                "voiceover_zh": "夜间喂养准备，可以更轻松。",
-                "scene_zh": "深夜卧室，暖黄色床头灯，床头柜上有恒温杯、干净奶瓶与喂养用品；同一位照护者穿浅色家居服。",
-                "action_zh": "照护者轻放恒温杯到床头柜，建立夜间喂养准备情境。",
-                "story_beat_zh": "从真实夜间场景切入，让观众识别熟悉的准备时刻。",
-                "subtitle_zh": "夜间喂养准备，可以更轻松。",
+                "voiceover_zh": opening,
+                "scene_zh": f"{place}，{profile['light']}，恒温杯、独立干净奶瓶与随身喂养用品清晰分开；同一位{audience}保持服装和随身物品一致。",
+                "action_zh": profile["opening_action"],
+                "story_beat_zh": f"从{profile['context']}的未完成动作切入，让目标受众立即识别自己的使用时刻。",
+                "subtitle_zh": opening,
                 "selling_points": [],
             },
             {
                 "number": 2,
                 "role": "痛点",
                 "timing": "6-12s",
-                "voiceover_zh": "奶液变冷和漫长等待，会让睡前准备更困难。",
-                "scene_zh": "保持同一卧室、暖光和床头柜，等待中的奶瓶位于画面内。",
-                "action_zh": "照护者看向等待中的奶液与奶瓶，短暂停顿后开始准备。",
+                "voiceover_zh": pressure,
+                "scene_zh": f"保持同一{place}、光线和人物状态，等待中的独立奶瓶与时间压力同时进入画面。",
+                "action_zh": profile["pressure_action"],
                 "story_beat_zh": "将麻烦具体化，为解决方案出现建立动机。",
-                "subtitle_zh": "奶液变冷和漫长等待，会让睡前准备更困难。",
+                "subtitle_zh": pressure,
                 "selling_points": [],
             },
             {
                 "number": 3,
                 "role": "方案",
                 "timing": "12-18s",
-                "voiceover_zh": "先将允许的奶液来源倒入恒温杯，开始准备。",
-                "scene_zh": "同一床头柜台面，恒温杯与独立的干净奶瓶并排；产品外观匹配已批准身份图。",
+                "voiceover_zh": f"在{profile['context']}，先把允许的奶液来源倒入恒温杯。",
+                "scene_zh": f"同一{place}的稳定台面，恒温杯与独立干净奶瓶并排，产品外观匹配已批准身份图。",
                 "action_zh": "将允许的奶液来源倒入恒温杯；本镜不出现向奶瓶倒液。",
                 "story_beat_zh": "产品作为解决方案进入，先完成正确使用流程的第一步。",
-                "subtitle_zh": "先将允许的奶液来源倒入恒温杯，开始准备。",
+                "subtitle_zh": f"在{profile['context']}，先把允许的奶液来源倒入恒温杯。",
                 "selling_points": ["USB-C rechargeable"],
             },
             {
@@ -54,7 +67,7 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
                 "role": "证明",
                 "timing": "18-24s",
                 "voiceover_zh": "准备完成后，经圆形出液口倒入独立的干净奶瓶。",
-                "scene_zh": "保持同一床头柜、照护者、服装与灯光，恒温杯和独立奶瓶清晰可见。",
+                "scene_zh": f"保持同一{place}、人物、服装与光线，恒温杯和独立奶瓶清晰可见。",
                 "action_zh": "保持主盖闭合，倾斜恒温杯，让奶液从圆形出液口连续倒入独立的干净奶瓶；禁止反向倒液或把奶瓶放入杯中。",
                 "story_beat_zh": "完成正确使用流程的第二步，用可见动作证明方案可执行。",
                 "subtitle_zh": "准备完成后，经圆形出液口倒入独立的干净奶瓶。",
@@ -64,15 +77,66 @@ def mock_script_copy(project_id: str, product_id: str = "便携恒温杯", *, pr
                 "number": 5,
                 "role": "行动号召",
                 "timing": "24-30s",
-                "voiceover_zh": "为下一次夜间喂养先收藏这条。",
-                "scene_zh": "回到整洁的床头柜全景，准备完成的奶瓶与恒温杯位于同一画面。",
+                "voiceover_zh": cta,
+                "scene_zh": f"回到整洁的{place}全景，准备完成的独立奶瓶与恒温杯位于同一画面。",
                 "action_zh": "照护者收好物品，镜头停留在产品与准备完成的奶瓶上。",
                 "story_beat_zh": "从混乱回到有序，以低压力行动号召完成收束。",
-                "subtitle_zh": "为下一次夜间喂养先收藏这条。",
+                "subtitle_zh": cta,
                 "selling_points": [],
             },
         ],
         "feedback_constraints_applied": [],
+    }
+
+
+def _creative_profile(request: str) -> dict[str, str]:
+    text = " ".join(request.strip().split())
+    if any(token in text for token in ("旅行", "旅途", "出行", "机场", "高铁", "酒店", "车内")):
+        return {
+            "place": "明亮的高铁候车区行李整理台",
+            "light": "自然窗光与柔和顶灯",
+            "audience": "准备出行的新手照护者",
+            "context": "旅途中",
+            "opening": "行程已经开始，喂养准备别再临时找办法。",
+            "opening_action": "照护者一手扶住行李，一手从侧袋取出恒温杯，身后的登车提示即将变化。",
+            "pressure": "空间有限、时间在走，奶液准备更需要清楚的顺序。",
+            "pressure_action": "照护者看一眼登车时间，再把奶液来源、恒温杯和独立奶瓶依次排开。",
+            "cta": "下次带宝宝出发前，把这套准备顺序存下来。",
+        }
+    if any(token in text for token in ("办公室", "办公", "通勤", "工位", "午休")):
+        return {
+            "place": "安静的办公室母婴室操作台",
+            "light": "午后自然光与中性顶灯",
+            "audience": "需要兼顾工作的通勤照护者",
+            "context": "工作间隙",
+            "opening": "午休只剩十分钟，准备动作不能再绕远。",
+            "opening_action": "照护者放下工牌和手机，把恒温杯从通勤包中取出并腾出操作台。",
+            "pressure": "会议时间在靠近，反复等待会打乱整个下午。",
+            "pressure_action": "照护者看向手机日程，随后按使用顺序摆好奶液来源与独立奶瓶。",
+            "cta": "把这套工作日准备流程留给下一次忙碌午后。",
+        }
+    if any(token in text for token in ("露营", "户外", "公园", "野餐")):
+        return {
+            "place": "有遮阳棚的公园野餐桌",
+            "light": "柔和日光与树影",
+            "audience": "喜欢带宝宝户外活动的照护者",
+            "context": "户外停留时",
+            "opening": "风景可以慢慢看，喂养准备要先安排好。",
+            "opening_action": "照护者压住被风吹动的野餐布，从收纳包中取出恒温杯。",
+            "pressure": "户外台面有限，步骤越混乱越容易手忙脚乱。",
+            "pressure_action": "照护者整理台面，将奶液来源、恒温杯和独立奶瓶按顺序摆放。",
+            "cta": "下次去户外前，把这套准备清单一起带上。",
+        }
+    return {
+        "place": "深夜卧室床头柜",
+        "light": "暖黄色床头灯",
+        "audience": "夜间喂养照护者",
+        "context": "夜间喂养时",
+        "opening": "夜里醒来的那一刻，准备流程越清楚越从容。",
+        "opening_action": "照护者轻放恒温杯到床头柜，伸手整理独立奶瓶与喂养用品。",
+        "pressure": "奶液变冷和漫长等待，会让睡前准备更困难。",
+        "pressure_action": "照护者看向等待中的奶液与奶瓶，短暂停顿后开始准备。",
+        "cta": "为下一次夜间喂养先收藏这套准备顺序。",
     }
 
 
@@ -124,7 +188,7 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
         "project_id": project_id,
         "script_copy_ref": "artifacts/script_copy.json",
         "aspect_ratio": "9:16",
-        "scene_continuity": "同一深夜卧室、暖黄色床头灯与床头柜区域",
-        "character_continuity": "同一位成年照护者，保持脸部身份、发型、浅色家居服、手部与体态一致",
+        "scene_continuity": str(script_copy["sections"][0].get("scene_zh") or "同一生活场景与光线"),
+        "character_continuity": "同一位成年照护者，保持身份、发型、服装、手部与体态一致",
         "shots": shots,
     }

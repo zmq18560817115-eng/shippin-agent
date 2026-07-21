@@ -280,3 +280,91 @@ def test_standalone_script_promotes_to_a_gated_production_project(tmp_path: Path
     assert promoted.json()["project"]["standalone"] is False
     assert promoted.json()["project"]["current_stage"] == "script_gate"
     assert promoted.json()["engine"]["status"] == "awaiting_human"
+
+
+def test_independent_content_agents_preserve_distinct_user_intent(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "intent-aware.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+    travel = "便携恒温杯用于高铁旅行，新手照护者携带宝宝出行，投放 TikTok。"
+    office = "便携恒温杯用于办公室午休，通勤照护者会议前快速准备，投放 TikTok。"
+
+    with TestClient(app) as client:
+        travel_research = client.post(
+            "/api/v2/agents/run",
+            json={"action": "research", "source_text": travel, "mock": True},
+        )
+        office_research = client.post(
+            "/api/v2/agents/run",
+            json={"action": "research", "source_text": office, "mock": True},
+        )
+        travel_strategy = client.post(
+            "/api/v2/agents/run",
+            json={"action": "strategy", "source_text": travel, "mock": True},
+        )
+        office_strategy = client.post(
+            "/api/v2/agents/run",
+            json={"action": "strategy", "source_text": office, "mock": True},
+        )
+        travel_script = client.post(
+            "/api/v2/agents/run",
+            json={"action": "script", "source_text": travel, "mock": True},
+        )
+        office_script = client.post(
+            "/api/v2/agents/run",
+            json={"action": "script", "source_text": office, "mock": True},
+        )
+        travel_storyboard = client.post(
+            "/api/v2/agents/run",
+            json={"action": "storyboard", "source_text": travel, "mock": True},
+        )
+        unsafe_review = client.post(
+            "/api/v2/agents/run",
+            json={"action": "review", "source_text": "恒温杯显示 98°C，再把整个奶瓶放入杯中加热。", "mock": True},
+        )
+
+    responses = (
+        travel_research,
+        office_research,
+        travel_strategy,
+        office_strategy,
+        travel_script,
+        office_script,
+        travel_storyboard,
+        unsafe_review,
+    )
+    assert all(response.status_code == 200 for response in responses)
+
+    travel_research_text = str(travel_research.json()["artifact"])
+    office_research_text = str(office_research.json()["artifact"])
+    assert "旅途" in travel_research_text
+    assert "工作" in office_research_text
+    assert travel_research_text != office_research_text
+
+    travel_strategy_text = str(travel_strategy.json()["artifact"])
+    office_strategy_text = str(office_strategy.json()["artifact"])
+    assert "旅途" in travel_strategy_text
+    assert "办公室" in office_strategy_text
+    assert travel_strategy_text != office_strategy_text
+
+    travel_sections = travel_script.json()["artifact"]["sections"]
+    office_sections = office_script.json()["artifact"]["sections"]
+    assert "高铁" in travel_sections[0]["scene_zh"]
+    assert "办公室" in office_sections[0]["scene_zh"]
+    assert travel_sections[0]["voiceover_zh"] != office_sections[0]["voiceover_zh"]
+    assert travel_script.json()["artifact"]["creative_request"]
+
+    storyboard = travel_storyboard.json()["artifact"]
+    assert "高铁" in storyboard["scene_continuity"]
+    assert "高铁" in storyboard["shots"][0]["visual"]
+    assert len(storyboard["shots"]) == 5
+
+    review = unsafe_review.json()["artifact"]
+    assert review["status"] == "BLOCKED"
+    assert all(comment.startswith("源需求：") for comment in review["comments"])
+    assert any("98°F" in comment for comment in review["comments"])
+    assert any("独立物体" in comment for comment in review["comments"])
+
+    for script in (travel_script.json()["artifact"], office_script.json()["artifact"]):
+        joined = str(script)
+        assert "98°C" not in joined
+        assert "独立" in script["sections"][3]["action_zh"]

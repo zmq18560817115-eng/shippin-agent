@@ -19,7 +19,23 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         return _execute_real(payload, context)
     project_id = str(payload.get("project_id") or "ref-mock")
     product_id = str(payload.get("product_id") or "便携恒温杯")
-    script_copy = mock_script_copy(project_id, product_id, provider="doubao")
+    analysis_report = payload.get("analysis_report") or {}
+    strategy_brief = payload.get("strategy_brief") or {}
+    creative_request = " ".join(
+        str(value).strip()
+        for value in (
+            strategy_brief.get("content_direction"),
+            analysis_report.get("voiceover_text"),
+            analysis_report.get("hook_3s"),
+        )
+        if str(value or "").strip()
+    )
+    script_copy = mock_script_copy(
+        project_id,
+        product_id,
+        provider="doubao",
+        creative_request=creative_request,
+    )
     artifacts.validate_artifact("script_copy", script_copy)
     return ToolResult.success(
         {"script_copy": script_copy},

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from libshared import artifacts
@@ -15,21 +16,26 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         require_env(context, "DOUBAO_API_KEY")
         return _execute_real(payload, context)
     project_id = str(payload.get("project_id") or "ref-mock")
+    script_copy = payload.get("script_copy") or {}
+    script_text = json.dumps(script_copy.get("sections") or [], ensure_ascii=False)
+    source_text = str(payload.get("review_source_text") or "")
+    violations = _mock_violations(source_text, prefix="源需求") + _mock_violations(script_text, prefix="成稿")
+    status = "BLOCKED" if violations else "PASS"
     report = {
         "version": "2.0",
         "project_id": project_id,
         "artifact_type": "review_report",
-        "status": "PASS",
+        "status": status,
         "scores": {
             "hook": 8,
             "clarity": 8,
-            "compliance": 10,
+            "compliance": 2 if violations else 10,
             "product_fit": 9,
             "pacing": 8,
             "cta": 8,
             "asset_traceability": 9,
         },
-        "comments": ["演练审核通过：文案符合当前产品安全表达规则。"],
+        "comments": violations or ["演练审核通过：文案符合当前产品安全表达规则，产品使用方向与温标表达未发现违规。"],
     }
     artifacts.validate_artifact("review_report", report)
     return ToolResult.success(
@@ -39,10 +45,30 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     )
 
 
+def _mock_violations(script_text: str, *, prefix: str) -> list[str]:
+    checks = (
+        (("98°C", "98 摄氏", "98摄氏"), "检测到错误温标：产品可见温度只能是 98°F，禁止 98°C。"),
+        (("奶瓶放入杯", "奶瓶插入杯", "把奶瓶放进"), "检测到错误使用方式：恒温杯与奶瓶必须是两个独立物体。"),
+        (("保证治愈", "医疗效果", "促进泌乳", "增加奶量"), "检测到未经批准的医疗或保证性宣称。"),
+        (("全网第一", "最好", "百分百", "100%有效"), "检测到绝对化或保证性广告表达。"),
+    )
+    clauses = [clause.strip() for clause in script_text.replace("；", "。").replace(";", ".").split("。")]
+    violations = []
+    for tokens, message in checks:
+        if any(
+            token in clause and not any(negation in clause for negation in ("禁止", "不得", "不能", "不可", "避免"))
+            for clause in clauses
+            for token in tokens
+        ):
+            violations.append(message)
+    return [f"{prefix}：{message}" for message in violations]
+
+
 def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     project_id = str(payload.get("project_id") or "ref-real")
     script_copy = payload.get("script_copy") or {}
     analysis_report = payload.get("analysis_report") or {}
+    review_source_text = str(payload.get("review_source_text") or "")
     response, meta = ark.chat_json(
         context,
         api_key_names=("DOUBAO_API_KEY", "ARK_DOUBAO_API_KEY", "ARK_API_KEY"),
@@ -51,16 +77,16 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "role": "system",
                 "content": (
                     agent_system_prompt("review")
-                    + "You review baby product short-video scripts for compliance and product factuality. "
-                    "Return strict JSON only with status PASS, WARNING, or BLOCKED."
+                    + "你负责审核母婴产品短视频脚本的合规性、产品事实与使用动作。"
+                    "只返回严格 JSON，状态只能是 PASS、WARNING 或 BLOCKED，评论必须使用简体中文。"
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    "Review this script. Block unsupported medical, guarantee, best, pain-free, lactation, "
-                    "competitor, or unsafe baby-product claims. Return status, scores, comments. "
-                    f"Analysis: {analysis_report} Script: {script_copy}"
+                    "审核以下脚本。遇到未经批准的医疗效果、保证性、第一/最好、无痛、泌乳、竞品贬低或不安全使用宣称时必须阻断。"
+                    "同时检查温度只能显示 98°F，恒温杯与奶瓶为两个独立物体，并返回 status、scores、comments。"
+                    f"用户原始需求：{review_source_text} 素材分析：{analysis_report} 脚本：{script_copy}"
                 ),
             },
         ],

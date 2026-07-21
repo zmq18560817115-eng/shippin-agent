@@ -985,6 +985,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             {
                 "script_copy": script,
                 "analysis_report": _load_artifact_or_none(project_id, "analysis_report") or {},
+                "review_source_text": (request.source_text or request.prompt or "").strip(),
             }
         )
         tool_name, artifact_name = "doubao_review", "review_report"

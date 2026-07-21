@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from libshared import artifacts
@@ -16,12 +17,13 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         return _execute_real(payload, context)
     project_id = str(payload.get("project_id") or "ref-mock")
     transcript = str(payload.get("transcript_text") or "")
+    hook = _mock_hook(transcript)
     report = {
         "version": "2.0",
         "project_id": project_id,
         "source_link_id": payload.get("source_link_id"),
         "material_meta_ref": str(payload.get("source_material_id") or payload.get("source_url") or ""),
-        "hook_3s": "夜间喂养准备，也可以更轻松。",
+        "hook_3s": hook,
         "structure": ["钩子", "痛点", "方案", "证明", "行动号召"],
         "voiceover_text": transcript or "便携恒温杯夜间喂养准备的演练素材转写。",
         "pacing": [
@@ -33,7 +35,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         ],
         "keyframes": [],
         "shot_breakdown": _fallback_shot_breakdown(),
-        "fingerprint": "mock-analysis",
+        "fingerprint": f"mock-analysis-{hashlib.sha256(transcript.encode('utf-8')).hexdigest()[:10]}",
     }
     artifacts.validate_artifact("analysis_report", report)
     return ToolResult.success(
@@ -41,6 +43,16 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         cost_cny=context.pricing_for("doubao_analyze") if not context.mock else 0.0,
         meta={"tool": "doubao_analyze", "mock": context.mock, "model": "mock" if context.mock else "doubao"},
     )
+
+
+def _mock_hook(transcript: str) -> str:
+    if any(token in transcript for token in ("旅行", "旅途", "出行", "机场", "高铁", "酒店")):
+        return "登车时间在变，喂养准备别再临时找办法。"
+    if any(token in transcript for token in ("办公室", "办公", "通勤", "工位", "午休")):
+        return "午休只剩十分钟，准备动作不能再绕远。"
+    if any(token in transcript for token in ("露营", "户外", "公园", "野餐")):
+        return "户外空间有限，准备顺序更要清楚。"
+    return "夜间喂养准备，也可以更轻松。"
 
 
 def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:

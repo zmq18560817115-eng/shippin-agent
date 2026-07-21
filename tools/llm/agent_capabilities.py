@@ -23,9 +23,10 @@ def competitor_research(payload: dict[str, Any], context: ToolContext) -> ToolRe
     project_id = str(payload["project_id"])
     source = str(payload.get("source_text") or "未提供转写文本，仅依据现有结构化元数据进行研究。")
     if context.mock:
+        situation = _situation(source)
         body = {
-            "viral_patterns": ["先呈现问题再给出方案", "每六秒推进一个叙事节拍", "用可见动作展示产品"],
-            "audience_insights": ["夜间照护者重视准备速度、信息清晰和低操作负担"],
+            "viral_patterns": [f"用{situation['context']}的未完成动作建立钩子", "每六秒推进一个叙事节拍", "用可见动作展示产品"],
+            "audience_insights": [situation["insight"]],
             "pacing_notes": ["0-6秒：钩子", "6-12秒：痛点", "12-18秒：方案", "18-24秒：证明", "24-30秒：行动号召"],
             "content_risks": ["不得复制竞品文案、品牌、宣称或产品外观。"],
             "source_summary": source[:500],
@@ -57,12 +58,14 @@ def content_strategy(payload: dict[str, Any], context: ToolContext) -> ToolResul
     research = payload.get("research_brief") or {}
     guardrails = _object(payload.get("product_guardrails"))
     if context.mock:
+        research_text = json.dumps(research, ensure_ascii=False)
+        situation = _situation(research_text)
         body = {
-            "content_direction": "用平静的夜间照护故事，从准备不便自然推进到安全、清晰的产品使用展示。",
-            "target_audience": ["需要在夜间或出行时准备喂养用品的照护者"],
-            "selling_point_priority": ["便携机身", "准备步骤清晰", "适合床头与出行场景"],
-            "hook_options": ["夜间准备，不必占满你的休息时间。"],
-            "cta_options": ["收藏这套更从容的夜间准备方法。"],
+            "content_direction": situation["direction"],
+            "target_audience": [situation["audience"]],
+            "selling_point_priority": ["便携机身", "准备步骤清晰", situation["use_case"]],
+            "hook_options": [situation["hook"]],
+            "cta_options": [situation["cta"]],
             "forbidden_claims": ["医疗效果", "保证性性能宣称", "贬低竞品", "98°C"],
         }
         meta = {"model": "mock"}
@@ -145,3 +148,35 @@ def _object(value: Any) -> dict[str, Any]:
 def _intent(role: str) -> str:
     intents = {"钩子": "在前三秒建立注意力", "痛点": "让用户识别真实困扰", "方案": "展示正确且安全的解决方式", "证明": "用可感知细节说明价值", "行动号召": "给出低压力的下一步行动"}
     return intents.get(role, "推动故事自然向前")
+
+
+def _situation(value: str) -> dict[str, str]:
+    if any(token in value for token in ("旅行", "旅途", "出行", "机场", "高铁", "酒店", "车内")):
+        return {
+            "context": "旅途出发",
+            "insight": "携带宝宝出行的新手照护者重视便携、步骤清晰和临时空间里的操作秩序",
+            "direction": "用旅途中的时间压力开场，在候车或转场间隙自然展示清楚、安全的准备顺序。",
+            "audience": "携带宝宝出行的新手照护者",
+            "use_case": "适合旅途临时操作台",
+            "hook": "登车时间在变，喂养准备别再临时找办法。",
+            "cta": "下次带宝宝出发前，先收藏这套准备顺序。",
+        }
+    if any(token in value for token in ("办公室", "办公", "通勤", "工位", "午休")):
+        return {
+            "context": "工作间隙",
+            "insight": "通勤照护者重视有限午休时间内的步骤效率与整洁收纳",
+            "direction": "用会议前的时间倒计时建立冲突，在办公室母婴室完成连续、克制的产品演示。",
+            "audience": "需要兼顾工作的通勤照护者",
+            "use_case": "适合办公室母婴室",
+            "hook": "午休只剩十分钟，准备动作不能再绕远。",
+            "cta": "把这套工作日准备流程留给下一次忙碌午后。",
+        }
+    return {
+        "context": "夜间喂养",
+        "insight": "夜间照护者重视准备速度、信息清晰和低操作负担",
+        "direction": "用平静的夜间照护故事，从准备不便自然推进到安全、清晰的产品使用展示。",
+        "audience": "需要夜间准备喂养用品的照护者",
+        "use_case": "适合床头准备场景",
+        "hook": "夜间准备，不必占满你的休息时间。",
+        "cta": "收藏这套更从容的夜间准备方法。",
+    }
