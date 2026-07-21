@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260721-6" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260721-7" />
   </head>
   <body>
     <header class="topbar">
@@ -97,8 +97,14 @@
         </div>
         <div class="quickToolRunner" id="quickToolRunner" hidden>
           <div class="sectionHead"><div><span class="eyebrow">当前工具</span><h2 id="quickToolTitle">脚本生成</h2></div><button type="button" id="closeQuickTool">关闭</button></div>
-          <textarea id="quickToolPrompt" placeholder="输入需求、素材转写、脚本或画面描述"></textarea>
-          <div class="formActions"><button type="button" class="primary" id="runQuickTool">运行工具</button></div>
+          <div class="quickToolBrief" id="quickToolBrief"></div>
+          <div class="quickToolSettings">
+            <label>产品<select id="quickToolProduct"></select></label>
+            <label>运行模式<select id="quickToolMode"><option value="mock">演练模式</option><option value="real">真实模型</option></select></label>
+          </div>
+          <label class="quickToolPromptLabel"><span id="quickToolInputLabel">创作需求</span><textarea id="quickToolPrompt" placeholder="输入需求、素材转写、脚本或画面描述"></textarea></label>
+          <div class="quickToolExample"><span>输入示例</span><button type="button" id="fillQuickToolExample">填入示例</button><p id="quickToolExampleText"></p></div>
+          <div class="formActions"><button type="button" class="primary iconAction" id="runQuickTool"><i data-lucide="sparkles"></i>开始生成</button><span id="quickToolEstimate"></span></div>
           <div id="quickToolResult" class="nodeResult">结果会在这里展示。</div>
         </div>
       </section>
@@ -454,6 +460,6 @@
 
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260721-6"></script>
+    <script src="/static/app.js?v=20260721-7"></script>
   </body>
 </html>

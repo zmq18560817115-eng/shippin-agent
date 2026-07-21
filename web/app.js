@@ -104,6 +104,15 @@ const independentActionHints = {
   feedback: "输入人工复盘结论、问题和优化要求，保存为可下载的反馈记录。",
 };
 
+const quickToolConfigs = {
+  analysis: { input: "视频转写或素材说明", output: "内容结构、节奏、镜头与受众洞察", example: "这是一条 30 秒恒温杯参考视频：夜间卧室中，照护者提前准备温奶，展示 98°F 温标与向奶瓶倒奶的动作。请拆解钩子、节奏、镜头和可借鉴点。", seconds: 35 },
+  strategy: { input: "产品事实与传播目标", output: "受众、卖点优先级、钩子与行动号召", example: "产品：便携恒温杯。受众：夜间喂养的新手父母。目标：突出提前温奶、98°F 温标和便携性，生成一条 30 秒 TikTok 内容策略。", seconds: 35 },
+  script: { input: "脚本创作需求", output: "五段式中文场景、动作、剧情与旁白", example: "为便携恒温杯创作 30 秒夜间喂养短视频脚本。需要真实家庭场景、明确剧情推进，正确展示 98°F，并把奶液从恒温杯倒入奶瓶。", seconds: 40 },
+  script_breakdown: { input: "待拆解脚本", output: "逐段意图、画面、动作与连续性要求", example: "夜里宝宝醒来，妈妈不用再等待水温下降。她从床头拿起显示 98°F 的恒温杯，将温奶倒入奶瓶，快速完成喂养准备。", seconds: 30 },
+  storyboard: { input: "分镜创作需求或完整脚本", output: "连续的镜头计划与中文生成 Prompt", example: "把夜间喂养脚本设计为 5 个连续镜头：卧室建立、痛点反应、恒温杯 98°F 特写、向奶瓶倒奶、轻松喂养收束。保持同一人物、产品和场景。", seconds: 45 },
+  production: { input: "单镜视频画面 Prompt", output: "720×1280 竖屏候选镜头", example: "真实夜间卧室暖光，中景固定镜头，同一位年轻母亲从床头柜拿起紫色便携恒温杯，杯身清晰显示 98°F，产品外观稳定，6 秒竖屏广告镜头。", seconds: 90 },
+};
+
 const motionLabels = {
   dolly_in: "推进", dolly_out: "拉远", pan_left: "左移", pan_right: "右移",
   static: "固定", arc: "环绕", crash_zoom: "快速推进",
@@ -413,6 +422,12 @@ function bindEvents() {
   });
   $("#closeQuickTool").addEventListener("click", closeQuickTool);
   $("#runQuickTool").addEventListener("click", runQuickTool);
+  $("#fillQuickToolExample").addEventListener("click", () => {
+    const config = quickToolConfigs[state.quickToolAction];
+    if (!config) return;
+    $("#quickToolPrompt").value = config.example;
+    $("#quickToolPrompt").focus();
+  });
   $("#refreshTasks").addEventListener("click", () => refreshProjects());
   document.querySelectorAll("[data-task-filter]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -634,10 +649,20 @@ function updateCrawlTargetUI() {
 
 function openQuickTool(action) {
   state.quickToolAction = action;
+  const config = quickToolConfigs[action] || { input: "创作需求", output: "结构化结果", example: "请输入具体需求。", seconds: 35 };
   const runner = $("#quickToolRunner");
   runner.hidden = false;
   $("#quickToolTitle").textContent = independentActionLabels[action] || "快速工具";
   $("#quickToolPrompt").placeholder = independentActionHints[action] || "输入需求";
+  $("#quickToolInputLabel").textContent = config.input;
+  $("#quickToolBrief").innerHTML = `<span><strong>输入</strong>${escapeHtml(config.input)}</span><i data-lucide="arrow-right"></i><span><strong>输出</strong>${escapeHtml(config.output)}</span>`;
+  $("#quickToolExampleText").textContent = config.example;
+  $("#quickToolEstimate").textContent = `预计 ${config.seconds} 秒左右`;
+  $("#quickToolProduct").value = $("#productSelect").value;
+  $("#quickToolMode").value = $("#runtimeMode").value;
+  $("#quickToolResult").className = "nodeResult";
+  $("#quickToolResult").textContent = "运行完成后将在这里显示可编辑、可下载的结果。";
+  installCommandIcons();
   $("#quickToolPrompt").focus();
   runner.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -658,17 +683,18 @@ async function runQuickTool() {
   button.disabled = true;
   host.className = "nodeResult";
   host.textContent = "正在运行，请稍候...";
-  beginOperation(`正在运行${independentActionLabels[state.quickToolAction] || "快速工具"}`, state.quickToolAction === "production" ? 90 : 35);
+  const config = quickToolConfigs[state.quickToolAction] || { seconds: 35 };
+  beginOperation(`正在运行${independentActionLabels[state.quickToolAction] || "快速工具"}`, config.seconds);
   try {
     const payload = await api("/api/v2/agents/run", {
       method: "POST",
       body: JSON.stringify({
         action: state.quickToolAction,
-        product_id: $("#productSelect").value || "便携恒温杯",
+        product_id: $("#quickToolProduct").value || "便携恒温杯",
         prompt,
         source_text: prompt,
         provider: "auto",
-        mock: $("#runtimeMode").value !== "real",
+        mock: $("#quickToolMode").value !== "real",
       }),
     });
     renderAgentResult(host, payload);
@@ -856,19 +882,21 @@ async function checkHealth() {
 }
 
 async function loadProducts() {
-  const select = $("#productSelect");
+  const selects = [$("#productSelect"), $("#quickToolProduct")].filter(Boolean);
   try {
     const payload = await api("/api/v2/products");
-    select.innerHTML = "";
-    payload.items.forEach((item) => {
-      const option = document.createElement("option");
-      option.value = item.id;
-      option.textContent = item.ready ? item.label : `${item.label}（素材未齐 ${item.issue_count || 0}）`;
-      option.disabled = !item.ready;
-      select.appendChild(option);
+    selects.forEach((select) => {
+      select.innerHTML = "";
+      payload.items.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = item.ready ? item.label : `${item.label}（素材未齐 ${item.issue_count || 0}）`;
+        option.disabled = !item.ready;
+        select.appendChild(option);
+      });
     });
   } catch (error) {
-    select.innerHTML = '<option value="便携恒温杯">便携恒温杯</option>';
+    selects.forEach((select) => { select.innerHTML = '<option value="便携恒温杯">便携恒温杯</option>'; });
   }
 }
 

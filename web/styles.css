@@ -1977,9 +1977,50 @@ button.quietButton {
   padding: 20px;
 }
 
+.quickToolBrief {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+
+.quickToolBrief span { display: grid; gap: 3px; color: var(--muted-strong); font-size: 12px; }
+.quickToolBrief strong { color: var(--text); font-size: 12px; }
+.quickToolBrief > svg { width: 16px; color: var(--muted); }
+
+.quickToolSettings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 280px));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.quickToolSettings label,
+.quickToolPromptLabel { display: grid; gap: 7px; }
+
 .quickToolRunner textarea {
   min-height: 132px;
 }
+
+.quickToolExample {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: start;
+  gap: 8px;
+  margin: 9px 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quickToolExample button { min-height: 28px; height: 28px; padding: 3px 8px; color: var(--blue); }
+.quickToolExample p { margin: 5px 0 0; line-height: 1.55; }
+.quickToolRunner .formActions { align-items: center; }
+.quickToolRunner .formActions > span { color: var(--muted); font-size: 12px; }
 
 .taskTabs {
   display: flex;
@@ -2059,12 +2100,17 @@ button.quietButton {
   .homeColumns { grid-template-columns: 1fr; }
   .homeHero { min-height: 0; padding: 20px; }
   .quickToolGrid { grid-template-columns: 1fr; }
+  .quickToolBrief { grid-template-columns: minmax(0, 1fr); }
+  .quickToolBrief > svg { transform: rotate(90deg); }
+  .quickToolSettings { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 620px) {
   .homeHero { align-items: stretch; flex-direction: column; }
   .homeActionGrid { grid-template-columns: 1fr; }
   .homeAction { min-height: 72px; }
+  .quickToolExample { grid-template-columns: auto 1fr; }
+  .quickToolExample p { grid-column: 1 / -1; }
   .taskList article,
   .taskList article > div { align-items: flex-start; flex-direction: column; }
 
