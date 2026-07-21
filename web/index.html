@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260721-3" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260721-4" />
   </head>
   <body>
     <header class="topbar">
@@ -418,12 +418,18 @@
           <h2>交付归档</h2>
           <span id="deliveryState"></span>
         </div>
+        <div class="deliveryTabs" role="tablist" aria-label="交付中心分类">
+          <button type="button" data-delivery-filter="pending">待验收 <span id="deliveryPendingCount">0</span></button>
+          <button type="button" data-delivery-filter="passed">已通过 <span id="deliveryPassedCount">0</span></button>
+          <button type="button" class="active" data-delivery-filter="archived">已归档 <span id="deliveryArchivedCount">0</span></button>
+          <button type="button" data-delivery-filter="downloads">下载记录 <span id="deliveryDownloadCount">0</span></button>
+        </div>
         <div id="deliveryPanel" class="emptyState">暂无可交付项目</div>
       </section>
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260721-3"></script>
+    <script src="/static/app.js?v=20260721-4"></script>
   </body>
 </html>

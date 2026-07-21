@@ -6,6 +6,7 @@ const state = {
   productLibrarySources: [],
   selectedId: null,
   selected: null,
+  strategyBrief: null,
   scriptCopy: null,
   scriptBreakdown: null,
   reviewReport: null,
@@ -19,6 +20,8 @@ const state = {
   operation: null,
   currentView: "home",
   assetArea: "products",
+  deliveryFilter: "archived",
+  deliveryDownloads: [],
   taskFilter: "running",
   quickToolAction: "analysis",
   selectedRevision: "",
@@ -418,6 +421,13 @@ function bindEvents() {
   document.querySelectorAll("#assetCenterNav [data-asset-area]").forEach((button) => {
     button.addEventListener("click", () => setAssetArea(button.dataset.assetArea));
   });
+  document.querySelectorAll("[data-delivery-filter]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.deliveryFilter = button.dataset.deliveryFilter;
+      if (state.deliveryFilter === "downloads") await loadDeliveryDownloads();
+      renderDelivery();
+    });
+  });
   window.addEventListener("hashchange", () => {
     const view = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
     if (views[view]) showView(view, { updateUrl: false });
@@ -755,6 +765,7 @@ function showView(view, { updateUrl = true } = {}) {
   }
   if (next === "home") renderHomeDashboard();
   if (next === "tasks") renderTaskCenter();
+  if (["archive", "delivery"].includes(next)) loadDeliveryDownloads();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -1511,6 +1522,7 @@ async function saveMaterialTranscript(panel, materialId) {
 async function loadSelectedProject(projectId) {
   state.selected = await api(`/api/v2/pipeline/${encodeURIComponent(projectId)}`);
   state.selectedRevision = projectRevision(state.selected);
+  state.strategyBrief = null;
   state.scriptCopy = null;
   state.scriptBreakdown = null;
   state.reviewReport = null;
@@ -1520,8 +1532,9 @@ async function loadSelectedProject(projectId) {
   state.renderReport = null;
   state.runReport = null;
 
-  [state.scriptCopy, state.scriptBreakdown, state.reviewReport, state.shotPlan,
+  [state.strategyBrief, state.scriptCopy, state.scriptBreakdown, state.reviewReport, state.shotPlan,
     state.assetManifest, state.takeManifest, state.renderReport, state.runReport] = await Promise.all([
+    safeArtifact(projectId, "strategy_brief"),
     safeArtifact(projectId, "script_copy"), safeArtifact(projectId, "script_breakdown"),
     safeArtifact(projectId, "review_report"), safeArtifact(projectId, "shot_plan"),
     safeArtifact(projectId, "asset_manifest"), safeArtifact(projectId, "take_manifest"),
@@ -1701,6 +1714,7 @@ function renderPanels() {
   $("#currentStage").textContent = state.selected
     ? `当前节点：${stageLabels[stage] || stage}`
     : "暂无在制项目";
+  if (state.currentView === "strategy") renderStrategyNode();
   if (state.currentView === "script") renderScriptGate();
   if (state.currentView === "storyboard") {
     renderStoryboardNode();
@@ -1708,12 +1722,24 @@ function renderPanels() {
   }
   if (state.currentView === "production") {
     renderProductionNode();
-    renderComposeNode();
   }
-  if (state.currentView === "delivery") renderDelivery();
+  if (state.currentView === "review") renderComposeNode();
+  if (["archive", "delivery"].includes(state.currentView)) renderDelivery();
   if (state.currentView === "home") renderHomeDashboard();
   if (state.currentView === "tasks") renderTaskCenter();
   installCommandIcons();
+}
+
+function renderStrategyNode() {
+  const host = $("#strategyResult");
+  if (!host) return;
+  if (!state.selected || !state.strategyBrief) {
+    host.className = "nodeResult emptyState";
+    host.textContent = state.selected ? "研究分析完成后将在这里生成内容策略。" : "请选择项目，或使用下方独立策略 Agent。";
+    return;
+  }
+  host.className = "nodeResult";
+  host.innerHTML = renderFriendlyArtifact("strategy_brief", state.strategyBrief);
 }
 
 function renderScriptGate() {
@@ -2268,15 +2294,64 @@ async function retryTask(taskId) {
   }
 }
 
+function deliveryBuckets() {
+  const buckets = { pending: [], passed: [], archived: [] };
+  state.projects.forEach((project) => {
+    const stage = String(project.current_gate || project.current_stage || "");
+    if (project.status === "succeeded" && project.delivery_ready) buckets.archived.push(project);
+    else if (stage === "archive") buckets.passed.push(project);
+    else if (["compose", "final_qa"].includes(stage)) buckets.pending.push(project);
+  });
+  return buckets;
+}
+
+async function loadDeliveryDownloads() {
+  try {
+    const payload = await api("/api/v2/delivery/downloads?limit=100");
+    state.deliveryDownloads = payload.items || [];
+  } catch {
+    state.deliveryDownloads = [];
+  }
+  if (["archive", "delivery"].includes(state.currentView)) renderDelivery();
+}
+
+function renderDownloadHistory(host) {
+  if (!state.deliveryDownloads.length) {
+    host.className = "emptyState";
+    host.textContent = "暂无交付包下载记录。";
+    return;
+  }
+  host.className = "downloadHistory";
+  host.innerHTML = state.deliveryDownloads.map((item) => `
+    <article>
+      <i data-lucide="download"></i>
+      <span><strong>${escapeHtml(item.meta?.filename || item.message || "项目交付包")}</strong><small>${escapeHtml(item.project_id || "未知项目")}</small></span>
+      <span><strong>${escapeHtml(item.meta?.username || "本地操作员")}</strong><small>${escapeHtml(formatProjectTime(item.created_at))}</small></span>
+    </article>
+  `).join("");
+  window.lucide?.createIcons();
+}
+
 function renderDelivery() {
   const host = $("#deliveryPanel");
-  const delivered = state.projects.filter((project) => project.status === "succeeded" && project.delivery_ready);
-  $("#deliveryState").textContent = delivered.length ? `${delivered.length} 个可交付` : "";
+  const buckets = deliveryBuckets();
+  $("#deliveryPendingCount").textContent = buckets.pending.length;
+  $("#deliveryPassedCount").textContent = buckets.passed.length;
+  $("#deliveryArchivedCount").textContent = buckets.archived.length;
+  $("#deliveryDownloadCount").textContent = state.deliveryDownloads.length;
+  document.querySelectorAll("[data-delivery-filter]").forEach((button) => button.classList.toggle("active", button.dataset.deliveryFilter === state.deliveryFilter));
+  $("#deliveryState").textContent = `${buckets.pending.length} 待验收 · ${buckets.archived.length} 已归档`;
+  if (state.deliveryFilter === "downloads") {
+    renderDownloadHistory(host);
+    return;
+  }
+  const delivered = buckets[state.deliveryFilter] || [];
   if (!delivered.length) {
     host.className = "emptyState";
     const current = state.selected;
     const nextView = current?.current_gate === "take_gate" || current?.current_stage === "production" ? "production" : current?.current_gate === "script_gate" ? "script" : "storyboard";
-    host.innerHTML = `<div class="emptyGuide"><strong>暂无可交付项目</strong><span>${current ? `当前项目停在“${escapeHtml(stageLabel(current.current_gate || current.current_stage || current.status))}”。完成该节点后即可继续交付。` : "请先创建或打开一个项目。"}</span>${current ? `<button type="button" data-go-next>前往下一步</button>` : ""}</div>`;
+    const emptyTitle = { pending: "暂无待验收项目", passed: "暂无已通过待归档项目", archived: "暂无已归档项目" }[state.deliveryFilter] || "暂无交付项目";
+    host.innerHTML = `<div class="emptyGuide"><strong>${emptyTitle}</strong><span>${current ? `当前项目停在“${escapeHtml(stageLabel(current.current_gate || current.current_stage || current.status))}”。完成该节点后即可继续。` : "请先创建或打开一个项目。"}</span>${current ? `<button type="button" data-go-next>前往下一步</button>` : ""}</div>`;
     host.querySelector("[data-go-next]")?.addEventListener("click", () => showView(nextView));
     return;
   }
@@ -2294,7 +2369,7 @@ function renderDelivery() {
     <div class="deliveryList">
       ${delivered.map((project) => `
         <button type="button" data-open="${escapeAttr(project.project_id)}" class="${project.project_id === selectedDelivered?.project_id ? "active" : ""}" title="${escapeAttr(project.project_id)}">
-          <strong>${escapeHtml(project.product_id || "未命名产品")}</strong><span>${escapeHtml(formatProjectTime(project.updated_at))} · ${project.mock ? "演练" : "真实"} · QA 通过</span><small>${escapeHtml(project.project_id)} · ¥${Number(project.cost.total_cost_cny || 0).toFixed(2)}</small>
+          <strong>${escapeHtml(project.product_id || "未命名产品")}</strong><span>${escapeHtml(formatProjectTime(project.updated_at))} · ${project.mock ? "演练" : "真实"} · ${state.deliveryFilter === "pending" ? "待验收" : state.deliveryFilter === "passed" ? "质检通过" : "已归档"}</span><small>${escapeHtml(project.project_id)} · ¥${Number(project.cost.total_cost_cny || 0).toFixed(2)}</small>
         </button>
       `).join("")}
     </div>
@@ -2310,7 +2385,7 @@ function renderDelivery() {
         <span>失败 ${failureCount}</span>
       </div>
       <div class="actionBar">
-        ${selectedDelivered ? `<a class="buttonLink" href="/api/v2/download/${encodeURIComponent(selectedDelivered.project_id)}">下载 zip</a>
+        ${selectedDelivered ? `<a class="buttonLink" download href="/api/v2/download/${encodeURIComponent(selectedDelivered.project_id)}">下载 zip</a>
         <a class="buttonLink" target="_blank" rel="noopener" href="/api/v2/reports/${encodeURIComponent(selectedDelivered.project_id)}">运行报告</a>` : ""}
         <input id="feedbackInput" placeholder="一句话反馈" />
         <button type="button" id="sendFeedback">写入反馈</button>

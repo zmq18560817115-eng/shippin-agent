@@ -2571,10 +2571,28 @@ def get_run_file(project_id: str, relative_path: str) -> FileResponse:
     return FileResponse(target)
 
 
+@app.get("/api/v2/delivery/downloads")
+def delivery_downloads(limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
+    return {
+        "items": queue.list_events(event_type="delivery.downloaded", limit=limit, db_path=_db_path()),
+    }
+
+
 @app.get("/api/v2/download/{project_id}")
-def download_project(project_id: str) -> FileResponse:
+def download_project(project_id: str, raw_request: Request) -> FileResponse:
     project_id = _validate_project_id(project_id)
     zip_path = _build_delivery_zip(project_id)
+    session = _read_session(raw_request) or {}
+    queue.record_event(
+        project_id=project_id,
+        event_type="delivery.downloaded",
+        message=zip_path.name,
+        meta={
+            "filename": zip_path.name,
+            "username": str(session.get("username") or "local-operator"),
+        },
+        db_path=_db_path(),
+    )
     return FileResponse(
         zip_path,
         media_type="application/zip",

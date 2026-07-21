@@ -1006,6 +1006,38 @@ def record_event(
         )
 
 
+def list_events(
+    *,
+    event_type: str | None = None,
+    limit: int = 100,
+    db_path: str | os.PathLike[str] | None = None,
+) -> list[dict[str, Any]]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    if event_type:
+        clauses.append("event_type = ?")
+        params.append(event_type)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(max(1, min(int(limit), 500)))
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT id, project_id, task_id, event_type, message, meta_json, created_at FROM events {where} ORDER BY created_at DESC, id DESC LIMIT ?",
+            params,
+        ).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "project_id": row["project_id"],
+            "task_id": row["task_id"],
+            "event_type": str(row["event_type"]),
+            "message": row["message"],
+            "meta": _loads(row["meta_json"]),
+            "created_at": str(row["created_at"]),
+        }
+        for row in rows
+    ]
+
+
 def _row_to_task(row: sqlite3.Row) -> Task:
     return Task(
         id=int(row["id"]),

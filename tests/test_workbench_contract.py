@@ -132,3 +132,18 @@ def test_material_center_uses_five_focused_subsections() -> None:
     assert "function renderProjectAssetPackages" in script
     assert 'api("/api/v2/collect/library?limit=50")' in script
     assert 'api("/api/v2/collect/jobs"' in script
+
+
+def test_delivery_center_has_four_operational_views() -> None:
+    html = Path("web/index.html").read_text(encoding="utf-8")
+    script = Path("web/app.js").read_text(encoding="utf-8")
+
+    for delivery_filter in ("pending", "passed", "archived", "downloads"):
+        assert f'data-delivery-filter="{delivery_filter}"' in html
+
+    assert "function deliveryBuckets" in script
+    assert "function loadDeliveryDownloads" in script
+    assert "function renderDownloadHistory" in script
+    assert 'api("/api/v2/delivery/downloads?limit=100")' in script
+    assert 'state.currentView === "review"' in script
+    assert '["archive", "delivery"].includes(state.currentView)' in script

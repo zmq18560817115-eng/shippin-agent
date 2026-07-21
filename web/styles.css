@@ -1721,6 +1721,80 @@ button.quietButton {
   min-height: 36px;
 }
 
+.deliveryTabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.deliveryTabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  border-color: transparent;
+  color: var(--muted);
+  background: transparent;
+}
+
+.deliveryTabs button span {
+  display: inline-grid;
+  min-width: 22px;
+  min-height: 22px;
+  place-items: center;
+  border-radius: 11px;
+  background: #eef1f5;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.deliveryTabs button.active {
+  border-color: #c8d8fb;
+  color: var(--blue);
+  background: #edf3ff;
+}
+
+.deliveryTabs button.active span {
+  background: var(--blue);
+  color: #fff;
+}
+
+.downloadHistory {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.downloadHistory article {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) minmax(160px, auto);
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 4px;
+}
+
+.downloadHistory article > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--blue);
+}
+
+.downloadHistory article span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.downloadHistory article small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .homeHero,
 .homePanel,
 .quickToolRunner {
@@ -1960,6 +2034,14 @@ button.quietButton {
   .homeAction { min-height: 72px; }
   .taskList article,
   .taskList article > div { align-items: flex-start; flex-direction: column; }
+
+  .downloadHistory article {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .downloadHistory article span:last-child {
+    grid-column: 2;
+  }
 }
 
 .crawlForm label {
