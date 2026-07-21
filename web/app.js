@@ -25,7 +25,10 @@ const state = {
   taskFilter: "running",
   quickToolAction: "analysis",
   selectedRevision: "",
-  showAllProjects: false,
+  projectQuery: "",
+  projectStatusFilter: "all",
+  projectPage: 1,
+  projectPageSize: 10,
   collectionJobs: [],
   selectedCollectionJobId: null,
   agentContracts: {},
@@ -389,12 +392,26 @@ function bindEvents() {
   $("#runtimeMode").addEventListener("change", updateRuntimeModeHint);
   $("#crawlTargetType").addEventListener("change", updateCrawlTargetUI);
   $("#refreshButton").addEventListener("click", () => refreshProjects());
-  $("#toggleProjects").addEventListener("click", () => {
-    state.showAllProjects = !state.showAllProjects;
+  $("#projectSearch").addEventListener("input", (event) => {
+    state.projectQuery = event.currentTarget.value.trim().toLowerCase();
+    state.projectPage = 1;
     renderProjectRows();
-    renderHomeDashboard();
-    renderTaskCenter();
   });
+  $("#projectStatusFilter").addEventListener("change", (event) => {
+    state.projectStatusFilter = event.currentTarget.value;
+    state.projectPage = 1;
+    renderProjectRows();
+  });
+  $("#clearProjectFilters").addEventListener("click", () => {
+    state.projectQuery = "";
+    state.projectStatusFilter = "all";
+    state.projectPage = 1;
+    $("#projectSearch").value = "";
+    $("#projectStatusFilter").value = "all";
+    renderProjectRows();
+  });
+  $("#projectPrev").addEventListener("click", () => { state.projectPage = Math.max(1, state.projectPage - 1); renderProjectRows(); });
+  $("#projectNext").addEventListener("click", () => { state.projectPage += 1; renderProjectRows(); });
   $("#refreshProductLibrary").addEventListener("click", refreshProductLibrary);
   $("#runResearch").addEventListener("click", (event) => runFlowCapability("research", event.currentTarget, "#researchResult"));
   $("#runStrategy").addEventListener("click", (event) => runFlowCapability("strategy", event.currentTarget, "#strategyResult"));
@@ -1665,12 +1682,24 @@ async function safeRunReport(projectId) {
 function renderProjectRows() {
   const tbody = $("#projectRows");
   tbody.innerHTML = "";
-  const visibleProjects = state.showAllProjects ? state.projects : state.projects.slice(0, 10);
-  $("#projectCount").textContent = `${Math.min(visibleProjects.length, state.projects.length)} / ${state.projects.length}`;
-  $("#toggleProjects").textContent = state.showAllProjects ? "收起列表" : "显示全部";
-  $("#toggleProjects").hidden = state.projects.length <= 10;
-  if (!state.projects.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted">暂无项目</td></tr>';
+  const filtered = state.projects.filter((project) => {
+    const query = state.projectQuery;
+    const searchable = `${project.project_id || ""} ${project.product_id || ""}`.toLowerCase();
+    const matchesQuery = !query || searchable.includes(query);
+    const matchesStatus = state.projectStatusFilter === "all" || projectBucket(project) === state.projectStatusFilter;
+    return matchesQuery && matchesStatus;
+  });
+  const pageCount = Math.max(1, Math.ceil(filtered.length / state.projectPageSize));
+  state.projectPage = Math.min(Math.max(1, state.projectPage), pageCount);
+  const start = (state.projectPage - 1) * state.projectPageSize;
+  const visibleProjects = filtered.slice(start, start + state.projectPageSize);
+  $("#projectCount").textContent = `${filtered.length} 个结果 · 共 ${state.projects.length} 个项目`;
+  $("#projectPageState").textContent = `第 ${state.projectPage} / ${pageCount} 页`;
+  $("#projectPrev").disabled = state.projectPage <= 1;
+  $("#projectNext").disabled = state.projectPage >= pageCount;
+  $("#projectPagination").hidden = filtered.length <= state.projectPageSize;
+  if (!visibleProjects.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">${state.projects.length ? "没有符合筛选条件的项目" : "暂无项目"}</td></tr>`;
     return;
   }
   visibleProjects.forEach((project) => {
@@ -2148,7 +2177,7 @@ function renderProductionNode() {
     const candidates = takes.map((take) => {
       const status = String(take.status || "needs_review");
       const note = safeTakeNote(take);
-      const canReview = take.playable && ["needs_review", "succeeded", "qa_pass"].includes(status);
+      const canReview = take.playable && ["needs_review", "succeeded", "qa_pass", "selected"].includes(status);
       const canSelect = take.playable && status === "qa_pass";
       return `
       <div class="takeCandidate">
@@ -2157,7 +2186,7 @@ function renderProductionNode() {
           : `<div class="mediaUnavailable">${escapeHtml(take.media_message || "无可播放视频：请以真实运行模式重新生成此 Take。")}</div>`}
         <span class="takeStatus ${statusClass(status)}">Take ${escapeHtml(take.take_id)} · ${escapeHtml(takeStatusLabel(status))}</span>
         <div class="actionBar takeActions">
-          ${canReview ? `<button type="button" data-review-pass-shot="${shot.number}" data-review-pass-take="${escapeAttr(take.take_id)}">通过单镜质检</button><button type="button" data-review-reject-shot="${shot.number}" data-review-reject-take="${escapeAttr(take.take_id)}">不通过并重做</button>` : ""}
+          ${canReview ? `<button type="button" data-review-pass-shot="${shot.number}" data-review-pass-take="${escapeAttr(take.take_id)}">${status === "selected" || take.qa?.note_corrupted ? "重新质检并保持选用" : "通过单镜质检"}</button><button type="button" data-review-reject-shot="${shot.number}" data-review-reject-take="${escapeAttr(take.take_id)}">不通过并重做</button>` : ""}
           ${canSelect ? `<button type="button" class="primary" data-select-shot="${shot.number}" data-select-take="${escapeAttr(take.take_id)}">选用此 Take</button>` : ""}
           ${status === "selected" ? '<span class="takeResolved">该镜头已选用</span>' : ""}
           ${status === "rejected" ? '<span class="takeRejected">请修改上方提示词或返工说明后生成新候选</span>' : ""}

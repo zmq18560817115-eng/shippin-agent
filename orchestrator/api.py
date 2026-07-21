@@ -2332,9 +2332,10 @@ def review_take(request: TakeReviewRequest) -> dict[str, Any]:
     }
 
     approved = all(checks.values())
-    take["status"] = "qa_pass" if approved else "rejected"
+    was_selected = shot_entry.get("selected_take_id") == request.take_id
+    take["status"] = "selected" if approved and was_selected else "qa_pass" if approved else "rejected"
     take["qa"] = {"approved": approved, "checks": checks, "notes": request.notes.strip()}
-    if not approved and shot_entry.get("selected_take_id") == request.take_id:
+    if not approved and was_selected:
         shot_entry["selected_take_id"] = None
     artifacts.save_artifact(project_id, "take_manifest", manifest, run_root=root)
     queue.record_event(

@@ -2516,6 +2516,25 @@ th {
   background: #eef5f2;
 }
 
+.projectFilters {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(160px, 220px) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.projectFilters label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+.projectFilters input, .projectFilters select { min-height: 42px; }
+.pagination { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 14px; }
+.pagination[hidden] { display: none; }
+.pagination span { min-width: 88px; text-align: center; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 700px) {
+  .projectFilters { grid-template-columns: 1fr; }
+  .projectFilters button, .projectFilters input, .projectFilters select, .pagination button { min-height: 44px; }
+}
+
 .projectOverviewBody {
   display: grid;
   gap: 18px;

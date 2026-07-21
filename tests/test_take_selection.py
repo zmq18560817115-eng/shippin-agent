@@ -54,6 +54,20 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
             "/api/v2/takes/select",
             json={"project_id": "take-demo", "shot_index": 1, "take_id": "B"},
         )
+        rereviewed = client.post(
+            "/api/v2/takes/review",
+            json={
+                "project_id": "take-demo",
+                "shot_index": 1,
+                "take_id": "B",
+                "product_identity": True,
+                "no_invented_brand": True,
+                "temperature_display": True,
+                "usage_flow": True,
+                "continuity": True,
+                "notes": "复检通过：产品外观、98°F、倒液方向和连续性正确。",
+            },
+        )
         displayed = client.get("/api/v2/artifacts/take-demo/take_manifest")
 
     assert take_a.status_code == 200, take_a.text
@@ -61,6 +75,7 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
     assert rejected.status_code == 409, rejected.text
     assert reviewed.status_code == 200, reviewed.text
     assert selected.status_code == 200, selected.text
+    assert rereviewed.status_code == 200, rereviewed.text
     assert displayed.status_code == 200, displayed.text
     manifest = selected.json()["take_manifest"]
     assert manifest["shots"][0]["selected_take_id"] == "B"
@@ -70,6 +85,41 @@ def test_generate_two_takes_and_select_one_for_compose(tmp_path: Path, monkeypat
     assert report_shot["path"].endswith("shot-001-take-b.mp4")
     assert displayed.json()["shots"][0]["takes"][0]["playable"] is True
     assert displayed.json()["shots"][0]["takes"][0]["media_url"]
+    displayed_take_b = next(item for item in displayed.json()["shots"][0]["takes"] if item["take_id"] == "B")
+    assert displayed_take_b["status"] == "selected"
+    assert displayed_take_b["qa"]["notes"].startswith("复检通过")
+
+
+def test_rejecting_a_selected_take_clears_selection(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "agentflow.db"
+    runs_root = tmp_path / "runs"
+    run_root = runs_root / "selected-reject"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    queue.init_db(db_path)
+    engine.start_pipeline("selected-reject", product_id="便携恒温杯", db_path=db_path, run_root=run_root, mock=True)
+    engine.run_until_blocked("selected-reject", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("selected-reject", "script_gate", approver="test", db_path=db_path, run_root=run_root)
+    engine.run_until_blocked("selected-reject", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("selected-reject", "hero_gate", approver="test", db_path=db_path, run_root=run_root)
+
+    with TestClient(app) as client:
+        client.post("/api/v2/manual/run", json={"project_id": "selected-reject", "stage": "production", "shot_index": 1, "take_id": "A", "mock": True})
+        client.post(
+            "/api/v2/takes/review",
+            json={"project_id": "selected-reject", "shot_index": 1, "take_id": "A", "product_identity": True, "no_invented_brand": True, "temperature_display": True, "usage_flow": True, "continuity": True},
+        )
+        client.post("/api/v2/takes/select", json={"project_id": "selected-reject", "shot_index": 1, "take_id": "A"})
+        rejected = client.post(
+            "/api/v2/takes/review",
+            json={"project_id": "selected-reject", "shot_index": 1, "take_id": "A", "product_identity": False, "no_invented_brand": True, "temperature_display": True, "usage_flow": True, "continuity": True, "notes": "产品外观不一致，需要重做。"},
+        )
+
+    shot = rejected.json()["take_manifest"]["shots"][0]
+    assert rejected.status_code == 200
+    assert rejected.json()["approved"] is False
+    assert shot["selected_take_id"] is None
+    assert shot["takes"][0]["status"] == "rejected"
 
 
 def test_hero_approval_generates_initial_take_and_waits_for_selection(tmp_path: Path, monkeypatch) -> None:

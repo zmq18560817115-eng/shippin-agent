@@ -334,9 +334,13 @@
           <h2>项目列表</h2>
           <div class="headActions">
             <span id="projectCount"></span>
-            <button type="button" id="toggleProjects">显示全部</button>
             <button type="button" id="refreshButton">刷新</button>
           </div>
+        </div>
+        <div class="projectFilters">
+          <label><span>搜索项目</span><input id="projectSearch" type="search" placeholder="输入项目编号或产品名称" /></label>
+          <label><span>项目状态</span><select id="projectStatusFilter"><option value="all">全部状态</option><option value="running">运行中</option><option value="human">待我处理</option><option value="failed">失败或阻断</option><option value="done">已完成</option></select></label>
+          <button type="button" id="clearProjectFilters">清除筛选</button>
         </div>
         <div class="tableWrap">
           <table class="projectTable">
@@ -352,6 +356,7 @@
             <tbody id="projectRows"></tbody>
           </table>
         </div>
+        <div class="pagination" id="projectPagination"><button type="button" id="projectPrev">上一页</button><span id="projectPageState">第 1 页</span><button type="button" id="projectNext">下一页</button></div>
       </section>
 
       <section class="band" id="strategyNode" data-view-section="strategy" hidden>

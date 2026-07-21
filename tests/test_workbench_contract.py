@@ -32,6 +32,13 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert 'provider: $("#crawlProvider").value' in script
     assert "生成第一个候选 Take" in script
     assert 'api("/api/v2/takes/select"' in script
+    assert '"needs_review", "succeeded", "qa_pass", "selected"' in script
+    assert "重新质检并保持选用" in script
+    assert 'id="projectSearch"' in html
+    assert 'id="projectStatusFilter"' in html
+    assert 'id="projectPagination"' in html
+    assert "state.projectStatusFilter" in script
+    assert "projectBucket(project) === state.projectStatusFilter" in script
     assert 'id="independentAgentContract"' in html
     assert 'id="independentCreativeStyle"' in html
     assert 'id="independentTargetAudience"' in html
