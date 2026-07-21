@@ -3030,3 +3030,224 @@ pre {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Restructured information architecture: accordion sidebar + hub views
+   Appended last so it stays authoritative over legacy nav declarations.
+   ========================================================================== */
+.appNav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+.appNav .navGroup {
+  display: block;
+}
+.appNav .navGroupHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  grid-template-columns: none;
+  grid-template-rows: none;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.appNav .navGroupHead strong { font-size: 14px; font-weight: 650; }
+.appNav .navGroupHead svg { width: 18px; height: 18px; color: var(--muted); }
+.appNav .navGroupHead:hover,
+.appNav .navGroupHead:focus-visible { background: var(--blue-soft); color: var(--blue); outline: none; }
+.appNav .navGroupHead:hover svg,
+.appNav .navGroupHead.active svg { color: var(--blue); }
+.appNav .navGroup.open .navGroupHead,
+.appNav .navGroupHead.active { background: var(--blue-soft); color: var(--blue); }
+.appNav .navGroupItems {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 8px 32px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+.appNav .navItem {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  grid-template-columns: none;
+  grid-template-rows: none;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+.appNav .navItem::before { content: none; }
+.appNav .navItem:hover,
+.appNav .navItem:focus-visible { background: var(--blue-soft); color: var(--blue); outline: none; }
+.appNav .navItem.active { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
+
+/* Header nav toggle — desktop hides it, mobile shows the drawer control. */
+.navToggle { display: none; }
+
+/* 工作首页 dashboard */
+.homeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.homeCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.homeCard strong,
+.homeCard small { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+.homeCard:hover,
+.homeCard:focus-visible {
+  border-color: var(--blue);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, .10);
+  transform: translateY(-1px);
+  outline: none;
+}
+.homeCard .homeCardIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.homeCard strong { font-size: 15px; color: var(--ink); }
+.homeCard small { color: var(--muted); font-size: 12.5px; }
+.homeRecent {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.homeRecent > strong { font-size: 13px; color: var(--ink); }
+.homeRecentRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.homeRecentRow:hover { background: var(--blue-soft); }
+.homeRecentRow small { color: var(--muted); font-size: 12px; }
+
+/* 任务中心 / 交付中心 lists */
+.taskCenterList,
+.deliveryCenterList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.taskCenterRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.taskCenterRow:hover { border-color: var(--blue); background: var(--blue-soft); }
+.taskCenterMain { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.taskCenterMain strong { font-size: 14px; color: var(--ink); }
+.taskCenterMain small { color: var(--muted); font-size: 12px; }
+.taskCenterRow svg { width: 16px; height: 16px; color: var(--muted); }
+.deliveryCenterRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.deliveryCenterOpen {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.deliveryCenterOpen strong { font-size: 14px; color: var(--ink); }
+.deliveryCenterOpen small { color: var(--muted); font-size: 12px; }
+.deliveryCenterActions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* 收藏与项目素材包 */
+.favoritesPanel { display: flex; flex-direction: column; gap: 12px; }
+.favoritesHead { display: flex; align-items: baseline; gap: 10px; }
+.favoritesHead small { color: var(--muted); }
+.favoritesBody { display: flex; flex-wrap: wrap; gap: 8px; }
+.favoriteTag {
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .navToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .appNav {
+    position: fixed;
+    top: 59px;
+    bottom: 0;
+    left: 0;
+    width: min(320px, 84vw);
+    max-width: 84vw;
+    height: auto;
+    transform: translateX(-102%);
+    transition: transform .2s ease;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, .18);
+  }
+  body.navOpen .appNav { transform: translateX(0); }
+  .appNav .navGroupHead svg { display: inline-block; }
+}
