@@ -104,6 +104,10 @@ class ManualCollectRequest(BaseModel):
     source_keyword: str = "manual_tiktok"
 
 
+class RuntimeProbeRequest(BaseModel):
+    provider: str
+
+
 class TikTokCollectRequest(ManualCollectRequest):
     source_keyword: str = "tiktok_oembed"
 
@@ -467,31 +471,68 @@ def runtime_status() -> dict[str, Any]:
     apify_ready = bool(os.environ.get("APIFY_API_TOKEN"))
     yt_dlp_ready = bool(shutil.which("yt-dlp"))
     cookies_ready = bool(os.environ.get("TIKTOK_COOKIES_FILE"))
+    doubao_configured = bool(os.environ.get("DOUBAO_API_KEY"))
+    seedance_configured = bool(os.environ.get("SEEDANCE_API_KEY"))
+    asr_configured = bool(os.environ.get("VOLCENGINE_ASR_API_KEY")) or bool(
+        os.environ.get("VOLCENGINE_ASR_APP_KEY") and os.environ.get("VOLCENGINE_ASR_ACCESS_KEY")
+    )
     context = ToolContext.from_mapping()
+    probes = _load_runtime_probes()
+    tiktok_probe = probes.get("tiktok_api") or {}
+    tiktok_operational = tiktok_probe.get("state") == "ready"
+    tiktok_state = str(tiktok_probe.get("state") or ("configured_unverified" if tiktok_api_ready else "not_configured"))
+    tiktok_detail = str(tiktok_probe.get("detail") or (
+        "TikTokApi 与令牌已配置，需实时采集探针确认会话有效"
+        if tiktok_api_ready else "TikTokApi 未安装或缺少有效令牌"
+    ))
     return {
         "status": "ok",
-        "real_ready": bool(os.environ.get("DOUBAO_API_KEY") and os.environ.get("SEEDANCE_API_KEY")),
+        "build_version": _build_version(),
+        "real_ready": doubao_configured and seedance_configured,
         "providers": {
-            "doubao": {"configured": bool(os.environ.get("DOUBAO_API_KEY"))},
-            "seedance": {"configured": bool(os.environ.get("SEEDANCE_API_KEY"))},
-            "tiktok_oembed": {"configured": True},
-            "tiktok_video": {"configured": bool(shutil.which("yt-dlp"))},
+            "doubao": _runtime_provider(
+                doubao_configured,
+                configured_detail="密钥已配置，需通过真实文本探针确认模型与网络",
+            ),
+            "seedance": _runtime_provider(
+                seedance_configured,
+                configured_detail="密钥已配置，需通过真实单镜探针确认模型参数兼容",
+            ),
+            "tiktok_oembed": _runtime_provider(True, operational=True, detail="公开元数据接口可用"),
+            "tiktok_video": _runtime_provider(
+                yt_dlp_ready,
+                operational=yt_dlp_ready,
+                detail="yt-dlp 已就绪，可执行直链下载" if yt_dlp_ready else "未检测到 yt-dlp",
+            ),
             "tiktok_keyword_crawler": {
                 "configured": apify_ready or tiktok_api_ready,
+                "operational": False,
+                "state": "configured_unverified" if apify_ready or tiktok_api_ready else "not_configured",
                 "mode": "tiktok_api_or_apify",
+                "detail": "采集后端已配置，需运行关键词探针确认结果相关性" if apify_ready or tiktok_api_ready else "未配置关键词发现后端",
             },
             "tiktok_api": {
                 "configured": tiktok_api_ready,
+                "operational": tiktok_operational,
+                "state": tiktok_state,
                 "installed": tiktok_api_installed,
                 "mode": "account_hashtag_trending",
+                "detail": tiktok_detail,
+                "last_checked_at": tiktok_probe.get("checked_at"),
             },
-            "speech_to_text": {"configured": False, "mode": "subtitle_or_operator_text"},
+            "speech_to_text": {
+                **_runtime_provider(
+                    asr_configured,
+                    configured_detail="语音转写凭证已配置，需通过短音频探针确认",
+                ),
+                "mode": "volcengine_flash_or_subtitle",
+            },
         },
         "collector_backends": [
-            {"id": "tiktok_api", "ready": tiktok_api_ready, "supports": ["account", "hashtag", "keyword", "trending"]},
-            {"id": "apify", "ready": apify_ready, "supports": ["keyword"]},
-            {"id": "yt_dlp", "ready": yt_dlp_ready, "supports": ["account", "direct_url"], "cookies_file": cookies_ready},
-            {"id": "manual_url", "ready": yt_dlp_ready, "supports": ["direct_url"]},
+            {"id": "tiktok_api", "ready": tiktok_operational, "configured": tiktok_api_ready, "state": tiktok_state, "supports": ["account", "hashtag", "keyword", "trending"], "detail": tiktok_detail, "last_checked_at": tiktok_probe.get("checked_at")},
+            {"id": "apify", "ready": False, "configured": apify_ready, "optional": True, "state": "configured_unverified" if apify_ready else "optional_disabled", "supports": ["keyword"], "detail": "可选降级后端"},
+            {"id": "yt_dlp", "ready": yt_dlp_ready, "configured": yt_dlp_ready, "state": "ready" if yt_dlp_ready else "not_configured", "supports": ["account", "direct_url"], "cookies_file": cookies_ready, "detail": "下载器已安装" if yt_dlp_ready else "未检测到 yt-dlp"},
+            {"id": "manual_url", "ready": yt_dlp_ready, "configured": True, "state": "ready" if yt_dlp_ready else "dependency_missing", "supports": ["direct_url"], "detail": "内建导入入口；依赖 yt-dlp"},
         ],
         "budget_mode": str((context.config.get("runtime") or {}).get("budget_mode") or "enforce"),
         "pricing_calibrated": _pricing_calibrated(),
@@ -677,6 +718,92 @@ def _creative_brief(request: AgentRunRequest) -> dict[str, str]:
         "freedom": freedom,
         "freedom_instruction": labels[freedom],
     }
+
+
+@app.post("/api/v2/admin/runtime/probe")
+def probe_runtime_provider(request: RuntimeProbeRequest) -> dict[str, Any]:
+    provider = request.provider.strip().casefold()
+    if provider != "tiktok_api":
+        raise HTTPException(status_code=422, detail="当前仅支持 TikTok 自建采集的无费用实时探针")
+    started = time.monotonic()
+    result = tool_registry.execute_tool(
+        "tiktok_crawler",
+        {"target_type": "trending", "target": "", "provider": "tiktok_api", "limit": 1},
+        context={"mock": False, "env": os.environ},
+    )
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    if result.ok and result.data.get("items"):
+        probe = {"state": "ready", "detail": "实时发现探针通过", "checked_at": _utc_now(), "latency_ms": elapsed_ms, "item_count": len(result.data.get("items") or [])}
+    else:
+        probe = {"state": "error", "detail": _friendly_runtime_error(str((result.error or {}).get("message") or "实时发现探针失败")), "checked_at": _utc_now(), "latency_ms": elapsed_ms, "item_count": 0}
+    probes = _load_runtime_probes()
+    probes[provider] = probe
+    _write_json_atomic(_runtime_probe_path(), probes)
+    return {"ok": probe["state"] == "ready", "provider": provider, "probe": probe}
+
+
+def _runtime_provider(
+    configured: bool,
+    *,
+    operational: bool = False,
+    detail: str = "",
+    configured_detail: str = "配置已保存，尚未执行真实探针",
+) -> dict[str, Any]:
+    return {
+        "configured": configured,
+        "operational": bool(configured and operational),
+        "state": "ready" if configured and operational else ("configured_unverified" if configured else "not_configured"),
+        "detail": detail or (configured_detail if configured else "尚未配置"),
+    }
+
+
+def _build_version() -> str:
+    configured = str(os.environ.get("VAF_BUILD_VERSION") or "").strip()
+    if configured:
+        return configured
+    head = ROOT / ".git" / "HEAD"
+    try:
+        ref = head.read_text(encoding="utf-8").strip()
+        if ref.startswith("ref:"):
+            ref_path = ROOT / ".git" / ref.split(":", 1)[1].strip()
+            return ref_path.read_text(encoding="utf-8").strip()[:7]
+        return ref[:7]
+    except OSError:
+        return "unknown"
+
+
+def _runtime_probe_path() -> Path:
+    return DATA_ROOT / "runtime-probes.json"
+
+
+def _load_runtime_probes() -> dict[str, Any]:
+    try:
+        payload = json.loads(_runtime_probe_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _friendly_runtime_error(message: str) -> str:
+    lowered = message.casefold()
+    if "timeout" in lowered or "超时" in message:
+        return "TikTok 页面访问超时，请检查服务器外网、代理或地区访问策略"
+    if "captcha" in lowered or "验证码" in message:
+        return "TikTok 要求验证码，请更新会话或切换采集出口"
+    if "token" in lowered or "session" in lowered or "会话" in message:
+        return "TikTok 会话无效，请更新 ms_token 后重试"
+    return message[-300:]
 
 
 def _apply_creative_brief(text: str, brief: dict[str, str]) -> str:

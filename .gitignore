@@ -15,6 +15,7 @@ venv/
 
 db/
 data/runs/
+data/runtime-probes.json
 data/reports/
 data/*.db
 data/*.db-shm

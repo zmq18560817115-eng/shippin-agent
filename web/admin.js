@@ -94,8 +94,28 @@ async function loadAdmin() {
   renderDistribution("#statusDistribution", Object.entries(payload.analytics?.project_status || payload.projects), { labels: statusNames, center: projectTotal, centerLabel: "项目" });
   document.querySelector("#storageDistributionTotal").textContent = formatBytes(storageTotal);
   renderDistribution("#storageDistribution", Object.entries(payload.storage_bytes || {}), { labels: { database: "数据库", materials: "素材库", runs: "运行产物" }, center: formatBytes(storageTotal), centerLabel: "总占用", format: formatBytes });
-  const providers = [...(payload.runtime.collector_backends || []), ...Object.entries(payload.runtime.providers || {}).filter(([id]) => ["doubao", "seedance", "speech_to_text"].includes(id)).map(([id, value]) => ({ id, ready: value.configured }))];
-  document.querySelector("#backendStates").innerHTML = providers.map((provider) => `<div><span>${escapeHtml(providerNames[provider.id] || provider.id)}</span><strong class="${provider.ready ? "ready" : "missing"}">${provider.ready ? "可用" : "未配置"}</strong></div>`).join("");
+  const providers = [
+    ...(payload.runtime.collector_backends || []),
+    ...Object.entries(payload.runtime.providers || {})
+      .filter(([id]) => ["doubao", "seedance", "speech_to_text"].includes(id))
+      .map(([id, value]) => ({ id, ...value })),
+  ];
+  const stateLabels = {
+    ready: "探针通过",
+    configured_unverified: "待验证",
+    not_configured: "未配置",
+    optional_disabled: "可选未启用",
+    dependency_missing: "依赖缺失",
+    degraded: "降级可用",
+    error: "异常",
+  };
+  document.querySelector("#backendStates").innerHTML = providers.map((provider) => {
+    const state = provider.state || (provider.ready ? "ready" : provider.configured ? "configured_unverified" : "not_configured");
+    const tone = state === "ready" ? "ready" : state === "configured_unverified" || state === "degraded" ? "warning" : state === "optional_disabled" ? "optional" : "missing";
+    return `<div class="backendState"><span>${escapeHtml(providerNames[provider.id] || provider.id)}<small>${escapeHtml(provider.detail || "")}</small></span><strong class="${tone}">${escapeHtml(stateLabels[state] || state)}</strong></div>`;
+  }).join("");
+  const runtimeStamp = document.querySelector("#runtimeBuildVersion");
+  if (runtimeStamp) runtimeStamp.textContent = `版本 ${payload.runtime.build_version || "unknown"}`;
   document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(formatTime(project.updated_at))}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';
   const activeUsers = (users.items || []).filter((user) => user.status === "active");
   document.querySelector("#recentFailures").innerHTML = payload.recent_failures.map((failure) => `<article class="failureItem">
@@ -211,6 +231,21 @@ function renderUsers(users) {
 }
 
 document.querySelector("#refreshAdmin").addEventListener("click", () => loadAdmin());
+document.querySelector("#probeTikTok")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = "检测中…";
+  try {
+    const result = await api("/api/v2/admin/runtime/probe", { method: "POST", body: JSON.stringify({ provider: "tiktok_api" }) });
+    window.alert(result.ok ? "TikTok 实时采集探针通过" : `采集探针失败：${result.probe?.detail || "未知错误"}`);
+    await loadAdmin();
+  } catch (error) {
+    window.alert(`采集探针失败：${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = "检测采集";
+  }
+});
 const userDialog = document.querySelector("#userDialog");
 document.querySelector("#openUserDialog").addEventListener("click", () => userDialog.showModal());
 ["#closeUserDialog", "#cancelUserDialog"].forEach((selector) => document.querySelector(selector).addEventListener("click", () => userDialog.close()));

@@ -150,3 +150,63 @@ def test_seedance_request_marks_all_images_as_references(tmp_path: Path, monkeyp
     images = [item for item in captured["content"] if item["type"] == "image_url"]
     assert len(images) == 2
     assert {item["role"] for item in images} == {"reference_image"}
+
+
+def test_seedance_request_retries_without_image_role_on_model_validation_error(tmp_path: Path, monkeypatch) -> None:
+    primary = tmp_path / "primary.png"
+    primary.write_bytes(b"primary")
+    requests = []
+
+    def fake_post(url, *, api_key, body, timeout_s):
+        requests.append(body)
+        if len(requests) == 1:
+            raise ark.ArkProviderError("Ark HTTP 400: image content role is invalid for this model")
+        return {"id": "task-2"}
+
+    monkeypatch.setattr(ark, "_post_json", fake_post)
+    monkeypatch.setattr(
+        ark,
+        "_get_json",
+        lambda *args, **kwargs: {"status": "succeeded", "video_url": "https://example.com/video.mp4"},
+    )
+    monkeypatch.setattr(ark, "_download", lambda url, output_path, timeout_s: output_path.write_bytes(b"video"))
+    monkeypatch.setattr(ark.time, "sleep", lambda _: None)
+
+    ark.create_seedance_video(
+        ToolContext.from_mapping(
+            {"mock": False, "run_root": str(tmp_path), "env": {"SEEDANCE_API_KEY": "configured"}}
+        ),
+        prompt="Product demo",
+        image_path=str(primary),
+        output_path=tmp_path / "out.mp4",
+    )
+
+    assert requests[0]["content"][1]["role"] == "reference_image"
+    assert "role" not in requests[1]["content"][1]
+
+
+def test_seedance_request_does_not_retry_non_role_errors(tmp_path: Path, monkeypatch) -> None:
+    primary = tmp_path / "primary.png"
+    primary.write_bytes(b"primary")
+    calls = 0
+
+    def fake_post(url, *, api_key, body, timeout_s):
+        nonlocal calls
+        calls += 1
+        raise ark.ArkProviderError("Ark HTTP 429: quota exceeded")
+
+    monkeypatch.setattr(ark, "_post_json", fake_post)
+    try:
+        ark.create_seedance_video(
+            ToolContext.from_mapping(
+                {"mock": False, "run_root": str(tmp_path), "env": {"SEEDANCE_API_KEY": "configured"}}
+            ),
+            prompt="Product demo",
+            image_path=str(primary),
+            output_path=tmp_path / "out.mp4",
+        )
+    except ark.ArkProviderError as exc:
+        assert "quota" in str(exc)
+    else:
+        raise AssertionError("expected provider error")
+    assert calls == 1

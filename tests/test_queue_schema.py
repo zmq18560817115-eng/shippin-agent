@@ -71,3 +71,21 @@ def test_startup_recovery_requeues_orphaned_running_task(tmp_path: Path) -> None
     task = queue.get_task(task_id, db_path=db_path)
     assert task.status == "queued"
     assert task.error_json["category"] == "service_restarted"
+
+
+def test_expired_recovery_handles_legacy_running_task_without_lease(tmp_path: Path) -> None:
+    db_path = tmp_path / "agentflow.db"
+    queue.init_db(db_path=db_path)
+    task_id = queue.enqueue_task(project_id="legacy-demo", stage="analysis", agent="analysis", db_path=db_path)
+    with queue.get_conn(db_path) as conn:
+        conn.execute(
+            "UPDATE tasks SET status = 'running', lease_owner = NULL, lease_expires_at = NULL, updated_at = ? WHERE id = ?",
+            ("2026-07-15T00:00:00.000Z", task_id),
+        )
+
+    recovered = queue.recover_expired_leases(now="2026-07-21T00:00:00.000Z", db_path=db_path)
+
+    assert recovered == 1
+    task = queue.get_task(task_id, db_path=db_path)
+    assert task.status == "queued"
+    assert task.error_json["category"] == "legacy_running_recovered"

@@ -843,23 +843,27 @@ def recover_expired_leases(
     now: str | None = None,
 ) -> int:
     recovery_time = now or utc_now()
+    parsed_recovery = datetime.fromisoformat(recovery_time.replace("Z", "+00:00"))
+    legacy_cutoff = (parsed_recovery - timedelta(minutes=15)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     with get_conn(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT id, project_id, attempt, max_retries
+            SELECT id, project_id, attempt, max_retries, lease_expires_at
             FROM tasks
             WHERE status = 'running'
-              AND lease_expires_at IS NOT NULL
-              AND lease_expires_at <= ?
+              AND (
+                    (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
+                 OR (lease_expires_at IS NULL AND lease_owner IS NULL AND updated_at <= ?)
+              )
             """,
-            (recovery_time,),
+            (recovery_time, legacy_cutoff),
         ).fetchall()
         recovered = 0
         for row in rows:
             next_status = "queued" if int(row["attempt"]) < int(row["max_retries"]) else "failed"
             error = {
-                "category": "lease_expired",
-                "message": "worker lease expired before task completion",
+                "category": "lease_expired" if row["lease_expires_at"] else "legacy_running_recovered",
+                "message": "worker lease expired before task completion" if row["lease_expires_at"] else "legacy running task had no active worker lease",
                 "attempt": int(row["attempt"]),
                 "max_retries": int(row["max_retries"]),
             }

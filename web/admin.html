@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂 · 管理后台</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/portal.css?v=20260721-4" />
+    <link rel="stylesheet" href="/static/portal.css?v=20260721-5" />
   </head>
   <body class="adminPage">
     <header class="adminTopbar">
@@ -22,7 +22,7 @@
       </section>
       <section class="adminColumns">
         <div class="adminPanel" id="projectStatusPanel"><div class="panelHead"><div><i data-lucide="activity"></i><h3>项目状态</h3></div><span id="projectTotal"></span></div><div id="projectStates" class="stateBars"></div></div>
-        <div class="adminPanel" id="backendPanel"><div class="panelHead"><div><i data-lucide="server-cog"></i><h3>服务状态</h3></div><span>实时</span></div><div id="backendStates" class="backendList"></div></div>
+        <div class="adminPanel" id="backendPanel"><div class="panelHead"><div><i data-lucide="server-cog"></i><h3>服务状态</h3></div><div><span id="runtimeBuildVersion">正在检测</span><button type="button" class="tableAction" id="probeTikTok">检测采集</button></div></div><div id="backendStates" class="backendList"></div></div>
       </section>
       <section class="adminPanel registrationRequestsPanel" id="registrationPanel">
         <div class="panelHead"><div><i data-lucide="user-round-check"></i><h3>账号申请</h3></div><span id="registrationRequestCount"></span></div>
@@ -47,6 +47,6 @@
       </form>
     </dialog>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/admin.js?v=20260721-4"></script>
+    <script src="/static/admin.js?v=20260721-5"></script>
   </body>
 </html>

@@ -103,26 +103,27 @@ def create_seedance_video(
         if key not in seen:
             seen.add(key)
             source_paths.append(source)
-    body = {
-        "model": model,
-        "content": [
-            {"type": "text", "text": _seedance_prompt(prompt, duration_sec)},
-            *[
-                {
-                    "type": "image_url",
-                    "image_url": {"url": _image_data_url(source)},
-                    "role": "reference_image",
-                }
-                for source in source_paths
-            ],
-        ],
-    }
-    created = _post_json(
-        base_url + "/contents/generations/tasks",
-        api_key=api_key,
-        body=body,
-        timeout_s=timeout_s,
-    )
+    body = _seedance_request_body(model, prompt, duration_sec, source_paths, image_role="reference_image")
+    try:
+        created = _post_json(
+            base_url + "/contents/generations/tasks",
+            api_key=api_key,
+            body=body,
+            timeout_s=timeout_s,
+        )
+    except ArkProviderError as exc:
+        if not _is_seedance_image_role_error(exc):
+            raise
+        # Seedance variants currently differ on whether ordinary URL/base64
+        # inputs accept an explicit role. A validation failure means no task
+        # was created, so a role-free retry cannot duplicate a paid job.
+        body = _seedance_request_body(model, prompt, duration_sec, source_paths, image_role=None)
+        created = _post_json(
+            base_url + "/contents/generations/tasks",
+            api_key=api_key,
+            body=body,
+            timeout_s=timeout_s,
+        )
     task_id = _task_id(created)
     if not task_id:
         raise ArkProviderError(f"Seedance task response missing task id: {_safe_payload(created)}")
@@ -216,6 +217,37 @@ def _seedance_prompt(prompt: str, duration_sec: int) -> str:
         # the delivery standard in ffmpeg_compose.
         f"--ratio 9:16 --dur {duration_sec}"
     )
+
+
+def _seedance_request_body(
+    model: str,
+    prompt: str,
+    duration_sec: int,
+    source_paths: list[Path],
+    *,
+    image_role: str | None,
+) -> dict[str, Any]:
+    images: list[dict[str, Any]] = []
+    for source in source_paths:
+        item: dict[str, Any] = {
+            "type": "image_url",
+            "image_url": {"url": _image_data_url(source)},
+        }
+        if image_role:
+            item["role"] = image_role
+        images.append(item)
+    return {
+        "model": model,
+        "content": [
+            {"type": "text", "text": _seedance_prompt(prompt, duration_sec)},
+            *images,
+        ],
+    }
+
+
+def _is_seedance_image_role_error(exc: Exception) -> bool:
+    message = str(exc).casefold()
+    return "role" in message and any(token in message for token in ("invalid", "unsupported", "not support"))
 
 
 def _image_data_url(path: Path) -> str:
