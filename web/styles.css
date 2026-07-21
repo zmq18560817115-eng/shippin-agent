@@ -54,6 +54,16 @@ button:hover,
   color: var(--blue);
 }
 
+button:focus-visible,
+.buttonLink:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.22);
+  outline-offset: 2px;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -3971,4 +3981,12 @@ pre {
   .quickIntake .formActions {
     grid-template-columns: 1fr;
   }
+}
+
+/* Final accessibility floor after all responsive theme layers. */
+.workflowNav button > span,
+.workflowNav .navLabel,
+.workflowNav .navFoot,
+.viewIntro > div > span {
+  font-size: 12px;
 }

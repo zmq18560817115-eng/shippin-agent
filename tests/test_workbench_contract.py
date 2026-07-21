@@ -216,3 +216,14 @@ def test_admin_failures_have_inline_recovery_actions() -> None:
     assert 'data-admin-ignore-task="${Number(failure.task_id)}"' in script
     assert 'api("/api/v2/tasks/retry"' in script
     assert "/api/v2/admin/tasks/${button.dataset.adminIgnoreTask}/ignore" in script
+
+
+def test_visual_system_keeps_accessible_text_and_focus_targets() -> None:
+    styles = Path("web/styles.css").read_text(encoding="utf-8")
+    portal_styles = Path("web/portal.css").read_text(encoding="utf-8")
+
+    assert "button:focus-visible" in styles
+    assert "textarea:focus-visible" in styles
+    assert "button:focus-visible" in portal_styles
+    assert ".tableAction { min-height: 36px" in portal_styles
+    assert "button, select, input { min-height: 44px; }" in portal_styles
