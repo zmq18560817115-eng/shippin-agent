@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from orchestrator.api import app
+from orchestrator import queue
 
 
 def test_local_portals_are_available_without_auth(monkeypatch):
@@ -50,6 +51,32 @@ def test_admin_endpoint_requires_admin_role(monkeypatch, tmp_path):
         assert "storage_bytes" in summary.json()
         assert len(summary.json()["analytics"]["daily"]) == 7
         assert summary.json()["analytics"]["project_status"] == summary.json()["projects"]
+
+
+def test_admin_can_ignore_failed_task_with_audit_event(monkeypatch, tmp_path):
+    db_path = tmp_path / "ignore-task.db"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_COOKIE_SECURE", "false")
+    monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
+    monkeypatch.setenv("VAF_ADMIN_USER", "admin")
+    monkeypatch.setenv("VAF_ADMIN_PASSWORD", "admin-pass")
+    queue.init_db(db_path=db_path)
+    task_id = queue.enqueue_task(project_id="failed-project", stage="analysis", agent="analysis", db_path=db_path)
+    queue.mark_task_status(task_id, "failed", error={"message": "模型调用失败"}, db_path=db_path)
+
+    with TestClient(app) as admin:
+        assert admin.post(
+            "/api/v2/auth/login",
+            json={"username": "admin", "password": "admin-pass", "portal": "admin"},
+        ).status_code == 200
+        summary = admin.get("/api/v2/admin/summary").json()
+        assert summary["recent_failures"][0]["task_id"] == task_id
+        ignored = admin.post(f"/api/v2/admin/tasks/{task_id}/ignore", json={"reason": "历史测试任务"})
+        assert ignored.status_code == 200
+        assert queue.get_task(task_id, db_path=db_path).status == "cancelled"
+        events = queue.list_events(event_type="task.ignored", db_path=db_path)
+        assert events[0]["task_id"] == task_id
 
 
 def test_admin_can_create_and_disable_database_user(monkeypatch, tmp_path):

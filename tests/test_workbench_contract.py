@@ -197,3 +197,14 @@ def test_delivery_center_has_four_operational_views() -> None:
     assert 'api("/api/v2/delivery/downloads?limit=100")' in script
     assert 'state.currentView === "review"' in script
     assert '["archive", "delivery"].includes(state.currentView)' in script
+
+
+def test_admin_failures_have_inline_recovery_actions() -> None:
+    script = Path("web/admin.js").read_text(encoding="utf-8")
+
+    assert "function failureMessage" in script
+    assert "function bindFailureActions" in script
+    assert 'data-admin-retry-task="${Number(failure.task_id)}"' in script
+    assert 'data-admin-ignore-task="${Number(failure.task_id)}"' in script
+    assert 'api("/api/v2/tasks/retry"' in script
+    assert "/api/v2/admin/tasks/${button.dataset.adminIgnoreTask}/ignore" in script

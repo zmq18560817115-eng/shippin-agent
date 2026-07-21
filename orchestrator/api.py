@@ -240,6 +240,10 @@ class AgentRunRequest(BaseModel):
     creative_freedom: str = "balanced"
 
 
+class TaskIgnoreRequest(BaseModel):
+    reason: str | None = None
+
+
 class PipelineResumeRequest(BaseModel):
     project_id: str
     mock: bool = True
@@ -495,7 +499,7 @@ def admin_summary() -> dict[str, Any]:
         failures = [
             dict(row)
             for row in conn.execute(
-                "SELECT project_id, stage, agent, error_json, updated_at FROM tasks WHERE status = 'failed' ORDER BY updated_at DESC LIMIT 12"
+                "SELECT id AS task_id, project_id, stage, agent, error_json, updated_at FROM tasks WHERE status = 'failed' ORDER BY updated_at DESC LIMIT 12"
             ).fetchall()
         ]
     material_index = manual_import.load_library_index(_material_library_root())
@@ -2596,6 +2600,32 @@ def retry_task(request: TaskRetryRequest) -> dict[str, Any]:
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"engine": _engine_status(status), "project": _project_summary(project_id)}
+
+
+@app.post("/api/v2/admin/tasks/{task_id}/ignore")
+def ignore_failed_task(task_id: int, request: TaskIgnoreRequest) -> dict[str, Any]:
+    try:
+        task = queue.get_task(task_id, db_path=_db_path())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="任务不存在") from exc
+    if task.status != "failed":
+        raise HTTPException(status_code=409, detail="只有失败任务可以忽略")
+    reason = (request.reason or "管理员确认无需继续处理").strip()
+    queue.mark_task_status(
+        task_id,
+        "cancelled",
+        result={"ignored": True, "reason": reason},
+        db_path=_db_path(),
+    )
+    queue.record_event(
+        project_id=task.project_id,
+        task_id=task_id,
+        event_type="task.ignored",
+        message=reason,
+        meta={"stage": task.stage, "agent": task.agent},
+        db_path=_db_path(),
+    )
+    return {"ok": True, "task_id": task_id, "status": "cancelled"}
 
 
 @app.get("/api/v2/runs/{project_id}/{relative_path:path}", include_in_schema=False)

@@ -5,6 +5,16 @@ const formatBytes = (bytes) => { const units = ["B", "KB", "MB", "GB", "TB"]; le
 const chartColors = ["#2563eb", "#7c3aed", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#64748b", "#94a3b8"];
 const refreshIcons = () => window.lucide?.createIcons({ attrs: { "stroke-width": 1.8 } });
 
+function failureMessage(value) {
+  if (!value) return "未记录错误详情";
+  try {
+    const payload = typeof value === "string" ? JSON.parse(value) : value;
+    return payload.message || payload.detail || payload.error || JSON.stringify(payload);
+  } catch (_) {
+    return String(value);
+  }
+}
+
 function renderDailyTrend(items) {
   const rows = items || [];
   const maxProjects = Math.max(1, ...rows.map((item) => Number(item.projects || 0)));
@@ -84,10 +94,41 @@ async function loadAdmin() {
   const providers = [...(payload.runtime.collector_backends || []), ...Object.entries(payload.runtime.providers || {}).filter(([id]) => ["doubao", "seedance", "speech_to_text"].includes(id)).map(([id, value]) => ({ id, ready: value.configured }))];
   document.querySelector("#backendStates").innerHTML = providers.map((provider) => `<div><span>${escapeHtml(providerNames[provider.id] || provider.id)}</span><strong class="${provider.ready ? "ready" : "missing"}">${provider.ready ? "可用" : "未配置"}</strong></div>`).join("");
   document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(formatTime(project.updated_at))}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';
-  document.querySelector("#recentFailures").innerHTML = payload.recent_failures.map((failure) => `<details><summary>${escapeHtml(failure.project_id)} · ${escapeHtml(failure.stage)} · ${escapeHtml(failure.agent)}</summary><pre>${escapeHtml(failure.error_json || "无错误详情")}</pre></details>`).join("") || '<p class="emptyMessage">当前没有失败节点</p>';
+  document.querySelector("#recentFailures").innerHTML = payload.recent_failures.map((failure) => `<article class="failureItem">
+    <div class="failureSummary"><div><strong>${escapeHtml(failure.project_id)} · ${escapeHtml(failure.stage)}</strong><span>${escapeHtml(failure.agent)} · ${escapeHtml(formatTime(failure.updated_at))}</span></div><span class="statusTag status-failed">失败</span></div>
+    <p>${escapeHtml(failureMessage(failure.error_json))}</p>
+    <details><summary>查看原始日志</summary><pre>${escapeHtml(failure.error_json || "无错误详情")}</pre></details>
+    <div class="failureActions"><a class="tableAction" href="/workbench#view=tasks">进入任务中心</a><button type="button" class="tableAction" data-admin-retry-task="${Number(failure.task_id)}" data-project-id="${escapeHtml(failure.project_id)}">重试</button><button type="button" class="tableAction danger" data-admin-ignore-task="${Number(failure.task_id)}">忽略</button></div>
+  </article>`).join("") || '<p class="emptyMessage">当前没有失败节点</p>';
+  bindFailureActions();
   renderUsers(users.items || []);
   renderRegistrationRequests(registrations.items || []);
   installAdminActionIcons();
+}
+
+function bindFailureActions() {
+  document.querySelectorAll("[data-admin-retry-task]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      await api("/api/v2/tasks/retry", { method: "POST", body: JSON.stringify({ project_id: button.dataset.projectId, task_id: Number(button.dataset.adminRetryTask) }) });
+      await loadAdmin();
+    } catch (error) {
+      window.alert(`重试失败：${error.message}`);
+      button.disabled = false;
+    }
+  }));
+  document.querySelectorAll("[data-admin-ignore-task]").forEach((button) => button.addEventListener("click", async () => {
+    const reason = window.prompt("请填写忽略原因（将保留审计记录）：", "已人工确认，无需继续处理");
+    if (reason === null) return;
+    button.disabled = true;
+    try {
+      await api(`/api/v2/admin/tasks/${button.dataset.adminIgnoreTask}/ignore`, { method: "POST", body: JSON.stringify({ reason }) });
+      await loadAdmin();
+    } catch (error) {
+      window.alert(`忽略失败：${error.message}`);
+      button.disabled = false;
+    }
+  }));
 }
 
 function renderRegistrationRequests(items) {
