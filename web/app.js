@@ -36,6 +36,7 @@ const state = {
   productionDrafts: {},
   scriptBaseline: null,
   scriptLocks: {},
+  selectedMaterials: new Set(),
 };
 
 const views = {
@@ -1506,7 +1507,7 @@ function renderMaterialLibrary() {
       <input id="materialSearch" type="search" placeholder="搜索标题、作者或关键词" aria-label="搜索素材" />
       <select id="materialReadiness" aria-label="筛选素材状态"><option value="all">全部素材</option><option value="production">生产可用</option><option value="processing">待处理</option><option value="quarantine">隔离区</option></select>
       <span id="materialCount"></span>
-    </div><div class="materialList" id="materialListInner"></div>`;
+    </div><div class="materialBatchBar"><label><input id="selectVisibleMaterials" type="checkbox" />选择当前结果</label><span id="selectedMaterialCount">已选 0 条</span><button type="button" id="batchAnalyzeMaterials" disabled>重新分析所选素材</button></div><div class="materialList" id="materialListInner"></div>`;
   const draw = () => {
     const query = $("#materialSearch").value.trim().toLowerCase();
     const readiness = $("#materialReadiness").value;
@@ -1519,6 +1520,13 @@ function renderMaterialLibrary() {
     $("#materialCount").textContent = `${filtered.length} / ${state.materials.length} 条`;
     $("#materialListInner").innerHTML = filtered.map(renderMaterialItem).join("") || '<div class="emptyState">没有符合条件的素材</div>';
     bindMaterialActions($("#materialListInner"));
+    updateMaterialBatchBar();
+    $("#selectVisibleMaterials").checked = Boolean(filtered.length) && filtered.every((item) => state.selectedMaterials.has(item.material_id));
+    $("#selectVisibleMaterials").onchange = (event) => {
+      filtered.forEach((item) => event.currentTarget.checked ? state.selectedMaterials.add(item.material_id) : state.selectedMaterials.delete(item.material_id));
+      draw();
+    };
+    $("#batchAnalyzeMaterials").onclick = batchAnalyzeSelectedMaterials;
   };
   $("#materialSearch").addEventListener("input", draw);
   $("#materialReadiness").addEventListener("change", draw);
@@ -1526,6 +1534,12 @@ function renderMaterialLibrary() {
 }
 
 function bindMaterialActions(host) {
+  host.querySelectorAll("[data-select-material]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      checkbox.checked ? state.selectedMaterials.add(checkbox.dataset.selectMaterial) : state.selectedMaterials.delete(checkbox.dataset.selectMaterial);
+      updateMaterialBatchBar();
+    });
+  });
   host.querySelectorAll("[data-start-material]").forEach((button) => {
     button.addEventListener("click", () => startFromMaterial(button.dataset.startMaterial));
   });
@@ -1557,6 +1571,7 @@ function renderMaterialItem(item) {
     : `<div class="materialCover placeholder">无封面</div>`;
   return `
     <article class="materialItem">
+      <label class="materialSelect" title="选择素材"><input type="checkbox" data-select-material="${escapeAttr(item.material_id)}" ${state.selectedMaterials.has(item.material_id) ? "checked" : ""} /><span class="srOnly">选择 ${escapeHtml(title)}</span></label>
       ${cover}
       <div class="materialBody">
         <strong>${escapeHtml(title)}</strong>
@@ -1868,6 +1883,31 @@ function explainTaskError(error) {
   if (/quota|balance|insufficient/i.test(message)) return "模型余额或配额不足";
   if (/recovered after the local orchestrator restarted/i.test(message)) return "调度服务重启后任务已恢复，需要重新执行当前节点";
   return message;
+}
+
+function updateMaterialBatchBar() {
+  const count = state.selectedMaterials.size;
+  $("#selectedMaterialCount").textContent = `已选 ${count} 条`;
+  $("#batchAnalyzeMaterials").disabled = count === 0;
+}
+
+async function batchAnalyzeSelectedMaterials() {
+  const materialIds = [...state.selectedMaterials];
+  if (!materialIds.length) return;
+  beginOperation(`正在重新分析 ${materialIds.length} 条素材`, Math.max(20, materialIds.length * 12));
+  try {
+    const payload = await api("/api/v2/collect/materials/batch-analyze", {
+      method: "POST",
+      body: JSON.stringify({ material_ids: materialIds, mock: $("#runtimeMode").value !== "real" }),
+    });
+    state.selectedMaterials.clear();
+    toast(payload.failures.length ? `完成 ${payload.completed.length} 条，${payload.failures.length} 条需补转写` : `已重新分析 ${payload.completed.length} 条素材`, payload.failures.length ? "error" : "success");
+    await loadMaterials();
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    endOperation();
+  }
 }
 
 function renderPanels() {

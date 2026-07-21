@@ -182,6 +182,10 @@ def test_material_center_uses_five_focused_subsections() -> None:
     assert "function renderProjectAssetPackages" in script
     assert 'api("/api/v2/collect/library?limit=50")' in script
     assert 'api("/api/v2/collect/jobs"' in script
+    assert "selectedMaterials: new Set()" in script
+    assert "batchAnalyzeSelectedMaterials" in script
+    assert 'api("/api/v2/collect/materials/batch-analyze"' in script
+    assert 'data-select-material="${escapeAttr(item.material_id)}"' in script
 
 
 def test_delivery_center_has_four_operational_views() -> None:

@@ -2201,6 +2201,26 @@ button.quietButton {
   background: var(--canvas);
 }
 
+.materialBatchBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.materialBatchBar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.materialBatchBar span { color: var(--muted); font-size: 12px; }
+.materialBatchBar button { margin-left: auto; }
+
 .materialReadiness { width: fit-content; font-size: 12px; font-weight: 700; }
 .materialReadiness.production, .materialReadiness.ready, .takeResolved { color: var(--green); }
 .materialReadiness.processing { color: var(--warning); }
@@ -2323,7 +2343,7 @@ button.quietButton {
 
 .materialItem {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr) auto;
+  grid-template-columns: auto 112px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   border: 1px solid var(--line);
@@ -2555,6 +2575,17 @@ th {
 
 .projectTable tr.selected td {
   background: #eef5f2;
+}
+
+.materialSelect {
+  align-self: start;
+  padding-top: 4px;
+}
+
+.materialSelect input,
+.materialBatchBar input {
+  width: 18px;
+  height: 18px;
 }
 
 @media (max-width: 700px) {
@@ -3750,6 +3781,10 @@ pre {
   .materialItem {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .materialSelect { position: absolute; margin: 8px; padding: 6px; border-radius: 6px; background: #fff; }
+  .materialBatchBar { align-items: stretch; flex-direction: column; }
+  .materialBatchBar button { width: 100%; margin-left: 0; }
 
   .quickIntake {
     grid-template-columns: minmax(0, 1fr);

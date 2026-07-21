@@ -253,6 +253,11 @@ class MaterialTranscriptRequest(BaseModel):
     transcript_text: str
 
 
+class MaterialBatchAnalyzeRequest(BaseModel):
+    material_ids: list[str]
+    mock: bool = True
+
+
 class StandalonePromoteRequest(BaseModel):
     source_project_id: str
     artifact_name: str
@@ -1970,6 +1975,59 @@ def update_material_transcript(material_id: str, request: MaterialTranscriptRequ
         db_path=_db_path(),
     )
     return {"ok": True, "material": meta, "transcript_status": "ready"}
+
+
+@app.post("/api/v2/collect/materials/batch-analyze")
+def batch_analyze_materials(request: MaterialBatchAnalyzeRequest) -> dict[str, Any]:
+    material_ids = list(dict.fromkeys(item.strip() for item in request.material_ids if item.strip()))
+    if not material_ids:
+        raise HTTPException(status_code=422, detail="请至少选择一条素材")
+    if len(material_ids) > 50:
+        raise HTTPException(status_code=422, detail="单次最多重新分析 50 条素材")
+    root = _material_library_root()
+    completed: list[str] = []
+    failures: list[dict[str, str]] = []
+    for material_id in material_ids:
+        try:
+            meta = manual_import.load_material_meta(material_id, root)
+            source_text = str(meta.get("transcript_text") or meta.get("caption") or "").strip()
+            if not source_text:
+                raise ValueError("缺少转写或简介")
+            result = tool_registry.execute_tool(
+                "doubao_analyze",
+                {
+                    "project_id": f"material-{material_id}",
+                    "source_material_id": material_id,
+                    "source_url": str(meta.get("source_url") or ""),
+                    "transcript_text": source_text[:8000],
+                },
+                context={"mock": request.mock},
+            )
+            if not result.ok:
+                raise ValueError(str((result.error or {}).get("message") or "分析模型运行失败"))
+            report = result.data["analysis_report"]
+            try:
+                previous = json.loads(str(meta.get("ai_analysis_json") or "{}"))
+            except json.JSONDecodeError:
+                previous = {}
+            if not isinstance(previous, dict):
+                previous = {}
+            previous["analysis"] = {key: report.get(key) for key in ("hook_3s", "structure", "pacing", "keyframes", "shot_breakdown")}
+            manual_import.update_material_meta(
+                material_id,
+                {"processing_status": "analyzed", "ai_analysis_json": json.dumps(previous, ensure_ascii=False)},
+                root,
+            )
+            completed.append(material_id)
+        except (FileNotFoundError, ValueError) as exc:
+            failures.append({"material_id": material_id, "message": str(exc)})
+    queue.record_event(
+        event_type="collector.materials_reanalyzed",
+        message=f"完成 {len(completed)} 条，失败 {len(failures)} 条",
+        meta={"material_ids": material_ids, "completed": completed, "failures": failures, "mock": request.mock},
+        db_path=_db_path(),
+    )
+    return {"ok": not failures, "completed": completed, "failures": failures}
 
 
 @app.get("/api/v2/collect/materials/{material_id}/file/{relative_path:path}")
