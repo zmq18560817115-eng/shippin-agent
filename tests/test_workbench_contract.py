@@ -123,6 +123,10 @@ def test_p0_information_architecture_is_exposed_as_first_class_views() -> None:
     assert 'id="homeTasks"' in html
     assert "function renderHomeDashboard" in script
     assert "function renderTaskCenter" in script
+    assert "function renderTaskCenterItem" in script
+    assert "function taskCenterEmptyText" in script
+    assert "data-task-retry" in script
+    assert "taskProgress" in script
     assert "function runQuickTool" in script
     assert 'id="quickToolProduct"' in html
     assert 'id="quickToolMode"' in html

@@ -758,9 +758,7 @@ function renderTaskCenter() {
   const items = buckets[state.taskFilter] || [];
   const host = $("#taskCenterList");
   host.className = items.length ? "taskList" : "taskList emptyState";
-  host.innerHTML = items.length ? items.map((project) => `
-    <article><div><span class="statusTag ${statusClass(project.status)}">${escapeHtml(stageLabel(project.status))}</span><strong>${escapeHtml(project.product_id || "未命名产品")}</strong><small>${escapeHtml(project.project_id)} · ${escapeHtml(formatProjectTime(project.updated_at))}</small></div><div><span>${escapeHtml(stageLabel(project.current_gate || project.current_stage || project.status))}</span><button type="button" data-task-project="${escapeAttr(project.project_id)}">打开</button></div></article>
-  `).join("") : "当前分类暂无任务";
+  host.innerHTML = items.length ? items.map((project) => renderTaskCenterItem(project, state.taskFilter)).join("") : taskCenterEmptyText(state.taskFilter);
   host.querySelectorAll("[data-task-project]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.selectedId = button.dataset.taskProject;
@@ -768,6 +766,55 @@ function renderTaskCenter() {
       continueCurrentProject();
     });
   });
+  host.querySelectorAll("[data-task-retry]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.selectedId = button.dataset.projectId;
+      button.disabled = true;
+      await retryTask(Number(button.dataset.taskRetry));
+    });
+  });
+}
+
+function taskCenterEmptyText(filter) {
+  return {
+    running: "当前没有正在运行的项目。",
+    human: "当前没有需要你确认的脚本、分镜、镜头或成片。",
+    failed: "当前没有失败任务。",
+    done: "当前没有已完成项目。",
+  }[filter] || "当前分类暂无任务";
+}
+
+function renderTaskCenterItem(project, filter) {
+  const tasks = project.tasks || [];
+  const unresolved = tasks.filter((task) => task.status === "failed" && isUnresolvedTask(project, task));
+  const activeTask = tasks.find((task) => ["running", "queued"].includes(task.status));
+  const failedTask = unresolved[0];
+  const current = project.current_gate || activeTask?.stage || project.current_stage || project.status;
+  const nodes = project.nodes || [];
+  const completed = nodes.filter((node) => node.status === "succeeded").length;
+  const progress = nodes.length ? Math.round((completed / nodes.length) * 100) : project.status === "succeeded" ? 100 : 0;
+  const detail = filter === "failed" && failedTask
+    ? explainTaskError(failedTask.error_json)
+    : filter === "failed"
+      ? `项目停在${stageLabel(current)}，请打开查看失败详情`
+    : filter === "human"
+      ? `等待你完成${stageLabel(project.current_gate || current)}`
+      : filter === "done"
+        ? `已完成全部生产节点，可进入交付归档`
+        : `${stageLabel(current)}正在执行，已完成 ${completed}/${nodes.length || 0} 个节点`;
+  const action = failedTask
+    ? `<button type="button" class="primary" data-project-id="${escapeAttr(project.project_id)}" data-task-retry="${failedTask.id}">重试失败节点</button>`
+    : `<button type="button" ${filter === "human" ? 'class="primary"' : ""} data-task-project="${escapeAttr(project.project_id)}">${filter === "human" ? "去处理" : filter === "done" ? "查看交付" : "打开"}</button>`;
+  return `<article class="taskCenterItem ${filter}">
+    <div class="taskMain">
+      <span class="statusTag ${statusClass(project.status)}">${escapeHtml(stageLabel(project.status))}</span>
+      <strong>${escapeHtml(project.product_id || "未命名产品")}</strong>
+      <small>${escapeHtml(project.project_id)} · ${escapeHtml(formatProjectTime(project.updated_at))}</small>
+      <p>${escapeHtml(detail)}</p>
+      <div class="taskProgress"><span style="width:${progress}%"></span></div>
+    </div>
+    <div class="taskAction"><span>${escapeHtml(stageLabel(current))}</span>${action}</div>
+  </article>`;
 }
 
 function showView(view, { updateUrl = true } = {}) {
@@ -1752,10 +1799,11 @@ function renderErrors(projectId, errors) {
 }
 
 function explainTaskError(error) {
-  const message = String(error?.message || error?.detail || "任务执行失败");
+  const message = String(typeof error === "string" ? error : error?.message || error?.detail || "任务执行失败");
   if (/DOUBAO_API_KEY|SEEDANCE_API_KEY|not configured|missing/i.test(message)) return "缺少模型密钥或模型未配置";
   if (/timeout|timed out/i.test(message)) return "调用超时，可重试";
   if (/quota|balance|insufficient/i.test(message)) return "模型余额或配额不足";
+  if (/recovered after the local orchestrator restarted/i.test(message)) return "调度服务重启后任务已恢复，需要重新执行当前节点";
   return message;
 }
 
