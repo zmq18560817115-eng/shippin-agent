@@ -258,6 +258,12 @@ class MaterialBatchAnalyzeRequest(BaseModel):
     mock: bool = True
 
 
+class MaterialBatchActionRequest(BaseModel):
+    material_ids: list[str]
+    action: str
+    reason: str | None = None
+
+
 class StandalonePromoteRequest(BaseModel):
     source_project_id: str
     artifact_name: str
@@ -2030,6 +2036,50 @@ def batch_analyze_materials(request: MaterialBatchAnalyzeRequest) -> dict[str, A
     return {"ok": not failures, "completed": completed, "failures": failures}
 
 
+@app.post("/api/v2/collect/materials/batch-action")
+def batch_material_action(request: MaterialBatchActionRequest) -> dict[str, Any]:
+    material_ids = list(dict.fromkeys(item.strip() for item in request.material_ids if item.strip()))
+    if not material_ids:
+        raise HTTPException(status_code=422, detail="请至少选择一条素材")
+    if len(material_ids) > 50:
+        raise HTTPException(status_code=422, detail="单次最多处理 50 条素材")
+    if request.action not in {"quarantine", "restore", "delete"}:
+        raise HTTPException(status_code=422, detail="不支持的素材操作")
+    root = _material_library_root()
+    completed: list[str] = []
+    failures: list[dict[str, str]] = []
+    for material_id in material_ids:
+        try:
+            meta = manual_import.load_material_meta(material_id, root)
+            if request.action == "delete":
+                references = _material_project_references(material_id)
+                if references:
+                    raise ValueError(f"已被项目引用，不能删除：{', '.join(references[:3])}")
+                manual_import.delete_material(material_id, root)
+            else:
+                intake = dict(meta.get("asset_intake") or {})
+                if request.action == "quarantine":
+                    intake["moderation_status"] = "quarantined"
+                    intake["moderation_reason"] = (request.reason or "人工批量隔离").strip()
+                    intake["status_before_quarantine"] = str(meta.get("processing_status") or "raw")
+                    status = "quarantined"
+                else:
+                    intake["moderation_status"] = "active"
+                    intake["moderation_reason"] = ""
+                    status = str(intake.pop("status_before_quarantine", "raw") or "raw")
+                manual_import.update_material_meta(material_id, {"processing_status": status, "asset_intake": intake}, root)
+            completed.append(material_id)
+        except (FileNotFoundError, ValueError) as exc:
+            failures.append({"material_id": material_id, "message": str(exc)})
+    queue.record_event(
+        event_type=f"collector.materials_{request.action}",
+        message=f"完成 {len(completed)} 条，失败 {len(failures)} 条",
+        meta={"material_ids": material_ids, "completed": completed, "failures": failures, "reason": request.reason or ""},
+        db_path=_db_path(),
+    )
+    return {"ok": not failures, "action": request.action, "completed": completed, "failures": failures}
+
+
 @app.get("/api/v2/collect/materials/{material_id}/file/{relative_path:path}")
 def collect_material_file(material_id: str, relative_path: str) -> FileResponse:
     """Serve only files stored inside one material directory."""
@@ -3469,14 +3519,32 @@ def _material_production_readiness(meta: dict[str, Any], material_dir: Path) -> 
         missing.append("缺少转写")
     if not analysis_ready:
         missing.append("缺少镜头拆解")
-    ready = not missing
-    lane = "production" if ready else "quarantine" if relevance_score < 0.5 else "processing"
+    manually_quarantined = str((meta.get("asset_intake") or {}).get("moderation_status") or "") == "quarantined"
+    if manually_quarantined:
+        missing.insert(0, str((meta.get("asset_intake") or {}).get("moderation_reason") or "已人工隔离"))
+    ready = not missing and not manually_quarantined
+    lane = "quarantine" if manually_quarantined or relevance_score < 0.5 else "production" if ready else "processing"
     return {
         "ready": ready,
         "relevance_score": round(relevance_score, 3),
         "missing": missing,
         "lane": lane,
     }
+
+
+def _material_project_references(material_id: str) -> list[str]:
+    queue.init_db(db_path=_db_path())
+    references: list[str] = []
+    with queue.get_conn(_db_path()) as conn:
+        rows = conn.execute("SELECT id, payload_json FROM projects").fetchall()
+    for row in rows:
+        try:
+            payload = json.loads(str(row["payload_json"] or "{}"))
+        except json.JSONDecodeError:
+            continue
+        if str(payload.get("source_material_id") or "") == material_id:
+            references.append(str(row["id"]))
+    return references
 
 
 def _safe_run_file(run_root: Path, relative_path: str) -> Path:

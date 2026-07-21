@@ -2219,7 +2219,8 @@ button.quietButton {
 }
 
 .materialBatchBar span { color: var(--muted); font-size: 12px; }
-.materialBatchBar button { margin-left: auto; }
+.materialBatchActions { display: flex; flex-wrap: wrap; gap: 7px; margin-left: auto; }
+.materialBatchActions .danger { border-color: #efb6b0; color: var(--red); background: #fff8f7; }
 
 .materialReadiness { width: fit-content; font-size: 12px; font-weight: 700; }
 .materialReadiness.production, .materialReadiness.ready, .takeResolved { color: var(--green); }
@@ -3784,7 +3785,8 @@ pre {
 
   .materialSelect { position: absolute; margin: 8px; padding: 6px; border-radius: 6px; background: #fff; }
   .materialBatchBar { align-items: stretch; flex-direction: column; }
-  .materialBatchBar button { width: 100%; margin-left: 0; }
+  .materialBatchActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; margin-left: 0; }
+  .materialBatchActions button { width: 100%; }
 
   .quickIntake {
     grid-template-columns: minmax(0, 1fr);

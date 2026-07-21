@@ -1507,7 +1507,7 @@ function renderMaterialLibrary() {
       <input id="materialSearch" type="search" placeholder="搜索标题、作者或关键词" aria-label="搜索素材" />
       <select id="materialReadiness" aria-label="筛选素材状态"><option value="all">全部素材</option><option value="production">生产可用</option><option value="processing">待处理</option><option value="quarantine">隔离区</option></select>
       <span id="materialCount"></span>
-    </div><div class="materialBatchBar"><label><input id="selectVisibleMaterials" type="checkbox" />选择当前结果</label><span id="selectedMaterialCount">已选 0 条</span><button type="button" id="batchAnalyzeMaterials" disabled>重新分析所选素材</button></div><div class="materialList" id="materialListInner"></div>`;
+    </div><div class="materialBatchBar"><label><input id="selectVisibleMaterials" type="checkbox" />选择当前结果</label><span id="selectedMaterialCount">已选 0 条</span><div class="materialBatchActions"><button type="button" id="batchAnalyzeMaterials" disabled>重新分析</button><button type="button" id="batchQuarantineMaterials" disabled>移入隔离区</button><button type="button" id="batchRestoreMaterials" disabled>解除隔离</button><button type="button" id="batchDeleteMaterials" class="danger" disabled>删除</button></div></div><div class="materialList" id="materialListInner"></div>`;
   const draw = () => {
     const query = $("#materialSearch").value.trim().toLowerCase();
     const readiness = $("#materialReadiness").value;
@@ -1527,6 +1527,9 @@ function renderMaterialLibrary() {
       draw();
     };
     $("#batchAnalyzeMaterials").onclick = batchAnalyzeSelectedMaterials;
+    $("#batchQuarantineMaterials").onclick = () => batchMaterialAction("quarantine");
+    $("#batchRestoreMaterials").onclick = () => batchMaterialAction("restore");
+    $("#batchDeleteMaterials").onclick = () => batchMaterialAction("delete");
   };
   $("#materialSearch").addEventListener("input", draw);
   $("#materialReadiness").addEventListener("change", draw);
@@ -1888,7 +1891,9 @@ function explainTaskError(error) {
 function updateMaterialBatchBar() {
   const count = state.selectedMaterials.size;
   $("#selectedMaterialCount").textContent = `已选 ${count} 条`;
-  $("#batchAnalyzeMaterials").disabled = count === 0;
+  ["#batchAnalyzeMaterials", "#batchQuarantineMaterials", "#batchRestoreMaterials", "#batchDeleteMaterials"].forEach((selector) => {
+    $(selector).disabled = count === 0;
+  });
 }
 
 async function batchAnalyzeSelectedMaterials() {
@@ -1902,6 +1907,33 @@ async function batchAnalyzeSelectedMaterials() {
     });
     state.selectedMaterials.clear();
     toast(payload.failures.length ? `完成 ${payload.completed.length} 条，${payload.failures.length} 条需补转写` : `已重新分析 ${payload.completed.length} 条素材`, payload.failures.length ? "error" : "success");
+    await loadMaterials();
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    endOperation();
+  }
+}
+
+async function batchMaterialAction(action) {
+  const materialIds = [...state.selectedMaterials];
+  if (!materialIds.length) return;
+  const labels = { quarantine: "隔离", restore: "解除隔离", delete: "永久删除" };
+  let reason = "";
+  if (action === "delete") {
+    const confirmed = window.confirm(`确定永久删除所选 ${materialIds.length} 条素材吗？\n本地视频、封面、转写和拆解文件都会删除；已被项目引用的素材会自动阻止删除。`);
+    if (!confirmed) return;
+  } else if (action === "quarantine") {
+    reason = window.prompt("填写隔离原因：", "与当前生产目标不匹配") || "人工隔离";
+  }
+  beginOperation(`正在${labels[action]} ${materialIds.length} 条素材`, 15);
+  try {
+    const payload = await api("/api/v2/collect/materials/batch-action", {
+      method: "POST",
+      body: JSON.stringify({ material_ids: materialIds, action, reason }),
+    });
+    state.selectedMaterials.clear();
+    toast(payload.failures.length ? `${labels[action]}完成 ${payload.completed.length} 条，失败 ${payload.failures.length} 条` : `已${labels[action]} ${payload.completed.length} 条素材`, payload.failures.length ? "error" : "success");
     await loadMaterials();
   } catch (error) {
     toast(error.message, "error");

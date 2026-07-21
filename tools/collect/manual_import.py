@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -138,6 +139,25 @@ def update_material_meta(
     artifacts.validate_artifact("material_meta", payload)
     _atomic_write_json(root / material_id / "material_meta.json", payload)
     return payload
+
+
+def delete_material(material_id: str, library_root: str | os.PathLike[str] | None = None) -> None:
+    safe_id = _safe_id(material_id)
+    if safe_id != material_id:
+        raise ValueError("invalid material_id")
+    root = (Path(library_root) if library_root is not None else default_library_root()).resolve()
+    material_dir = (root / material_id).resolve()
+    try:
+        material_dir.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("invalid material path") from exc
+    if not material_dir.is_dir():
+        raise FileNotFoundError(f"material not found: {material_id}")
+    index = load_library_index(root)
+    index["items"] = [item for item in index.get("items", []) if str(item.get("material_id")) != material_id]
+    artifacts.validate_artifact("library_index", index)
+    shutil.rmtree(material_dir)
+    _atomic_write_json(root / LIBRARY_INDEX_NAME, index)
 
 
 def upsert_library_index(

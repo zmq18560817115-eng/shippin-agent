@@ -186,6 +186,10 @@ def test_material_center_uses_five_focused_subsections() -> None:
     assert "batchAnalyzeSelectedMaterials" in script
     assert 'api("/api/v2/collect/materials/batch-analyze"' in script
     assert 'data-select-material="${escapeAttr(item.material_id)}"' in script
+    assert "batchMaterialAction" in script
+    assert 'api("/api/v2/collect/materials/batch-action"' in script
+    assert 'id="batchQuarantineMaterials"' in script
+    assert 'id="batchDeleteMaterials"' in script
 
 
 def test_delivery_center_has_four_operational_views() -> None:
