@@ -15,8 +15,11 @@ from tools.base_tool import ToolContext, ToolNotConfiguredError
 
 
 CHAT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
-DEFAULT_DOUBAO_MODEL = "doubao-seed-1-8-251228"
-DEFAULT_SEEDANCE_MODEL = "doubao-seedance-2-0-fast-260128"
+# Model version defaults. Operators pin the exact dated endpoint id per
+# deployment via ARK_DOUBAO_MODEL / ARK_SEEDANCE_MODEL (see .env.example);
+# these are the fallbacks when no override is set.
+DEFAULT_DOUBAO_MODEL = "doubao-seed-2-1"
+DEFAULT_SEEDANCE_MODEL = "doubao-seedance-2-0"
 
 
 def _verify() -> str | bool:

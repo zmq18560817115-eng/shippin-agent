@@ -17,15 +17,16 @@ runtime:
   budget_mode: "enforce"
 
 pricing:
-  # CNY per call. Calibrated from the Volcengine Ark price sheet using the
-  # doubao-seed-2.0-pro text rates (input 9.6, output 48.0 元/百万token, input
-  # length [0,32]k) and measured token usage, plus doubao-seedance-2.0 720p at
+  # CNY per call. Estimated from the Volcengine Ark price sheet using
+  # doubao-seed-2-1 text rates (input 9.6, output 48.0 元/百万token, input
+  # length [0,32]k) and measured token usage, plus doubao-seedance-2-0 720p at
   # 46 元/百万token for image-referenced (non-video) input.
   #   text call ≈ (prompt_tokens*9.6 + completion_tokens*48)/1e6
   #   seedance 720p/6s ≈ 720*1280/1024 * 24fps * 6s = 129,600 tokens * 46/1e6
   # doubao_review is from a real run (1922 prompt / 293 completion tokens); the
-  # other text values are typical-usage estimates. Confirm seedance against a
-  # real invoice and adjust the single number if the fast model differs.
+  # other text values are typical-usage estimates. These are NOT yet reconciled
+  # against a real doubao-seed-2-1 / doubao-seedance-2-0 invoice — recalibrate
+  # each VAF_PRICE_<TOOL>_CNY from the first enterprise bill on the new models.
   doubao_analyze: 0.093
   doubao_script: 0.119
   doubao_shotplan: 0.082
