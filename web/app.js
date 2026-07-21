@@ -1605,7 +1605,8 @@ function renderProjectRows() {
     button.addEventListener("click", async () => {
       state.selectedId = button.dataset.open;
       await refreshProjects();
-      continueCurrentProject();
+      showView("projects");
+      $("#projectOverview")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
   tbody.querySelectorAll("[data-retry-shot]").forEach((button) => {
@@ -1714,6 +1715,7 @@ function renderPanels() {
   $("#currentStage").textContent = state.selected
     ? `当前节点：${stageLabels[stage] || stage}`
     : "暂无在制项目";
+  if (state.currentView === "projects") renderProjectOverview();
   if (state.currentView === "strategy") renderStrategyNode();
   if (state.currentView === "script") renderScriptGate();
   if (state.currentView === "storyboard") {
@@ -1728,6 +1730,86 @@ function renderPanels() {
   if (state.currentView === "home") renderHomeDashboard();
   if (state.currentView === "tasks") renderTaskCenter();
   installCommandIcons();
+}
+
+const projectStageGroups = [
+  { key: "strategy", label: "内容策略", stages: ["analysis", "research", "strategy"] },
+  { key: "script", label: "脚本", stages: ["script", "script_breakdown", "script_review", "script_gate"] },
+  { key: "storyboard", label: "分镜", stages: ["storyboard", "asset", "hero_gate"] },
+  { key: "production", label: "镜头制作", stages: ["production", "take_gate"] },
+  { key: "review", label: "成片验收", stages: ["compose", "final_qa"] },
+  { key: "archive", label: "交付归档", stages: ["archive", "succeeded"] },
+];
+
+function projectStageStatus(project, group) {
+  const current = project.current_stage || project.status;
+  const values = group.stages.map((stage) => project.stages?.[stage]?.status).filter(Boolean);
+  if (group.stages.includes(current)) return project.status === "failed" ? "failed" : project.status === "awaiting_human" ? "awaiting_human" : "running";
+  if (values.some((status) => status === "failed")) return "failed";
+  if (values.length && values.every((status) => status === "succeeded")) return "succeeded";
+  return "idle";
+}
+
+function projectNextAction(project) {
+  const stage = project.current_stage || project.status;
+  if (project.status === "failed") return { tone: "error", title: "有任务运行失败", detail: "打开当前阶段查看错误原因并重试。" };
+  if (project.status === "awaiting_human" || project.current_gate) {
+    return { tone: "warning", title: `等待处理：${stageLabel(project.current_gate || stage)}`, detail: "完成当前人工确认后，流水线将继续运行。" };
+  }
+  if (project.delivery_ready || project.status === "succeeded") return { tone: "success", title: "项目已完成", detail: "成片已通过验收，可进入交付归档下载产物。" };
+  return { tone: "info", title: `${stageLabel(stage)}进行中`, detail: "系统正在执行当前任务，可稍后刷新查看最新进度。" };
+}
+
+function renderProjectOverview() {
+  const section = $("#projectOverview");
+  const body = $("#projectOverviewBody");
+  const title = $("#projectOverviewTitle");
+  const actions = $("#projectOverviewActions");
+  if (!section || !body || !title || !actions) return;
+  if (!state.selected) {
+    section.hidden = true;
+    title.textContent = "请选择项目";
+    actions.innerHTML = "";
+    return;
+  }
+
+  section.hidden = false;
+  const project = state.selected;
+  const stages = projectStageGroups.map((group) => ({ ...group, status: projectStageStatus(project, group) }));
+  const completed = stages.filter((group) => group.status === "succeeded").length;
+  const failedTasks = (project.tasks || []).filter((task) => task.error_json && isUnresolvedTask(project, task)).length;
+  const next = projectNextAction(project);
+  title.textContent = project.product_id || project.project_id;
+  actions.innerHTML = `
+    <span class="stageTag ${statusClass(project.status)}">${escapeHtml(stageLabel(project.current_stage || project.status))}</span>
+    <button type="button" class="iconAction" id="projectOverviewContinue"><i data-lucide="arrow-right"></i>继续当前节点</button>
+  `;
+  body.className = "projectOverviewBody";
+  body.innerHTML = `
+    <div class="projectOverviewMeta">
+      <div><span>项目编号</span><strong>${escapeHtml(project.project_id)}</strong></div>
+      <div><span>运行模式</span><strong>${project.mock ? "演练模式" : "真实运行"}</strong></div>
+      <div><span>生产进度</span><strong>${completed} / ${stages.length} 阶段</strong></div>
+      <div><span>累计成本</span><strong>¥${Number(project.cost?.total_cost_cny || 0).toFixed(2)}</strong></div>
+    </div>
+    <div class="projectStageRail" id="projectStageRail" aria-label="项目生产阶段">
+      ${stages.map((group, index) => `
+        <button type="button" class="projectStageButton ${statusClass(group.status)}" data-project-stage-view="${group.key}">
+          <span>${String(index + 1).padStart(2, "0")}</span>
+          <strong>${escapeHtml(group.label)}</strong>
+          <small>${group.status === "succeeded" ? "已完成" : group.status === "running" ? "进行中" : group.status === "awaiting_human" ? "待确认" : group.status === "failed" ? "失败" : "未开始"}</small>
+        </button>
+      `).join("")}
+    </div>
+    <div class="projectAlert ${next.tone}">
+      <div><strong>${escapeHtml(next.title)}</strong><span>${escapeHtml(next.detail)}</span></div>
+      ${failedTasks ? `<span class="projectAlertCount">${failedTasks} 个失败任务</span>` : ""}
+    </div>
+  `;
+  $("#projectOverviewContinue")?.addEventListener("click", continueCurrentProject);
+  body.querySelectorAll("[data-project-stage-view]").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.projectStageView));
+  });
 }
 
 function renderStrategyNode() {

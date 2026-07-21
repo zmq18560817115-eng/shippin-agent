@@ -64,6 +64,11 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert "voiceover_zh" in script
     assert "seedance_prompt_zh" in script
     assert 'id="saveShotsAndContinue"' in script
+    assert 'id="projectOverview"' in html
+    assert 'id="projectStageRail"' in script
+    assert 'id="projectOverviewContinue"' in script
+    assert "function renderProjectOverview()" in script
+    assert 'data-project-stage-view' in script
 
 
 def test_video_project_navigation_exposes_every_production_stage() -> None:

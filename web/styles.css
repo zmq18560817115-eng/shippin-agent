@@ -2405,6 +2405,76 @@ th {
   background: #eef5f2;
 }
 
+.projectOverviewBody {
+  display: grid;
+  gap: 18px;
+}
+
+.projectOverviewMeta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-block: 1px solid var(--line);
+}
+
+.projectOverviewMeta > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-right: 1px solid var(--line);
+}
+
+.projectOverviewMeta > div:last-child { border-right: 0; }
+.projectOverviewMeta span { color: var(--muted); font-size: 12px; }
+.projectOverviewMeta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.projectStageRail {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(112px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.projectStageButton {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 2px 8px;
+  min-height: 72px;
+  padding: 10px 12px;
+  text-align: left;
+  background: #fff;
+}
+
+.projectStageButton > span { grid-row: 1 / 3; color: var(--muted); font-size: 12px; }
+.projectStageButton strong { font-size: 13px; }
+.projectStageButton small { color: var(--muted); font-size: 12px; }
+.projectStageButton.status-succeeded { border-color: #a7d8bb; background: #f3faf6; }
+.projectStageButton.status-running,
+.projectStageButton.status-awaiting-human { border-color: #9fbcff; background: #f3f7ff; }
+.projectStageButton.status-failed { border-color: #e7aaa6; background: #fff6f5; }
+
+.projectAlert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.projectAlert > div { display: grid; gap: 3px; }
+.projectAlert span { color: var(--muted); font-size: 12px; }
+.projectAlert.info { border-left-color: var(--blue); }
+.projectAlert.warning { border-left-color: #d49317; background: #fffbf2; }
+.projectAlert.error { border-left-color: var(--red); background: #fff6f5; }
+.projectAlert.success { border-left-color: var(--green); background: #f3faf6; }
+.projectAlertCount { white-space: nowrap; color: var(--red) !important; font-weight: 650; }
+
 .linkButton {
   height: auto;
   min-height: 0;
@@ -3268,6 +3338,15 @@ pre {
   .startBar {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .projectOverviewMeta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .projectOverviewMeta > div:nth-child(2) { border-right: 0; }
+  .projectOverviewMeta > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  .projectStageRail { grid-template-columns: repeat(6, minmax(140px, 1fr)); }
+  .projectAlert { align-items: flex-start; flex-direction: column; }
 
   button,
   select,

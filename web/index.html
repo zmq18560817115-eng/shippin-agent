@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260721-4" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260721-5" />
   </head>
   <body>
     <header class="topbar">
@@ -299,6 +299,17 @@
         <div id="projectAssetPackagePanel" class="emptyState">打开一个项目后，可在这里查看该项目使用的产品素材与参考视频。</div>
       </section>
 
+      <section class="band projectOverview" id="projectOverview" data-view-section="projects" hidden>
+        <div class="sectionHead">
+          <div>
+            <span class="eyebrow">当前项目</span>
+            <h2 id="projectOverviewTitle">请选择项目</h2>
+          </div>
+          <div class="headActions" id="projectOverviewActions"></div>
+        </div>
+        <div id="projectOverviewBody" class="emptyState">从项目列表打开一个项目，查看生产进度与下一步操作。</div>
+      </section>
+
       <section class="band" id="projectQueue" data-view-section="projects">
         <div class="sectionHead">
           <h2>项目列表</h2>
@@ -430,6 +441,6 @@
 
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260721-4"></script>
+    <script src="/static/app.js?v=20260721-5"></script>
   </body>
 </html>
