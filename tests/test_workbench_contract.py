@@ -38,6 +38,13 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert "productionShotNumber" in script
     assert "captureProductionDraft" in script
     assert "productionDraftKey" in script
+    assert "scriptBaseline" in script
+    assert "scriptLocks" in script
+    assert "toggleScriptSectionLock" in script
+    assert "undoScriptSection" in script
+    assert "renderScriptVersionDiff" in script
+    assert 'data-lock-section="${section.number}"' in script
+    assert 'data-undo-section="${section.number}"' in script
     assert 'id="projectSearch"' in html
     assert 'id="projectStatusFilter"' in html
     assert 'id="projectPagination"' in html

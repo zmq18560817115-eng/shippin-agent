@@ -34,6 +34,8 @@ const state = {
   agentContracts: {},
   productionShotNumber: null,
   productionDrafts: {},
+  scriptBaseline: null,
+  scriptLocks: {},
 };
 
 const views = {
@@ -1673,6 +1675,7 @@ async function loadSelectedProject(projectId) {
   state.selectedRevision = projectRevision(state.selected);
   state.strategyBrief = null;
   state.scriptCopy = null;
+  state.scriptBaseline = null;
   state.scriptBreakdown = null;
   state.reviewReport = null;
   state.shotPlan = null;
@@ -1689,6 +1692,7 @@ async function loadSelectedProject(projectId) {
     safeArtifact(projectId, "asset_manifest"), safeArtifact(projectId, "take_manifest"),
     safeArtifact(projectId, "render_report"), safeRunReport(projectId),
   ]);
+  state.scriptBaseline = state.scriptCopy ? structuredClone(state.scriptCopy) : null;
   renderPanels();
 }
 
@@ -2008,7 +2012,7 @@ function renderScriptGate() {
     ${state.scriptBreakdown ? `<div class="scriptBreakdown"><strong>脚本拆解</strong><span>${escapeHtml((state.scriptBreakdown.beats || []).map((beat) => `${beat.timing} ${beat.role}：${beat.intent}`).join("；"))}</span></div>` : ""}
     <div class="tableWrap">
       <table class="scriptTable narrativeTable">
-        <thead><tr><th>#</th><th>角色</th><th>时长</th><th>场景与环境</th><th>动作与剧情推进</th><th>中文旁白</th></tr></thead>
+        <thead><tr><th>#</th><th>角色</th><th>时长</th><th>场景与环境</th><th>动作与剧情推进</th><th>中文旁白</th><th>编辑状态</th></tr></thead>
         <tbody>
           ${state.scriptCopy.sections.map(renderScriptRow).join("")}
         </tbody>
@@ -2029,6 +2033,15 @@ function renderScriptGate() {
   $("#approveScript")?.addEventListener("click", approveScriptGate);
   $("#rewriteScript")?.addEventListener("click", rewriteScript);
   $("#regenerateScript").addEventListener("click", () => runManualStage("script"));
+  host.querySelectorAll("[data-section][data-field]").forEach((field) => {
+    field.addEventListener("input", () => markScriptSectionChanged(Number(field.dataset.section)));
+  });
+  host.querySelectorAll("[data-lock-section]").forEach((button) => {
+    button.addEventListener("click", () => toggleScriptSectionLock(Number(button.dataset.lockSection)));
+  });
+  host.querySelectorAll("[data-undo-section]").forEach((button) => {
+    button.addEventListener("click", () => undoScriptSection(Number(button.dataset.undoSection)));
+  });
 }
 
 function renderPipelineProgress(project, fallback) {
@@ -2053,16 +2066,93 @@ function renderCreativeQuality(assessment) {
 
 function renderScriptRow(section) {
   const fallback = scriptNarrativeFallback(section.number);
+  const locked = Boolean(state.scriptLocks[scriptLockKey(section.number)]);
+  const baseline = scriptBaselineSection(section.number) || section;
+  const changed = scriptSectionChanged(section, baseline);
+  const disabled = locked ? " disabled" : "";
   return `
-    <tr>
+    <tr data-script-row="${section.number}" class="${changed ? "scriptChanged" : ""} ${locked ? "scriptLocked" : ""}">
       <td>${section.number}</td>
       <td>${escapeHtml(section.role || "")}</td>
-      <td><input data-section="${section.number}" data-field="timing" value="${escapeAttr(section.timing || "")}" /></td>
-      <td><textarea class="sceneField" data-section="${section.number}" data-field="scene_zh">${escapeHtml(section.scene_zh || fallback.scene)}</textarea></td>
-      <td><textarea class="actionField" data-section="${section.number}" data-field="action_zh">${escapeHtml(section.action_zh || fallback.action)}</textarea><textarea class="storyField" data-section="${section.number}" data-field="story_beat_zh">${escapeHtml(section.story_beat_zh || fallback.beat)}</textarea></td>
-      <td><textarea class="copyField" data-section="${section.number}" data-field="voiceover_zh">${escapeHtml(section.voiceover_zh || section.subtitle_zh || section.voiceover_en || "")}</textarea></td>
+      <td><input data-section="${section.number}" data-field="timing" value="${escapeAttr(section.timing || "")}"${disabled} /></td>
+      <td><textarea class="sceneField" data-section="${section.number}" data-field="scene_zh"${disabled}>${escapeHtml(section.scene_zh || fallback.scene)}</textarea></td>
+      <td><textarea class="actionField" data-section="${section.number}" data-field="action_zh"${disabled}>${escapeHtml(section.action_zh || fallback.action)}</textarea><textarea class="storyField" data-section="${section.number}" data-field="story_beat_zh"${disabled}>${escapeHtml(section.story_beat_zh || fallback.beat)}</textarea></td>
+      <td><textarea class="copyField" data-section="${section.number}" data-field="voiceover_zh"${disabled}>${escapeHtml(section.voiceover_zh || section.subtitle_zh || section.voiceover_en || "")}</textarea></td>
+      <td class="scriptSectionTools">
+        <span data-script-status="${section.number}" class="scriptEditStatus ${changed ? "changed" : "saved"}">${locked ? "已锁定" : changed ? "已修改" : "已保存"}</span>
+        <button type="button" data-lock-section="${section.number}">${locked ? "解锁" : "锁定"}</button>
+        <button type="button" data-undo-section="${section.number}"${locked || !changed ? " disabled" : ""}>撤销本段</button>
+        <details><summary>版本对比</summary><div data-script-diff="${section.number}" class="scriptVersionDiff">${renderScriptVersionDiff(baseline, section)}</div></details>
+      </td>
     </tr>
   `;
+}
+
+function scriptLockKey(sectionNumber) {
+  return `${state.selectedId || "project"}:${Number(sectionNumber)}`;
+}
+
+function scriptBaselineSection(sectionNumber) {
+  return state.scriptBaseline?.sections?.find((section) => Number(section.number) === Number(sectionNumber));
+}
+
+function scriptSectionSnapshot(section) {
+  return ["timing", "scene_zh", "action_zh", "story_beat_zh", "voiceover_zh"]
+    .map((field) => String(section?.[field] || "").trim()).join("\n");
+}
+
+function scriptSectionChanged(section, baseline) {
+  return scriptSectionSnapshot(section) !== scriptSectionSnapshot(baseline);
+}
+
+function renderScriptVersionDiff(baseline, current) {
+  const before = scriptSectionSnapshot(baseline) || "无原始内容";
+  const after = scriptSectionSnapshot(current) || "无当前内容";
+  return `<div><strong>原版本</strong><pre>${escapeHtml(before)}</pre></div><div><strong>当前版本</strong><pre>${escapeHtml(after)}</pre></div>`;
+}
+
+function currentScriptSection(sectionNumber) {
+  const section = structuredClone(state.scriptCopy?.sections?.find((item) => Number(item.number) === Number(sectionNumber)) || {});
+  document.querySelectorAll(`[data-section="${sectionNumber}"][data-field]`).forEach((field) => {
+    section[field.dataset.field] = field.value.trim();
+  });
+  section.subtitle_zh = section.voiceover_zh || "";
+  return section;
+}
+
+function markScriptSectionChanged(sectionNumber) {
+  const current = currentScriptSection(sectionNumber);
+  const baseline = scriptBaselineSection(sectionNumber) || current;
+  const changed = scriptSectionChanged(current, baseline);
+  const row = $(`[data-script-row="${sectionNumber}"]`);
+  row?.classList.toggle("scriptChanged", changed);
+  const status = $(`[data-script-status="${sectionNumber}"]`);
+  if (status) {
+    status.textContent = changed ? "已修改" : "已保存";
+    status.className = `scriptEditStatus ${changed ? "changed" : "saved"}`;
+  }
+  const undo = $(`[data-undo-section="${sectionNumber}"]`);
+  if (undo) undo.disabled = !changed;
+  const diff = $(`[data-script-diff="${sectionNumber}"]`);
+  if (diff) diff.innerHTML = renderScriptVersionDiff(baseline, current);
+}
+
+function toggleScriptSectionLock(sectionNumber) {
+  const key = scriptLockKey(sectionNumber);
+  state.scriptLocks[key] = !state.scriptLocks[key];
+  const current = currentScriptSection(sectionNumber);
+  const target = state.scriptCopy?.sections?.find((section) => Number(section.number) === sectionNumber);
+  if (target) Object.assign(target, current);
+  renderScriptGate();
+}
+
+function undoScriptSection(sectionNumber) {
+  const baseline = scriptBaselineSection(sectionNumber);
+  if (!baseline || state.scriptLocks[scriptLockKey(sectionNumber)]) return;
+  const target = state.scriptCopy?.sections?.find((section) => Number(section.number) === sectionNumber);
+  if (target) Object.assign(target, structuredClone(baseline));
+  renderScriptGate();
+  toast(`已撤销第 ${sectionNumber} 段的未保存修改`);
 }
 
 function scriptNarrativeFallback(number) {
@@ -2101,6 +2191,7 @@ async function saveScript() {
     body: JSON.stringify(draft),
   });
   state.scriptCopy = saved.artifact;
+  state.scriptBaseline = structuredClone(saved.artifact);
   toast(`已保存，stale 镜头：${saved.stale_sections.join(",") || "无"}`);
   await refreshProjects({ silent: true });
   return saved;

@@ -2889,7 +2889,7 @@ pre {
 }
 
 .narrativeTable {
-  min-width: 1080px;
+  min-width: 1240px;
   table-layout: fixed;
 }
 
@@ -2897,7 +2897,59 @@ pre {
 .narrativeTable td:nth-child(4),
 .narrativeTable th:nth-child(5),
 .narrativeTable td:nth-child(5) {
-  width: 29%;
+  width: 23%;
+}
+
+.scriptTable th:last-child,
+.scriptTable td:last-child {
+  width: 164px;
+}
+
+.scriptTable tr.scriptChanged > td { background: #fffaf0; }
+.scriptTable tr.scriptLocked > td { background: #f5f7fa; }
+.scriptTable textarea:disabled,
+.scriptTable input:disabled { color: var(--text); background: #eef1f5; opacity: 1; }
+
+.scriptSectionTools {
+  vertical-align: top;
+}
+
+.scriptSectionTools button {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 6px;
+}
+
+.scriptEditStatus {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  color: var(--muted);
+  background: #eef1f5;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scriptEditStatus.changed { color: #8a5a00; background: #fff1c2; }
+.scriptEditStatus.saved { color: var(--green); background: #eaf7ef; }
+
+.scriptSectionTools details { margin-top: 8px; }
+.scriptSectionTools summary { cursor: pointer; color: var(--blue); font-size: 12px; }
+.scriptVersionDiff { display: grid; gap: 8px; margin-top: 8px; }
+.scriptVersionDiff pre {
+  max-height: 150px;
+  margin: 3px 0 0;
+  padding: 7px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
 }
 
 .scriptBreakdown {
