@@ -53,6 +53,11 @@ def test_agent_map_and_independent_research_strategy_breakdown(tmp_path: Path, m
 
     assert capability_map.status_code == 200
     assert capability_map.json()["summary"] == {"total": 11, "deployed": 7, "partial": 4, "missing": 0}
+    schemas = capability_map.json()["input_schemas"]
+    assert {field["name"] for field in schemas["collector"]} == {"target_type", "target", "limit", "persist"}
+    assert schemas["script"][0]["name"] == "prompt"
+    assert schemas["script_breakdown"][0]["name"] == "source_text"
+    assert all(any(field.get("required") for field in fields) for action, fields in schemas.items() if action != "collector")
     assert [
         item["independent_action"]
         for item in capability_map.json()["agents"]

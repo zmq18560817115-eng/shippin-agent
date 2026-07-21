@@ -5,6 +5,27 @@ from typing import Any
 from libshared.agent_contracts import agent_contract
 
 
+INDEPENDENT_INPUT_SCHEMAS: dict[str, list[dict[str, Any]]] = {
+    "orchestrator": [{"name": "prompt", "label": "任务目标与交付要求", "type": "textarea", "required": True, "placeholder": "说明产品、平台、目标受众、参考素材和期望交付。"}],
+    "collector": [
+        {"name": "target_type", "label": "采集方式", "type": "select", "required": True, "options": [{"value": "keyword", "label": "关键词"}, {"value": "account", "label": "TikTok 账号"}, {"value": "hashtag", "label": "话题标签"}, {"value": "trending", "label": "热门视频"}]},
+        {"name": "target", "label": "采集目标", "type": "text", "required": False, "placeholder": "输入关键词、账号主页或话题；热门视频可留空。"},
+        {"name": "limit", "label": "候选数量", "type": "number", "required": True, "min": 1, "max": 20, "value": 6},
+        {"name": "persist", "label": "下载并存入素材库", "type": "checkbox", "value": True},
+    ],
+    "analysis": [{"name": "source_text", "label": "视频转写、素材说明或链接", "type": "textarea", "required": True, "placeholder": "粘贴转写、视频内容说明或参考链接，Agent 将拆解结构、节奏和镜头。"}],
+    "research": [{"name": "source_text", "label": "研究样本与背景", "type": "textarea", "required": True, "placeholder": "输入竞品转写、市场观察、目标受众或已有分析结论。"}],
+    "strategy": [{"name": "source_text", "label": "产品事实与传播目标", "type": "textarea", "required": True, "placeholder": "输入产品卖点、目标用户、平台和希望达成的内容目标。"}],
+    "script": [{"name": "prompt", "label": "脚本创作需求", "type": "textarea", "required": True, "placeholder": "说明产品、受众、场景、剧情方向、平台和时长。"}],
+    "script_breakdown": [{"name": "source_text", "label": "待拆解脚本", "type": "textarea", "required": True, "placeholder": "粘贴完整脚本，生成逐段意图、画面、动作和连续性要求。"}],
+    "storyboard": [{"name": "prompt", "label": "脚本或分镜需求", "type": "textarea", "required": True, "placeholder": "输入脚本，或明确场景、人物、动作、镜头运动和视觉风格。"}],
+    "asset": [{"name": "prompt", "label": "镜头素材需求", "type": "textarea", "required": True, "placeholder": "说明需要匹配的产品、动作、构图和关键帧要求。"}],
+    "production": [{"name": "prompt", "label": "单镜视频 Prompt", "type": "textarea", "required": True, "placeholder": "描述单个 6 秒镜头的场景、人物、动作、产品状态、机位和光线。"}],
+    "review": [{"name": "source_text", "label": "待审核脚本或内容", "type": "textarea", "required": True, "placeholder": "粘贴脚本、分镜说明或广告文案，检查产品事实、合规和表达风险。"}],
+    "feedback": [{"name": "source_text", "label": "复盘反馈", "type": "textarea", "required": True, "placeholder": "记录问题、原因、修改建议和希望沉淀的规则。"}],
+}
+
+
 AGENT_CAPABILITIES: tuple[dict[str, Any], ...] = (
     {
         "id": "orchestrator",
@@ -165,6 +186,7 @@ def capability_map() -> dict[str, Any]:
     return {
         "version": "1.0",
         "agents": agents,
+        "input_schemas": INDEPENDENT_INPUT_SCHEMAS,
         "summary": {
             "total": len(agents),
             "deployed": sum(item["status"] == "deployed" for item in agents),

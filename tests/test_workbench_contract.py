@@ -42,6 +42,12 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert "ensureDeliverySelection" in script
     assert "演练产物 · 禁止外发" in script
     assert 'id="independentAgentContract"' in html
+    assert 'id="independentAgentFields"' in html
+    assert "renderIndependentAgentFields" in script
+    assert "independentAgentInputPayload" in script
+    assert "capabilityMap.input_schemas?.[action]" in script
+    assert 'id="independentAgentPrompt"' not in html
+    assert 'id="independentAgentTarget"' not in html
     assert 'id="independentCreativeStyle"' in html
     assert 'id="independentTargetAudience"' in html
     assert 'id="independentCreativeFreedom"' in html

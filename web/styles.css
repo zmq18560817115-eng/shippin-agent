@@ -1577,6 +1577,18 @@ button.quietButton {
   min-height: 92px;
 }
 
+.independentAgentFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 180px);
+  gap: 12px;
+}
+
+.independentAgentFields > label { display: grid; align-content: start; gap: 6px; }
+.independentAgentFields > label:has(textarea) { grid-column: 1 / -1; }
+.independentAgentFields textarea { min-height: 120px; }
+.independentAgentFields .agentCheckbox { display: flex; align-items: center; min-height: 42px; }
+.independentAgentFields .agentCheckbox input { width: 18px; height: 18px; }
+
 .backendStrip {
   display: flex;
   flex-wrap: wrap;
@@ -1613,6 +1625,8 @@ button.quietButton {
   .agentWorkbenchGrid {
     grid-template-columns: 1fr;
   }
+  .independentAgentFields { grid-template-columns: 1fr; }
+  .independentAgentFields > label:has(textarea) { grid-column: auto; }
   .agentContract {
     grid-template-columns: 1fr;
   }

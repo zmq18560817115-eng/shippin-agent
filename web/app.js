@@ -264,7 +264,7 @@ async function loadIndependentAgentActions() {
     (capabilityMap.agents || []).forEach((agent) => {
       String(agent.independent_action || "").split(",").map((item) => item.trim()).filter(Boolean).forEach((action) => {
         if (independentActionLabels[action] && !actions.includes(action)) actions.push(action);
-        if (independentActionLabels[action]) state.agentContracts[action] = agent;
+        if (independentActionLabels[action]) state.agentContracts[action] = { ...agent, input_schema: capabilityMap.input_schemas?.[action] || [] };
       });
     });
     select.innerHTML = actions.map((action) => `<option value="${escapeAttr(action)}">${escapeHtml(independentActionLabels[action])}</option>`).join("");
@@ -513,10 +513,8 @@ async function runStandaloneLauncher(button) {
 function updateIndependentAgentUI() {
   const action = $("#independentAgentAction").value;
   const contract = state.agentContracts[action] || {};
-  const targetLabel = $("#independentTargetLabel");
-  targetLabel.hidden = action !== "collector";
-  $("#independentAgentPrompt").placeholder = independentActionHints[action] || "输入需求";
   $("#independentAgentState").textContent = independentActionHints[action] || "";
+  renderIndependentAgentFields(contract.input_schema || []);
   const contractHost = $("#independentAgentContract");
   if (contract.identity) {
     contractHost.hidden = false;
@@ -577,10 +575,12 @@ function safeTakeNote(take) {
 async function runIndependentAgent() {
   const action = $("#independentAgentAction").value;
   const resultHost = $("#independentAgentResult");
-  const target = $("#independentAgentTarget").value.trim();
-  if (action === "collector" && !target) {
-    toast("请输入关键词或账号主页 URL", "error");
-    $("#independentAgentTarget").focus();
+  let agentInput;
+  try {
+    agentInput = independentAgentInputPayload();
+  } catch (error) {
+    toast(error.message, "error");
+    $("#independentAgentFields").querySelector(":invalid")?.focus();
     return;
   }
   const button = $("#runIndependentAgent");
@@ -592,10 +592,7 @@ async function runIndependentAgent() {
       body: JSON.stringify({
         action,
         product_id: $("#productSelect").value || "便携恒温杯",
-        prompt: $("#independentAgentPrompt").value.trim() || null,
-        source_text: $("#independentAgentPrompt").value.trim() || null,
-        target,
-        target_type: "keyword",
+        ...agentInput,
         provider: "auto",
         mock: $("#runtimeMode").value !== "real",
         ...creativeRequestFields(),
@@ -724,6 +721,33 @@ async function runQuickTool() {
     button.disabled = false;
     endOperation();
   }
+}
+
+function renderIndependentAgentFields(schema) {
+  const host = $("#independentAgentFields");
+  host.innerHTML = schema.map((field) => {
+    const id = `independentField-${field.name}`;
+    const required = field.required ? "required" : "";
+    if (field.type === "textarea") return `<label>${escapeHtml(field.label)}<textarea id="${id}" data-agent-field="${escapeAttr(field.name)}" placeholder="${escapeAttr(field.placeholder || "")}" ${required}></textarea></label>`;
+    if (field.type === "select") return `<label>${escapeHtml(field.label)}<select id="${id}" data-agent-field="${escapeAttr(field.name)}" ${required}>${(field.options || []).map((option) => `<option value="${escapeAttr(option.value)}">${escapeHtml(option.label)}</option>`).join("")}</select></label>`;
+    if (field.type === "checkbox") return `<label class="agentCheckbox"><input id="${id}" data-agent-field="${escapeAttr(field.name)}" type="checkbox" ${field.value ? "checked" : ""} /><span>${escapeHtml(field.label)}</span></label>`;
+    return `<label>${escapeHtml(field.label)}<input id="${id}" data-agent-field="${escapeAttr(field.name)}" type="${escapeAttr(field.type || "text")}" placeholder="${escapeAttr(field.placeholder || "")}" value="${escapeAttr(field.value ?? "")}" ${field.min == null ? "" : `min="${Number(field.min)}"`} ${field.max == null ? "" : `max="${Number(field.max)}"`} ${required} /></label>`;
+  }).join("") || `<label>任务输入<textarea data-agent-field="prompt" placeholder="${escapeAttr(independentActionHints[$("#independentAgentAction").value] || "输入需求")}" required></textarea></label>`;
+}
+
+function independentAgentInputPayload() {
+  const payload = {};
+  const missing = [];
+  $("#independentAgentFields").querySelectorAll("[data-agent-field]").forEach((field) => {
+    const name = field.dataset.agentField;
+    const value = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value.trim();
+    if (field.required && (value === "" || value == null || (field.type === "number" && !Number.isFinite(value)))) missing.push(field.closest("label")?.firstChild?.textContent?.trim() || name);
+    payload[name] = value;
+  });
+  if (payload.target_type === "trending") payload.target = payload.target || "trending";
+  if (payload.target_type && payload.target_type !== "trending" && !payload.target) missing.push("采集目标");
+  if (missing.length) throw new Error(`请填写：${missing.join("、")}`);
+  return payload;
 }
 
 function projectBucket(project) {
