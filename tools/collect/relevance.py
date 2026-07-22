@@ -127,8 +127,14 @@ def _field_score(text: str, terms: list[str]) -> tuple[float, set[str]]:
         term_tokens = set(TOKEN_RE.findall(term))
         if not term_tokens:
             continue
-        overlap = len(term_tokens & text_tokens) / len(term_tokens)
-        if overlap > 0:
+        shared_tokens = term_tokens & text_tokens
+        overlap = len(shared_tokens) / len(term_tokens)
+        # Do not treat one generic word from a multi-word product alias as a
+        # relevant match (for example, "portable" without "bottle warmer").
+        # Single-token aliases still require an exact token match.
+        minimum_shared = 1 if len(term_tokens) == 1 else 2
+        minimum_overlap = 1.0 if len(term_tokens) == 1 else 0.6
+        if len(shared_tokens) >= minimum_shared and overlap >= minimum_overlap:
             matched.add(term)
             best = max(best, overlap)
     return best, matched

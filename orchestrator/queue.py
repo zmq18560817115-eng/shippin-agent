@@ -415,17 +415,28 @@ def collection_url_exists(
     db_path: str | os.PathLike[str] | None = None,
 ) -> bool:
     init_db(db_path)
-    params: list[Any] = [source_url]
+    video_id = _tiktok_video_id(source_url)
+    params: list[Any] = [source_url, video_id, video_id]
     extra = ""
     if exclude_job_id is not None:
         extra = "AND job_id != ?"
         params.append(exclude_job_id)
     with get_conn(db_path) as conn:
         row = conn.execute(
-            f"SELECT 1 FROM collection_items WHERE source_url = ? {extra} AND status NOT IN ('failed','filtered') LIMIT 1",
+            f"""
+            SELECT 1 FROM collection_items
+            WHERE (source_url = ? OR (? != '' AND source_video_id = ?))
+              {extra} AND status NOT IN ('failed','filtered')
+            LIMIT 1
+            """,
             params,
         ).fetchone()
     return row is not None
+
+
+def _tiktok_video_id(source_url: str) -> str:
+    match = re.search(r"/video/(\d+)", str(source_url or ""))
+    return match.group(1) if match else ""
 
 
 def upsert_collection_item(
@@ -444,8 +455,7 @@ def upsert_collection_item(
     now = utc_now()
     video_id = str(item.get("video_id") or "")
     if not video_id:
-        match = re.search(r"/video/(\d+)", source_url)
-        video_id = match.group(1) if match else ""
+        video_id = _tiktok_video_id(source_url)
     with get_conn(db_path) as conn:
         conn.execute(
             """

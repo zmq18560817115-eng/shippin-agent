@@ -27,6 +27,30 @@ def test_keyword_relevance_rejects_unrelated_video() -> None:
     assert result["score"] == 0.0
 
 
+def test_keyword_relevance_rejects_single_generic_alias_token() -> None:
+    result = relevance.score_item(
+        {
+            "title": "Portable phone tripod",
+            "caption": "A portable creator stand for travel videos",
+            "hashtags": ["portable", "creator"],
+        },
+        "heated cup",
+    )
+
+    assert result["relevant"] is False
+    assert "portable bottle warmer" not in result["matched_terms"]
+
+
+def test_keyword_relevance_accepts_multi_token_alias_without_exact_phrase() -> None:
+    result = relevance.score_item(
+        {"caption": "A travel bottle heater and warmer for night feeds"},
+        "heated cup",
+    )
+
+    assert result["relevant"] is True
+    assert "bottle warmer" in result["matched_terms"]
+
+
 def test_chinese_keyword_expands_to_product_aliases() -> None:
     result = relevance.score_item(
         {"caption": "新手父母夜间使用便携温奶器冲奶体验"},

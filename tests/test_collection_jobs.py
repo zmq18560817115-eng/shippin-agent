@@ -38,6 +38,38 @@ def test_collection_job_persists_progress_contract(tmp_path: Path) -> None:
     assert cancelled["finished_at"]
 
 
+def test_collection_item_deduplicates_tiktok_video_id_across_url_variants(tmp_path: Path) -> None:
+    db_path = tmp_path / "collection-video-id.db"
+    job = queue.create_collection_job(
+        target_type="keyword",
+        provider="auto",
+        target="bottle warmer",
+        product_id="便携恒温杯",
+        requested_count=1,
+        mock=False,
+        db_path=db_path,
+    )
+    queue.upsert_collection_item(
+        job["id"],
+        source_url="https://www.tiktok.com/@first-name/video/7654321?lang=en",
+        item={"video_id": "7654321", "title": "Bottle warmer"},
+        relevance_score=0.9,
+        status="ready",
+        db_path=db_path,
+    )
+
+    assert queue.collection_url_exists(
+        "https://www.tiktok.com/@canonical-name/video/7654321",
+        exclude_job_id=None,
+        db_path=db_path,
+    ) is True
+    assert queue.collection_url_exists(
+        "https://www.tiktok.com/@canonical-name/video/9999999",
+        exclude_job_id=None,
+        db_path=db_path,
+    ) is False
+
+
 def test_collection_job_api_create_list_and_cancel(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "agentflow.db"))
     monkeypatch.setenv("VAF_COLLECTION_WORKER_ENABLED", "false")
