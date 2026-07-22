@@ -117,6 +117,9 @@ class TikTokIntakeRunRequest(BaseModel):
     product_id: str = "便携恒温杯"
     transcript_text: str | None = None
     source_item: dict[str, Any] | None = None
+    source_query: str = ""
+    source_target_type: str = "keyword"
+    relevance: dict[str, Any] | None = None
     project_id: str | None = None
     mock: bool = True
 
@@ -1304,7 +1307,7 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
     collect_payload = {
         "urls": [request.url],
         "product_id": request.product_id,
-        "source_keyword": "tiktok_active_capture",
+        "source_keyword": request.source_query.strip() or "tiktok_active_capture",
         "library_root": root.as_posix(),
     }
     collector = manual_import.execute if request.mock else tiktok_oembed.execute
@@ -1352,6 +1355,8 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
             ),
             "asset_intake": intake,
             "source_mode": "mock" if request.mock else "real",
+            "source_target_type": request.source_target_type,
+            "discovery_relevance": request.relevance or {},
             **_discovery_meta_updates(request.source_item),
         },
         root,
@@ -1402,6 +1407,7 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
         meta={"mock": request.mock, "transcript_source": capture.get("transcript_source")},
         db_path=_db_path(),
     )
+    readiness = _material_production_readiness(meta, material_dir)
     return {
         "ok": True,
         "material": meta,
@@ -1410,6 +1416,7 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
         "task_id": task_id,
         "engine": _engine_status(status),
         "project": _project_summary(project_id),
+        "readiness": readiness,
         "warnings": [] if capture.get("transcript_text") else ["未取得字幕，请在研究节点补充转写后重新运行研究分析。"],
     }
 
@@ -1434,15 +1441,22 @@ def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
 
     results: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
+    filtered: list[dict[str, Any]] = []
     for item in discovered.data.get("items", [])[:limit]:
         url = str(item.get("url") or "")
+        scored = relevance.score_item(item, request.target, target_type=request.target_type)
+        if not scored["relevant"]:
+            filtered.append({"url": url, "title": str(item.get("title") or ""), "relevance": scored})
+            continue
         try:
             result = collect_tiktok_and_run(
                 TikTokIntakeRunRequest(
                     url=url,
                     product_id=request.product_id,
-                    transcript_text=str(item.get("caption") or "") or None,
                     source_item=item,
+                    source_query=request.target,
+                    source_target_type=request.target_type,
+                    relevance=scored,
                     mock=request.mock,
                 )
             )
@@ -1470,8 +1484,10 @@ def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
         "target": request.target,
         "discovered_count": len(discovered.data.get("items", [])),
         "completed_count": len(results),
+        "filtered_count": len(filtered),
         "failed_count": len(failures),
         "results": results,
+        "filtered": filtered,
         "failures": failures,
     }
 
@@ -1907,11 +1923,28 @@ def _collect_relevant_job_items(job: dict[str, Any]) -> dict[str, Any]:
                     TikTokIntakeRunRequest(
                         url=url,
                         product_id=str(job["product_id"]),
-                        transcript_text=str(item.get("caption") or "") or None,
                         source_item=item,
+                        source_query=str(job["target"]),
+                        source_target_type=str(job["target_type"]),
+                        relevance=scored,
                         mock=bool(job["mock"]),
                     )
                 )
+                readiness = intake.get("readiness") or {}
+                if not bool(job["mock"]) and not readiness.get("ready"):
+                    missing = "、".join(str(value) for value in readiness.get("missing") or []) or "素材处理未完成"
+                    failed_count += 1
+                    failures.append({"url": url, "error": missing})
+                    queue.upsert_collection_item(
+                        job_id,
+                        source_url=url,
+                        item={**item, "relevance": scored, "material_id": intake["material"]["material_id"]},
+                        relevance_score=float(scored["score"]),
+                        status="failed",
+                        error_message=f"已入库待补齐：{missing}",
+                        db_path=_db_path(),
+                    )
+                    continue
                 queue.upsert_collection_item(
                     job_id,
                     source_url=url,
@@ -3709,13 +3742,17 @@ def _material_production_readiness(meta: dict[str, Any], material_dir: Path) -> 
     title = str(meta.get("video_title") or meta.get("caption") or "").casefold()
     keyword = str(meta.get("source_keyword") or "").casefold().strip()
     keyword_tokens = [token for token in re.split(r"[\s,，、/|#_-]+", keyword) if len(token) >= 2 and token not in {"tiktok", "manual", "real", "mock"}]
-    relevance_score = 1.0 if not keyword_tokens else sum(token in title for token in keyword_tokens) / len(keyword_tokens)
+    stored_relevance = meta.get("discovery_relevance") if isinstance(meta.get("discovery_relevance"), dict) else {}
+    if stored_relevance and "score" in stored_relevance:
+        relevance_score = max(0.0, min(float(stored_relevance.get("score") or 0), 1.0))
+    else:
+        relevance_score = 1.0 if not keyword_tokens else sum(token in title for token in keyword_tokens) / len(keyword_tokens)
     local_video = str(meta.get("local_video_path") or "").strip()
     local_cover = str(meta.get("local_cover_path") or "").strip()
     video_ready = bool(local_video and (Path(local_video).is_file() or (material_dir / Path(local_video).name).is_file()))
     cover_ready = bool(local_cover and (Path(local_cover).is_file() or (material_dir / Path(local_cover).name).is_file()))
     transcript_ready = bool(str(meta.get("transcript_text") or "").strip())
-    analysis_ready = bool(str(meta.get("ai_analysis_json") or "").strip())
+    analysis_ready = _material_analysis_ready(meta.get("ai_analysis_json"))
     missing: list[str] = []
     if relevance_score < 0.5:
         missing.append("与采集关键词不匹配")
@@ -3737,7 +3774,30 @@ def _material_production_readiness(meta: dict[str, Any], material_dir: Path) -> 
         "relevance_score": round(relevance_score, 3),
         "missing": missing,
         "lane": lane,
+        "checks": {
+            "video": video_ready,
+            "cover": cover_ready,
+            "transcript": transcript_ready,
+            "breakdown": analysis_ready,
+        },
     }
+
+
+def _material_analysis_ready(value: Any) -> bool:
+    try:
+        payload = json.loads(str(value or "{}"))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return False
+    analysis = payload.get("analysis") if isinstance(payload, dict) else None
+    if not isinstance(analysis, dict):
+        return False
+    return bool(
+        str(analysis.get("hook_3s") or "").strip()
+        and isinstance(analysis.get("structure"), list)
+        and analysis.get("structure")
+        and isinstance(analysis.get("shot_breakdown"), list)
+        and analysis.get("shot_breakdown")
+    )
 
 
 def _material_project_references(material_id: str) -> list[str]:

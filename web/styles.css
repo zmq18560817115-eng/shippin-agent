@@ -2237,6 +2237,10 @@ button.quietButton {
 .materialReadiness.production, .materialReadiness.ready, .takeResolved { color: var(--green); }
 .materialReadiness.processing { color: var(--warning); }
 .materialReadiness.quarantine, .materialReadiness.cleanup, .takeRejected { color: var(--red); }
+.materialPipeline { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.materialPipeline span { border-radius: 4px; padding: 3px 7px; font-size: 12px; line-height: 1.4; }
+.materialPipeline .done { color: #087a55; background: #e9fbf3; }
+.materialPipeline .pending { color: #8a5a00; background: #fff7df; }
 .materialMissing { color: var(--red) !important; font-size: 12px !important; }
 
 .takeList,

@@ -1573,6 +1573,7 @@ function renderMaterialItem(item) {
   const lane = readiness.lane || (ready ? "production" : "processing");
   const laneLabel = { production: "生产可用", processing: "待处理", quarantine: "隔离" }[lane] || "待处理";
   const missingText = Array.isArray(readiness.missing) ? readiness.missing.join("、") : "";
+  const checks = readiness.checks || {};
   const sourceUrl = meta.source_url || meta.video_url || "";
   const videoName = String(meta.local_video_path || "").split(/[\\/]/).pop();
   const localVideo = videoName
@@ -1592,6 +1593,9 @@ function renderMaterialItem(item) {
         <strong>${escapeHtml(title)}</strong>
         <span>${escapeHtml(meta.author_name || "未知创作者")} · ${escapeHtml(meta.source_keyword || "manual_tiktok")} · ${escapeHtml(materialStatusLabel(meta.processing_status || item.status))}</span>
         <span class="materialReadiness ${escapeAttr(lane)}">${escapeHtml(laneLabel)}${Number.isFinite(Number(readiness.relevance_score)) ? ` · 相关度 ${Math.round(Number(readiness.relevance_score) * 100)}%` : ""}</span>
+        <div class="materialPipeline" aria-label="素材处理进度">
+          ${[["video", "视频"], ["cover", "封面"], ["transcript", "转写"], ["breakdown", "拆解"]].map(([key, label]) => `<span class="${checks[key] ? "done" : "pending"}">${checks[key] ? "✓" : "·"} ${label}</span>`).join("")}
+        </div>
         <p>${escapeHtml(caption)}</p>
         <p class="materialAnalysis">${escapeHtml(analysis)}</p>
         ${missingText ? `<p class="materialMissing">${lane === "quarantine" ? "隔离原因" : "待补项目"}：${escapeHtml(missingText)}</p>` : ""}

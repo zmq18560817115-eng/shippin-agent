@@ -26,7 +26,16 @@
     "processing_status": {"type": "string"},
     "transcript_text": {"type": "string"},
     "ai_analysis_json": {"type": "string"},
-    "local_video_path": {"type": "string"}
-    ,"local_cover_path": {"type": "string"}
+    "local_video_path": {"type": "string"},
+    "local_cover_path": {"type": "string"},
+    "source_target_type": {"enum": ["keyword", "account", "hashtag", "trending"]},
+    "discovery_relevance": {
+      "type": "object",
+      "properties": {
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "matched_terms": {"type": "array", "items": {"type": "string"}},
+        "relevant": {"type": "boolean"}
+      }
+    }
   }
 }

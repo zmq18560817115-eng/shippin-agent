@@ -54,7 +54,7 @@ def test_a7_manual_import_five_links_can_start_pipelines(tmp_path: Path, monkeyp
                     "local_video_path": "source.mp4",
                     "local_cover_path": "cover.jpg",
                     "transcript_text": "夜间使用便携恒温杯准备奶液的完整转写。",
-                    "ai_analysis_json": '{"analysis":{"hook_3s":"夜间准备不再手忙脚乱","shot_breakdown":[{"shot":1}]}}',
+                        "ai_analysis_json": '{"analysis":{"hook_3s":"夜间准备不再手忙脚乱","structure":["钩子","痛点","方案","证明","行动号召"],"shot_breakdown":[{"shot":1}]}}',
                     "processing_status": "analyzed",
                 },
                 tmp_path / "materials",

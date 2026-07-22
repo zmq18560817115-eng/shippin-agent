@@ -128,9 +128,10 @@ def update_material_meta(
     payload = load_material_meta(material_id, root)
     allowed = {
         "processing_status", "transcript_text", "ai_analysis_json", "local_video_path", "asset_intake",
-        "source_mode", "local_cover_path",
-        "video_title", "caption", "author_name", "author_url", "cover_url",
-        "like_count", "comment_count", "share_count",
+            "source_mode", "local_cover_path",
+            "video_title", "caption", "author_name", "author_url", "cover_url",
+            "like_count", "comment_count", "share_count",
+            "source_target_type", "discovery_relevance",
     }
     unknown = set(updates) - allowed
     if unknown:

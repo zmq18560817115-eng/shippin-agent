@@ -96,6 +96,9 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             asr_error = str((asr.error or {}).get("message") or "")
     cover_path = _find_cover(material_dir)
     frame_paths = _extract_frames(video_path, material_dir / "frames")
+    if cover_path is None and frame_paths:
+        cover_path = material_dir / "cover.jpg"
+        shutil.copyfile(frame_paths[0], cover_path)
     return ToolResult.success(
         {
             "status": "downloaded",

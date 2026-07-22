@@ -18,7 +18,7 @@ def test_material_readiness_requires_complete_relevant_local_asset(tmp_path: Pat
         "local_video_path": "source.mp4",
         "local_cover_path": "cover.jpg",
         "transcript_text": "完整中文转写",
-        "ai_analysis_json": '{"analysis":{"hook_3s":"夜间准备"}}',
+        "ai_analysis_json": '{"analysis":{"hook_3s":"夜间准备","structure":["钩子","证明"],"shot_breakdown":[{"shot_index":1}]}}',
     }
 
     result = api._material_production_readiness(meta, material_dir)
@@ -26,6 +26,7 @@ def test_material_readiness_requires_complete_relevant_local_asset(tmp_path: Pat
     assert result["ready"] is True
     assert result["lane"] == "production"
     assert result["relevance_score"] == 1.0
+    assert result["checks"] == {"video": True, "cover": True, "transcript": True, "breakdown": True}
 
 
 def test_material_readiness_quarantines_metadata_only_or_irrelevant_asset(tmp_path: Path) -> None:
@@ -50,6 +51,35 @@ def test_material_readiness_keeps_relevant_incomplete_asset_in_processing(tmp_pa
     assert result["ready"] is False
     assert result["lane"] == "processing"
     assert "与采集关键词不匹配" not in result["missing"]
+
+
+def test_material_readiness_uses_persisted_discovery_relevance(tmp_path: Path) -> None:
+    result = api._material_production_readiness(
+        {
+            "video_title": "generic title without query words",
+            "source_keyword": "恒温杯",
+            "discovery_relevance": {"score": 0.82, "relevant": True},
+        },
+        tmp_path,
+    )
+
+    assert result["relevance_score"] == 0.82
+    assert result["lane"] == "processing"
+    assert "与采集关键词不匹配" not in result["missing"]
+
+
+def test_material_readiness_rejects_capture_metadata_without_real_breakdown(tmp_path: Path) -> None:
+    result = api._material_production_readiness(
+        {
+            "video_title": "便携恒温杯演示",
+            "source_keyword": "恒温杯",
+            "ai_analysis_json": '{"capture_status":"downloaded","frame_paths":["frame-01.jpg"]}',
+        },
+        tmp_path,
+    )
+
+    assert result["ready"] is False
+    assert "缺少镜头拆解" in result["missing"]
 
 
 def test_pipeline_rejects_material_that_has_not_passed_admission(tmp_path: Path, monkeypatch) -> None:
