@@ -235,6 +235,7 @@ class AgentRunRequest(BaseModel):
     action: str
     source_text: str | None = None
     source_refs: list[str] | None = None
+    source_material_id: str | None = None
     product_id: str = "便携恒温杯"
     prompt: str | None = None
     input_json: dict[str, Any] | None = None
@@ -743,7 +744,7 @@ def _creative_brief(request: AgentRunRequest) -> dict[str, str]:
 def _require_standalone_agent_input(request: AgentRunRequest, action: str) -> None:
     if request.project_id or action in {"collector", "orchestrator"}:
         return
-    if (request.source_text or "").strip() or (request.prompt or "").strip() or request.input_json:
+    if request.source_material_id or (request.source_text or "").strip() or (request.prompt or "").strip() or request.input_json:
         return
     labels = {
         "analysis": "视频转写、素材说明或链接",
@@ -997,6 +998,22 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         }
     if action == "analysis":
         source = (request.source_text or request.prompt or "").strip()
+        material: dict[str, Any] | None = None
+        if request.source_material_id:
+            material = _source_material_or_none(request.source_material_id)
+            source = str((material or {}).get("transcript_text") or "").strip()
+            if not source:
+                raise HTTPException(
+                    status_code=422,
+                    detail="该素材缺少字幕或 ASR 转写，请先在素材详情补充转写后再运行深度分析",
+                )
+            payload["source_url"] = str((material or {}).get("source_url") or "")
+            execution_meta.update(
+                {
+                    "source_mode": "material_library",
+                    "source_material_id": request.source_material_id,
+                }
+            )
         if standalone and source.startswith(("http://", "https://")):
             if "tiktok.com/" not in source.casefold():
                 raise HTTPException(status_code=422, detail="视频链接分析当前支持 TikTok 链接；其他来源请上传转写文本")
@@ -1051,14 +1068,34 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         payload.update(
             {
                 "transcript_text": source,
-                "source_material_id": (request.source_refs or [None])[0],
-                "source_url": source if source.startswith(("http://", "https://")) else "",
+                "source_material_id": request.source_material_id or (request.source_refs or [None])[0],
+                "source_url": payload.get("source_url") or (source if source.startswith(("http://", "https://")) else ""),
             }
         )
         tool_name, artifact_name = "doubao_analyze", "analysis_report"
     elif action == "research":
         analysis = _load_artifact_or_none(project_id, "analysis_report") or {}
         source_input = (request.source_text or request.prompt or "").strip()
+        if request.source_material_id:
+            material = _source_material_or_none(request.source_material_id) or {}
+            source_input = str(material.get("transcript_text") or "").strip()
+            if not source_input:
+                raise HTTPException(
+                    status_code=422,
+                    detail="该素材缺少字幕或 ASR 转写，请先在素材详情补充转写后再运行研究",
+                )
+            analysis_path = Path(str(material.get("breakdown_path") or ""))
+            if analysis_path.is_file():
+                try:
+                    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    analysis = {}
+            execution_meta.update(
+                {
+                    "source_mode": "material_library",
+                    "source_material_id": request.source_material_id,
+                }
+            )
         if standalone and source_input.startswith(("http://", "https://")):
             if "tiktok.com/" not in source_input.casefold():
                 raise HTTPException(status_code=422, detail="参考链接研究当前支持 TikTok 链接；其他来源请粘贴转写或研究样本")
@@ -1097,7 +1134,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
                 "source_text": (
                     str(analysis.get("voiceover_text") or "")
                     if execution_meta.get("source_mode") == "tiktok_capture"
-                    else request.source_text
+                    else source_input if execution_meta.get("source_mode") == "material_library" else request.source_text
                 )
                 or analysis.get("voiceover_text")
                 or project.get("source_url")
@@ -1334,6 +1371,30 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         script_copy = payload.get("script_copy") if isinstance(payload.get("script_copy"), dict) else None
         artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
     artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
+    if artifact_name == "analysis_report" and request.source_material_id:
+        material_root = _material_library_root()
+        analysis_path = material_root / request.source_material_id / "analysis_report.json"
+        _atomic_write_json(analysis_path, artifact)
+        material = _source_material_or_none(request.source_material_id) or {}
+        try:
+            previous = json.loads(str(material.get("ai_analysis_json") or "{}"))
+        except json.JSONDecodeError:
+            previous = {}
+        if not isinstance(previous, dict):
+            previous = {}
+        previous["analysis"] = {
+            key: artifact.get(key)
+            for key in ("hook_3s", "structure", "pacing", "keyframes", "shot_breakdown")
+        }
+        manual_import.update_material_meta(
+            request.source_material_id,
+            {
+                "processing_status": "analyzed",
+                "ai_analysis_json": json.dumps(previous, ensure_ascii=False),
+                "breakdown_path": analysis_path.as_posix(),
+            },
+            material_root,
+        )
     if artifact_name == "asset_manifest":
         _attach_preview_urls(project_id, artifact)
     queue.record_event(

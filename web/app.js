@@ -761,10 +761,11 @@ function renderIndependentAgentFields(schema) {
   host.innerHTML = schema.map((field) => {
     const id = `independentField-${field.name}`;
     const required = field.required ? "required" : "";
-    if (field.type === "textarea") return `<label>${escapeHtml(field.label)}<textarea id="${id}" data-agent-field="${escapeAttr(field.name)}" placeholder="${escapeAttr(field.placeholder || "")}" ${required}></textarea></label>`;
-    if (field.type === "select") return `<label>${escapeHtml(field.label)}<select id="${id}" data-agent-field="${escapeAttr(field.name)}" ${required}>${(field.options || []).map((option) => `<option value="${escapeAttr(option.value)}">${escapeHtml(option.label)}</option>`).join("")}</select></label>`;
+    const requiredGroup = field.required_group ? `data-required-group="${escapeAttr(field.required_group)}"` : "";
+    if (field.type === "textarea") return `<label>${escapeHtml(field.label)}<textarea id="${id}" data-agent-field="${escapeAttr(field.name)}" ${requiredGroup} placeholder="${escapeAttr(field.placeholder || "")}" ${required}></textarea></label>`;
+    if (field.type === "select") return `<label>${escapeHtml(field.label)}<select id="${id}" data-agent-field="${escapeAttr(field.name)}" ${requiredGroup} ${required}>${(field.options || []).map((option) => `<option value="${escapeAttr(option.value)}">${escapeHtml(option.label)}</option>`).join("")}</select></label>`;
     if (field.type === "checkbox") return `<label class="agentCheckbox"><input id="${id}" data-agent-field="${escapeAttr(field.name)}" type="checkbox" ${field.value ? "checked" : ""} /><span>${escapeHtml(field.label)}</span></label>`;
-    return `<label>${escapeHtml(field.label)}<input id="${id}" data-agent-field="${escapeAttr(field.name)}" type="${escapeAttr(field.type || "text")}" placeholder="${escapeAttr(field.placeholder || "")}" value="${escapeAttr(field.value ?? "")}" ${field.min == null ? "" : `min="${Number(field.min)}"`} ${field.max == null ? "" : `max="${Number(field.max)}"`} ${required} /></label>`;
+    return `<label>${escapeHtml(field.label)}<input id="${id}" data-agent-field="${escapeAttr(field.name)}" ${requiredGroup} type="${escapeAttr(field.type || "text")}" placeholder="${escapeAttr(field.placeholder || "")}" value="${escapeAttr(field.value ?? "")}" ${field.min == null ? "" : `min="${Number(field.min)}"`} ${field.max == null ? "" : `max="${Number(field.max)}"`} ${required} /></label>`;
   }).join("") || `<label>任务输入<textarea data-agent-field="prompt" placeholder="${escapeAttr(independentActionHints[$("#independentAgentAction").value] || "输入需求")}" required></textarea></label>`;
 }
 
@@ -776,6 +777,13 @@ function independentAgentInputPayload() {
     const value = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value.trim();
     if (field.required && (value === "" || value == null || (field.type === "number" && !Number.isFinite(value)))) missing.push(field.closest("label")?.firstChild?.textContent?.trim() || name);
     payload[name] = value;
+  });
+  const requiredGroups = new Set([...$("#independentAgentFields").querySelectorAll("[data-required-group]")].map((field) => field.dataset.requiredGroup));
+  requiredGroups.forEach((group) => {
+    const fields = [...$("#independentAgentFields").querySelectorAll(`[data-required-group="${group}"]`)];
+    if (!fields.some((field) => String(field.value || "").trim())) {
+      missing.push(fields.map((field) => field.closest("label")?.firstChild?.textContent?.trim()).filter(Boolean).join(" 或 "));
+    }
   });
   if (payload.target_type === "trending") payload.target = payload.target || "trending";
   if (payload.target_type && payload.target_type !== "trending" && !payload.target) missing.push("采集目标");
@@ -1585,6 +1593,9 @@ function bindMaterialActions(host) {
   host.querySelectorAll("[data-material-detail]").forEach((button) => {
     button.addEventListener("click", () => showMaterialDetail(button.dataset.materialDetail));
   });
+  host.querySelectorAll("[data-analyze-material]").forEach((button) => {
+    button.addEventListener("click", () => analyzeLibraryMaterial(button, button.dataset.analyzeMaterial));
+  });
 }
 
 function renderMaterialItem(item) {
@@ -1626,6 +1637,7 @@ function renderMaterialItem(item) {
         ${sourceUrl ? `<a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener">打开 TikTok 来源</a>` : ""}
         <div class="materialActions">
           <button type="button" data-material-detail="${escapeAttr(item.material_id)}">查看转写与拆解</button>
+          <button type="button" data-analyze-material="${escapeAttr(item.material_id)}" ${checks.transcript ? "" : "disabled"} title="${checks.transcript ? "交给独立 Analysis Agent 深度拆解" : "请先补充字幕或 ASR 转写"}">深度分析</button>
           ${localVideo ? `<a class="buttonLink" href="${escapeAttr(localVideo)}" download>下载原视频</a>` : ""}
         </div>
       </div>
@@ -2769,6 +2781,30 @@ function renderHeroFrame(frame, shot, gateActive) {
       ${gateActive ? `<button type="button" data-regen="${frame.number}">编辑分镜</button>` : '<span class="gateState done">已确认</span>'}
     </article>
   `;
+}
+
+async function analyzeLibraryMaterial(button, materialId) {
+  button.disabled = true;
+  beginOperation("正在深度分析本地素材", 35);
+  try {
+    const payload = await api("/api/v2/agents/run", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "analysis",
+        source_material_id: materialId,
+        mock: $("#runtimeMode").value !== "real",
+      }),
+    });
+    toast("素材深度分析已完成");
+    await loadMaterials();
+    await showMaterialDetail(materialId);
+    return payload;
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    endOperation();
+  }
 }
 
 async function approveHeroGate() {

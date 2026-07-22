@@ -13,8 +13,14 @@ INDEPENDENT_INPUT_SCHEMAS: dict[str, list[dict[str, Any]]] = {
         {"name": "limit", "label": "候选数量", "type": "number", "required": True, "min": 1, "max": 20, "value": 6},
         {"name": "persist", "label": "下载并存入素材库", "type": "checkbox", "value": True},
     ],
-    "analysis": [{"name": "source_text", "label": "视频转写、素材说明或链接", "type": "textarea", "required": True, "placeholder": "粘贴转写、视频内容说明或参考链接，Agent 将拆解结构、节奏和镜头。"}],
-    "research": [{"name": "source_text", "label": "研究样本与背景", "type": "textarea", "required": True, "placeholder": "输入竞品转写、市场观察、目标受众或已有分析结论。"}],
+    "analysis": [
+        {"name": "source_material_id", "label": "素材库编号（与下方文本二选一）", "type": "text", "required": False, "required_group": "analysis_source", "placeholder": "从素材中心复制素材编号"},
+        {"name": "source_text", "label": "视频转写、素材说明或链接", "type": "textarea", "required": False, "required_group": "analysis_source", "placeholder": "粘贴转写、视频内容说明或 TikTok 链接，Agent 将拆解结构、节奏和镜头。"},
+    ],
+    "research": [
+        {"name": "source_material_id", "label": "素材库编号（与下方文本二选一）", "type": "text", "required": False, "required_group": "research_source", "placeholder": "从素材中心复制素材编号"},
+        {"name": "source_text", "label": "研究样本与背景", "type": "textarea", "required": False, "required_group": "research_source", "placeholder": "输入竞品转写、市场观察、目标受众或已有分析结论。"},
+    ],
     "strategy": [
         {"name": "product_id", "label": "产品名称或策略主题", "type": "text", "required": True, "placeholder": "例如便携恒温杯、折叠雨伞或品牌故事"},
         {"name": "source_text", "label": "产品事实与传播目标", "type": "textarea", "required": True, "placeholder": "输入已确认卖点、目标用户、平台和希望达成的内容目标。"},
