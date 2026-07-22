@@ -103,6 +103,18 @@ def test_generation_references_include_approved_usage_step(tmp_path: Path, monke
     assert references[0].endswith("倒出口参考.png")
 
 
+def test_unknown_product_never_falls_back_to_warming_cup_identity(tmp_path: Path, monkeypatch) -> None:
+    index_path = tmp_path / "index.json"
+    index_path.write_text(
+        '{"version":"2.0","generated_at":null,"source_roots":[],"products":[]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VAF_PRODUCT_LIBRARY_INDEX", str(index_path))
+
+    assert product_library.resolve_seedance_source("折叠雨伞") == ""
+    assert product_library.resolve_generation_references("折叠雨伞") == []
+
+
 def _sample_product_root(tmp_path: Path) -> tuple[Path, Path]:
     root = tmp_path / "产品资料"
     root.mkdir()

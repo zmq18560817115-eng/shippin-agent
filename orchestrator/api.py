@@ -1181,6 +1181,11 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         tool_name, artifact_name = "doubao_shotplan", "shot_plan"
     elif action == "asset":
         source = product_library.resolve_seedance_source(request.product_id)
+        if not source:
+            raise HTTPException(
+                status_code=422,
+                detail=f"产品“{request.product_id}”没有已批准的产品主图，请先在素材中心入库产品素材后再生成身份关键帧。",
+            )
         shot_text = _apply_creative_brief(
             (request.prompt or request.source_text or "产品身份关键帧").strip(), creative_brief
         )
@@ -1208,6 +1213,12 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         )
         source = product_library.resolve_seedance_source(request.product_id)
         references = product_library.resolve_generation_references(request.product_id)
+        identity_mode = "product_reference" if source else "prompt_only"
+        hero_frames = (
+            [{"number": 1, "path": source, "source_refs": [source, *references], "status": "approved"}]
+            if source
+            else []
+        )
         payload.update({
             # Let seedance_shot select action references from the prompt. Passing
             # every product reference here can leak the pouring reference into a
@@ -1215,7 +1226,20 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             "shot": {"number": 1, "visual": prompt, "seedance_prompt": prompt, "reference_paths": [], "camera_motion": {"duration_sec": 6}},
             "shot_index": 1,
             "take_id": "A",
-            "asset_manifest": {"version": "2.0", "project_id": project_id, "product_id": request.product_id, "seedance_source": source, "reference_paths": references, "hero_frames": [{"number": 1, "path": source, "source_refs": [source, *references], "status": "approved"}]},
+            "asset_manifest": {
+                "version": "2.0",
+                "project_id": project_id,
+                "product_id": request.product_id,
+                "identity_mode": identity_mode,
+                "seedance_source": source,
+                "reference_paths": references,
+                "hero_frames": hero_frames,
+                **(
+                    {"warnings": ["未绑定产品素材，本次单镜采用纯 Prompt 创作，不具备产品外观一致性保证。"]}
+                    if identity_mode == "prompt_only"
+                    else {}
+                ),
+            },
         })
         tool_name, artifact_name = "seedance_shot", "shot_report"
     elif action == "script_breakdown":

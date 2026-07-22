@@ -322,6 +322,48 @@ def test_standalone_non_pour_production_does_not_leak_action_references(tmp_path
     assert response.json()["meta"]["reference_paths"] == []
 
 
+def test_standalone_unknown_product_production_uses_prompt_only_identity(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "prompt-only-production.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "production",
+                "product_id": "折叠雨伞",
+                "prompt": "雨天街道上打开一把红色折叠雨伞，镜头缓慢推进。",
+                "mock": True,
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    meta = response.json()["meta"]
+    assert meta["seedance_source"] == ""
+    assert meta["reference_paths"] == []
+    artifact = response.json()["artifact"]
+    assert artifact["shots"][0]["status"] == "succeeded"
+
+
+def test_standalone_unknown_product_asset_requires_approved_material(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "unknown-asset.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "asset",
+                "product_id": "折叠雨伞",
+                "prompt": "生成雨伞产品身份关键帧。",
+                "mock": True,
+            },
+        )
+
+    assert response.status_code == 422
+    assert "没有已批准的产品主图" in response.json()["detail"]
+
+
 def test_orchestrator_and_asset_are_independently_runnable(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "standalone-control.db"))
     monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))

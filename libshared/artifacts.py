@@ -217,8 +217,17 @@ def _validate_shot_plan(
 
 def _validate_asset_manifest(payload: dict[str, Any]) -> list[ArtifactValidationIssue]:
     issues: list[ArtifactValidationIssue] = []
+    identity_mode = str(payload.get("identity_mode") or "product_reference")
     source = str(payload.get("seedance_source") or "")
-    if not _is_white_background_hero(source):
+    if identity_mode == "prompt_only":
+        if source or payload.get("hero_frames"):
+            issues.append(
+                ArtifactValidationIssue(
+                    "/identity_mode",
+                    "prompt_only asset manifest must not contain product reference media",
+                )
+            )
+    elif not _is_white_background_hero(source):
         issues.append(
             ArtifactValidationIssue(
                 "/seedance_source",

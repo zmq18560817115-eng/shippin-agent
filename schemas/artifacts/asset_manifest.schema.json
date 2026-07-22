@@ -7,11 +7,13 @@
     "version": {"const": "2.0"},
     "project_id": {"type": "string"},
     "product_id": {"type": "string"},
-    "seedance_source": {"type": "string", "minLength": 1},
+    "identity_mode": {"enum": ["product_reference", "prompt_only"]},
+    "seedance_source": {"type": "string"},
+    "warnings": {"type": "array", "items": {"type": "string"}},
     "character_assets": {"type": "array", "items": {"type": "string"}},
     "hero_frames": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "items": {
         "type": "object",
         "required": ["number", "path"],
@@ -23,5 +25,22 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"identity_mode": {"const": "prompt_only"}}, "required": ["identity_mode"]},
+      "then": {
+        "properties": {
+          "seedance_source": {"maxLength": 0},
+          "hero_frames": {"maxItems": 0}
+        }
+      },
+      "else": {
+        "properties": {
+          "seedance_source": {"minLength": 1},
+          "hero_frames": {"minItems": 1}
+        }
+      }
+    }
+  ]
 }

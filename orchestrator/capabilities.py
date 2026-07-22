@@ -31,8 +31,14 @@ INDEPENDENT_INPUT_SCHEMAS: dict[str, list[dict[str, Any]]] = {
         {"name": "product_id", "label": "产品名称或创作主题", "type": "text", "required": True, "placeholder": "用于匹配产品事实与视觉约束"},
         {"name": "prompt", "label": "脚本或分镜需求", "type": "textarea", "required": True, "placeholder": "输入脚本，或明确场景、人物、动作、镜头运动和视觉风格。"},
     ],
-    "asset": [{"name": "prompt", "label": "镜头素材需求", "type": "textarea", "required": True, "placeholder": "说明需要匹配的产品、动作、构图和关键帧要求。"}],
-    "production": [{"name": "prompt", "label": "单镜视频 Prompt", "type": "textarea", "required": True, "placeholder": "描述单个 6 秒镜头的场景、人物、动作、产品状态、机位和光线。"}],
+    "asset": [
+        {"name": "product_id", "label": "已入库产品名称", "type": "text", "required": True, "placeholder": "素材 Agent 只使用素材中心已批准的产品主图"},
+        {"name": "prompt", "label": "镜头素材需求", "type": "textarea", "required": True, "placeholder": "说明需要匹配的产品、动作、构图和关键帧要求。"},
+    ],
+    "production": [
+        {"name": "product_id", "label": "产品名称或创作主题", "type": "text", "required": True, "placeholder": "已入库产品将锁定参考图；其他主题采用纯 Prompt 模式"},
+        {"name": "prompt", "label": "单镜视频 Prompt", "type": "textarea", "required": True, "placeholder": "描述单个 6 秒镜头的场景、人物、动作、产品状态、机位和光线。"},
+    ],
     "review": [
         {"name": "product_id", "label": "产品名称或审核主题", "type": "text", "required": True, "placeholder": "用于加载对应产品事实；未入库产品请在正文写明事实"},
         {"name": "source_text", "label": "待审核脚本或内容", "type": "textarea", "required": True, "placeholder": "粘贴脚本、分镜说明或广告文案，检查产品事实、合规和表达风险。"},

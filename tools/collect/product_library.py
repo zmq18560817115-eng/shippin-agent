@@ -16,7 +16,7 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 INDEX_VERSION = "2.0"
 INDEX_NAME = "product_library_index.json"
 PRODUCT_KEYWORDS = {
-    "便携恒温杯": ("便携恒温杯", "恒温杯", "warming cup", "warmer"),
+    "便携恒温杯": ("便携恒温杯", "恒温杯", "warming cup", "warmer", "thermos"),
     "吸奶器": ("吸奶器", "panda-bubu-pro", "breast pump", "pump"),
     "奶瓶": ("奶瓶", "bottle"),
     "羊脂膏": ("羊脂膏", "lanolin"),
@@ -109,6 +109,8 @@ def resolve_seedance_source(product_id: str) -> str:
     product = get_product(product_id)
     if product and product.get("seedance_source"):
         return str(product["seedance_source"])
+    if _canonical_product_id(product_id) != "便携恒温杯":
+        return ""
     fallback = ROOT / "data" / "01_素材库" / "产品资料" / "便携恒温杯" / "listing-0602-nw" / "主图" / "白底主图.png"
     return fallback.as_posix() if fallback.exists() else ""
 

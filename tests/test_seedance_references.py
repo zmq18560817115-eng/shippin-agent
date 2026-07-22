@@ -16,6 +16,24 @@ def test_seedance_prompt_has_shot_specific_action_contract() -> None:
     assert "approved round spout" in pour
 
 
+def test_prompt_only_seedance_prompt_does_not_inherit_warming_cup_rules() -> None:
+    manifest = {
+        "product_id": "折叠雨伞",
+        "identity_mode": "prompt_only",
+        "seedance_source": "",
+    }
+
+    prompt = seedance_shot._shot_prompt(
+        {"number": 1, "visual_zh": "雨天街道上打开红色折叠雨伞"},
+        manifest,
+    )
+
+    assert "雨天街道上打开红色折叠雨伞" in prompt
+    assert "Do not introduce a warming cup" in prompt
+    assert "98" not in prompt
+    assert "Shot 1 must not contain pouring" not in prompt
+
+
 def test_seedance_shot_forwards_additional_reference_paths(tmp_path: Path, monkeypatch) -> None:
     captured = {}
 

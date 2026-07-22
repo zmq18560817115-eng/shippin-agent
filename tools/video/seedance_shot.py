@@ -95,6 +95,25 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
 
 def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
     product_facts = product_library.product_guardrail_text(str(asset_manifest.get("product_id") or ""))
+    identity_mode = str(asset_manifest.get("identity_mode") or "product_reference")
+    if identity_mode == "prompt_only":
+        return " ".join(
+            part
+            for part in (
+                str(
+                    shot.get("seedance_prompt_zh")
+                    or shot.get("seedance_prompt")
+                    or shot.get("visual_prompt")
+                    or shot.get("visual_zh")
+                    or shot.get("visual")
+                    or ""
+                ),
+                "Pure Prompt creative mode: follow only the requested subject, scene, action, camera, lighting, and style.",
+                "Do not introduce a warming cup, baby bottle, milk-pouring action, temperature display, or unrelated branded product unless the user explicitly requested it.",
+                "Do not add invented logos, watermarks, subtitles, overlays, or readable text.",
+            )
+            if part
+        )
     number = int(shot.get("number") or 0)
     if number == 3:
         action_rule = (
@@ -115,7 +134,14 @@ def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
     return " ".join(
         part
         for part in (
-            str(shot.get("seedance_prompt") or shot.get("visual_prompt") or shot.get("visual") or ""),
+            str(
+                shot.get("seedance_prompt_zh")
+                or shot.get("seedance_prompt")
+                or shot.get("visual_prompt")
+                or shot.get("visual_zh")
+                or shot.get("visual")
+                or ""
+            ),
             f"Seedance source: {asset_manifest.get('seedance_source')}",
             f"Approved product facts and hard constraints: {product_facts}" if product_facts else "",
             "Use only the approved product identity from the reference image. Preserve its exact body shape, lid, handle, controls, color, and approved logo. Do not add any invented brand name, logo, watermark, label, subtitle, overlay, or readable text. The separate baby bottle must be transparent and completely unbranded. Do not replace the product with a generic bottle or another brand.",

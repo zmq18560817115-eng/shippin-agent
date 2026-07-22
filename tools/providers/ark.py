@@ -94,7 +94,7 @@ def create_seedance_video(
     timeout_s = float(context.env.get("ARK_TIMEOUT_S") or 240)
     poll_s = float(context.env.get("SEEDANCE_POLL_INTERVAL_S") or 5)
     max_wait_s = float(context.env.get("SEEDANCE_MAX_WAIT_S") or 900)
-    requested_paths = [image_path, *(image_paths or [])]
+    requested_paths = [path for path in [image_path, *(image_paths or [])] if str(path).strip()]
     source_paths: list[Path] = []
     seen: set[str] = set()
     for path_text in requested_paths:
@@ -205,11 +205,16 @@ def _json_from_text(text: str) -> dict[str, Any]:
     return loaded
 
 
-def _seedance_prompt(prompt: str, duration_sec: int) -> str:
-    return (
-        f"{prompt}\n"
+def _seedance_prompt(prompt: str, duration_sec: int, *, has_reference: bool = True) -> str:
+    identity_rule = (
         "Use the provided product image as the strict product identity reference. "
         "Do not invent product shape, logo, display, lid, spout, or accessories. "
+        if has_reference
+        else "This is a text-only creative shot with no product identity reference. Follow the described subject exactly and do not introduce unrelated products. "
+    )
+    return (
+        f"{prompt}\n"
+        f"{identity_rule}"
         "Do not add any invented brand name, watermark, label, or readable text; preserve only approved markings visible in the reference. "
         f"Duration {duration_sec} seconds, vertical 9:16, final delivery target 720x1280, product-safe commercial short video shot. "
         # Seedance model variants do not share the same resolution enum. Keep
@@ -239,7 +244,7 @@ def _seedance_request_body(
     return {
         "model": model,
         "content": [
-            {"type": "text", "text": _seedance_prompt(prompt, duration_sec)},
+            {"type": "text", "text": _seedance_prompt(prompt, duration_sec, has_reference=bool(source_paths))},
             *images,
         ],
     }
