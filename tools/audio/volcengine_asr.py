@@ -39,10 +39,13 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     api_key = str(context.env.get("VOLCENGINE_ASR_API_KEY") or "").strip()
     app_key = str(context.env.get("VOLCENGINE_ASR_APP_KEY") or "").strip()
     access_key = str(context.env.get("VOLCENGINE_ASR_ACCESS_KEY") or "").strip()
+    local_enabled = str(context.env.get("VAF_LOCAL_ASR_ENABLED") or "").strip().casefold() in {"1", "true", "yes", "on"}
+    if not api_key and not (app_key and access_key) and local_enabled:
+        return _execute_local(source, context)
     if not api_key and not (app_key and access_key):
         return ToolResult.failure(
             "not_configured",
-            "未配置语音识别凭证：新版控制台填写 VOLCENGINE_ASR_API_KEY；旧版填写 VOLCENGINE_ASR_APP_KEY 和 VOLCENGINE_ASR_ACCESS_KEY",
+            "未配置语音识别：填写 VOLCENGINE_ASR_API_KEY，或设置 VAF_LOCAL_ASR_ENABLED=true 启用本地 Faster-Whisper",
         )
 
     try:
@@ -68,6 +71,49 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     return ToolResult.success(
         {"transcript_text": text, "segments": segments},
         meta={"tool": "volcengine_asr", "mock": False, "source": "volcengine_flash", "segment_count": len(segments)},
+    )
+
+
+def _execute_local(source: Path, context: ToolContext) -> ToolResult:
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        return ToolResult.failure(
+            "not_configured",
+            "本地 ASR 已启用但 faster-whisper 未安装，请运行 pip install -r requirements-local-asr.txt",
+        )
+    model_name = str(context.env.get("VAF_LOCAL_ASR_MODEL") or "base").strip()
+    device = str(context.env.get("VAF_LOCAL_ASR_DEVICE") or "cpu").strip()
+    compute_type = str(context.env.get("VAF_LOCAL_ASR_COMPUTE_TYPE") or ("int8" if device == "cpu" else "float16")).strip()
+    cache_dir = str(context.env.get("VAF_LOCAL_ASR_CACHE_DIR") or "").strip() or None
+    try:
+        model = WhisperModel(model_name, device=device, compute_type=compute_type, download_root=cache_dir)
+        segments_iter, info = model.transcribe(
+            source.as_posix(),
+            beam_size=5,
+            vad_filter=True,
+            condition_on_previous_text=True,
+        )
+        segments = [
+            {"start_s": round(float(segment.start), 3), "end_s": round(float(segment.end), 3), "text": str(segment.text).strip()}
+            for segment in segments_iter
+            if str(segment.text).strip()
+        ]
+    except Exception as exc:
+        return ToolResult.failure("provider", f"本地语音识别失败：{exc}")
+    text = " ".join(segment["text"] for segment in segments).strip()
+    if not text:
+        return ToolResult.failure("provider", "本地语音识别完成，但没有识别出有效语音")
+    return ToolResult.success(
+        {"transcript_text": text, "segments": segments},
+        meta={
+            "tool": "volcengine_asr",
+            "mock": False,
+            "source": "faster_whisper",
+            "model": model_name,
+            "language": getattr(info, "language", None),
+            "segment_count": len(segments),
+        },
     )
 
 

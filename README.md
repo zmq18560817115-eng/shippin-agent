@@ -128,12 +128,25 @@ VAF_AUTO_COLLECT_INTERVAL_MINUTES=60
 VAF_AUTO_COLLECT_REAL=true
 ```
 
+关键词和话题采集默认优先使用 Playwright 浏览器搜索，结果经过关键词相关度、播放量和内容质量排序；随后由 `yt-dlp` 下载视频、封面和字幕，本地 ASR 在无字幕时补充转写。`TikTokApi`、Apify 和人工直链保留为降级通道。
+
 服务器上建议为 TikTok 服务账号导出持久化 Cookies，并设置：
 
 ```dotenv
 TIKTOK_COOKIES_FILE=/data/secrets/tiktok-cookies.txt
 TIKTOK_WORKER_TIMEOUT_SEC=75
+TIKTOK_BROWSER_SEARCH_BROWSER=chromium
+TIKTOK_SEARCH_WAIT_MS=12000
+TIKTOK_BROWSER_SEARCH_TIMEOUT_SEC=90
+TIKTOK_BROWSER_SEARCH_RETRIES=3
+TIKTOK_DOWNLOAD_TIMEOUT_SEC=120
+TIKTOK_SEARCH_CACHE_PATH=data/runtime/tiktok-search-cache.json
+TIKTOK_SEARCH_CACHE_MAX_AGE_SEC=86400
+VAF_TIKTOK_ENRICH_LIMIT=12
 ```
+
+`VAF_TIKTOK_ENRICH_LIMIT` 控制每次补查真实播放量、作者和标题的候选数量。Cookie 过期后应重新导出 Netscape Cookie 文件并重启采集 Worker。
+实时搜索成功后会保存最近一次真实结果。TikTok 临时返回空页时，系统可在 `TIKTOK_SEARCH_CACHE_MAX_AGE_SEC` 有效期内使用缓存继续任务，并将素材标记为 `cached_browser_search`，不会冒充实时发现。
 
 Cookies、`TIKTOK_MS_TOKEN` 和 API Key 不应进入仓库或镜像。TikTok 的可访问性会受地区、登录状态、Cookie 有效期和平台策略影响；系统会保留人工链接导入作为降级入口。
 
@@ -148,6 +161,12 @@ VOLCENGINE_ASR_ACCESS_KEY=
 ```
 
 TikTokApi 浏览器采集运行在隔离子进程中，超过 `TIKTOK_WORKER_TIMEOUT_SEC` 会终止并返回可读错误，避免主服务被浏览器卡死。TikTokApi 对关键词的能力更接近话题标签发现；需要严格按自然语言关键词检索时，应配置 `APIFY_API_TOKEN`，并保留账号采集、Cookies 下载和人工直链作为降级路径。
+
+关键词任务会自动展开为产品词、品类词、中英文场景词，合并去重后按相关度、播放量、互动率和元数据完整度排序。生产入库默认要求相关度至少 `50%`；供应商返回播放量时还要求至少 `5000` 次播放，可分别通过 `VAF_TIKTOK_MIN_RELEVANCE` 和 `VAF_TIKTOK_MIN_PLAYS` 调整。低分素材只记录在任务明细中，不下载、不进入生产素材库。
+
+真实素材必须同时具备本地视频、封面、真实字幕或 ASR 转写、结构化镜头拆解才会标记为可生产。视频简介不会再被当作转写。无字幕视频需配置火山 ASR；未配置时素材会留存在待补齐区，并明确显示缺少转写和拆解。
+
+不使用云端 ASR 时，可运行 `pip install -r requirements-local-asr.txt`，并设置 `VAF_LOCAL_ASR_ENABLED=true`。默认使用 Faster-Whisper `base/int8/CPU`，首次运行会下载模型到 `VAF_LOCAL_ASR_CACHE_DIR`，后续可离线转写。模型缓存和 `secrets/` 均已排除 Git。
 
 ## 验收与开发
 

@@ -39,3 +39,42 @@ def test_chinese_keyword_expands_to_product_aliases() -> None:
 def test_account_and_trending_targets_are_trusted_by_discovery_scope() -> None:
     assert relevance.score_item({"caption": "anything"}, "creator", target_type="account")["relevant"] is True
     assert relevance.score_item({"caption": "anything"}, "", target_type="trending")["relevant"] is True
+
+
+def test_product_query_plan_expands_bilingual_purchase_intent() -> None:
+    queries = relevance.query_plan("便携恒温杯")
+
+    assert queries[0] == "便携恒温杯"
+    assert "portable bottle warmer" in queries
+    assert "travel bottle warmer" in queries
+
+
+def test_negative_topic_blocks_false_positive_even_with_product_term() -> None:
+    result = relevance.score_item(
+        {"caption": "Python heated cup QR code tutorial", "hashtags": ["python", "qrcode"]},
+        "恒温杯",
+    )
+
+    assert result["relevant"] is False
+    assert "python" in result["negative_terms"]
+
+
+def test_quality_score_rewards_relevant_popular_complete_video() -> None:
+    relevant = {"score": 0.9, "relevant": True}
+    strong = relevance.quality_score(
+        {
+            "url": "https://www.tiktok.com/@demo/video/1",
+            "caption": "portable bottle warmer",
+            "author_name": "demo",
+            "cover_url": "https://example.test/cover.jpg",
+            "play_count": 600000,
+            "like_count": 50000,
+            "comment_count": 1000,
+            "share_count": 2000,
+        },
+        relevant,
+    )
+    weak = relevance.quality_score({"url": "https://www.tiktok.com/@demo/video/2"}, relevant)
+
+    assert strong["score"] > weak["score"]
+    assert strong["play_count"] == 600000

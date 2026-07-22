@@ -14,6 +14,7 @@ def main() -> int:
             "TIKTOK_PROXY": str(request.get("proxy") or ""),
             "TIKTOK_TIMEOUT_MS": str(request.get("timeout_ms") or "45000"),
             "TIKTOK_HEADLESS": str(request.get("headless") or "true"),
+            "TIKTOK_COOKIES_FILE": str(request.get("cookies_file") or ""),
         }
         items = discover_direct(
             target_type=str(request.get("target_type") or "keyword"),

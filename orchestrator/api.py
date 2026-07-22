@@ -9,6 +9,7 @@ import shutil
 import base64
 import hashlib
 import hmac
+import importlib.util
 import threading
 import time
 import zipfile
@@ -122,6 +123,7 @@ class TikTokIntakeRunRequest(BaseModel):
     relevance: dict[str, Any] | None = None
     project_id: str | None = None
     mock: bool = True
+    analysis_only: bool = False
 
 
 class TikTokCrawlRequest(BaseModel):
@@ -467,22 +469,28 @@ def healthz() -> dict[str, str]:
 
 @app.get("/api/v2/runtime")
 def runtime_status() -> dict[str, Any]:
-    from tools.collect import tiktok_api_adapter
+    from tools.collect import tiktok_api_adapter, tiktok_browser_search
 
     tiktok_api_installed = tiktok_api_adapter.package_available()
     tiktok_api_ready = tiktok_api_adapter.configured(os.environ)
+    browser_search_ready = tiktok_browser_search.configured(os.environ)
     apify_ready = bool(os.environ.get("APIFY_API_TOKEN"))
     yt_dlp_ready = bool(shutil.which("yt-dlp"))
     cookies_ready = bool(os.environ.get("TIKTOK_COOKIES_FILE"))
     doubao_configured = bool(os.environ.get("DOUBAO_API_KEY"))
     seedance_configured = bool(os.environ.get("SEEDANCE_API_KEY"))
-    asr_configured = bool(os.environ.get("VOLCENGINE_ASR_API_KEY")) or bool(
+    cloud_asr_configured = bool(os.environ.get("VOLCENGINE_ASR_API_KEY")) or bool(
         os.environ.get("VOLCENGINE_ASR_APP_KEY") and os.environ.get("VOLCENGINE_ASR_ACCESS_KEY")
     )
+    local_asr_configured = _env_bool("VAF_LOCAL_ASR_ENABLED", False) and importlib.util.find_spec("faster_whisper") is not None
+    asr_configured = cloud_asr_configured or local_asr_configured
     context = ToolContext.from_mapping()
     probes = _load_runtime_probes()
     tiktok_probe = probes.get("tiktok_api") or {}
+    browser_probe = probes.get("browser_search") or {}
     tiktok_operational = tiktok_probe.get("state") == "ready"
+    browser_operational = browser_probe.get("state") == "ready"
+    keyword_operational = browser_operational or tiktok_operational
     tiktok_state = str(tiktok_probe.get("state") or ("configured_unverified" if tiktok_api_ready else "not_configured"))
     tiktok_detail = str(tiktok_probe.get("detail") or (
         "TikTokApi 与令牌已配置，需实时采集探针确认会话有效"
@@ -508,11 +516,19 @@ def runtime_status() -> dict[str, Any]:
                 detail="yt-dlp 已就绪，可执行直链下载" if yt_dlp_ready else "未检测到 yt-dlp",
             ),
             "tiktok_keyword_crawler": {
-                "configured": apify_ready or tiktok_api_ready,
-                "operational": False,
-                "state": "configured_unverified" if apify_ready or tiktok_api_ready else "not_configured",
-                "mode": "tiktok_api_or_apify",
-                "detail": "采集后端已配置，需运行关键词探针确认结果相关性" if apify_ready or tiktok_api_ready else "未配置关键词发现后端",
+                "configured": browser_search_ready or apify_ready or tiktok_api_ready,
+                "operational": keyword_operational,
+                "state": "ready" if keyword_operational else ("configured_unverified" if browser_search_ready or apify_ready or tiktok_api_ready else "not_configured"),
+                "mode": "browser_search_then_fallbacks",
+                "detail": "浏览器搜索探针已通过；关键词结果继续执行相关度与质量门槛" if browser_operational else ("采集后端已配置，需运行实时探针确认会话有效" if browser_search_ready or apify_ready or tiktok_api_ready else "未配置关键词发现后端"),
+            },
+            "tiktok_browser_search": {
+                "configured": browser_search_ready,
+                "operational": browser_operational,
+                "state": "ready" if browser_operational else ("configured_unverified" if browser_search_ready else "not_configured"),
+                "mode": "authenticated_search_page",
+                "detail": str(browser_probe.get("detail") or ("Playwright 与 Cookies 已配置，需执行真实关键词探针" if browser_search_ready else "缺少 Playwright 或有效 Cookies")),
+                "last_checked_at": browser_probe.get("checked_at"),
             },
             "tiktok_api": {
                 "configured": tiktok_api_ready,
@@ -528,10 +544,11 @@ def runtime_status() -> dict[str, Any]:
                     asr_configured,
                     configured_detail="语音转写凭证已配置，需通过短音频探针确认",
                 ),
-                "mode": "volcengine_flash_or_subtitle",
+                "mode": "volcengine_flash" if cloud_asr_configured else ("faster_whisper_local" if local_asr_configured else "subtitle_only"),
             },
         },
         "collector_backends": [
+            {"id": "browser_search", "ready": browser_operational, "configured": browser_search_ready, "state": "ready" if browser_operational else ("configured_unverified" if browser_search_ready else "not_configured"), "supports": ["keyword", "hashtag"], "detail": str(browser_probe.get("detail") or "真实搜索页采集"), "last_checked_at": browser_probe.get("checked_at")},
             {"id": "tiktok_api", "ready": tiktok_operational, "configured": tiktok_api_ready, "state": tiktok_state, "supports": ["account", "hashtag", "keyword", "trending"], "detail": tiktok_detail, "last_checked_at": tiktok_probe.get("checked_at")},
             {"id": "apify", "ready": False, "configured": apify_ready, "optional": True, "state": "configured_unverified" if apify_ready else "optional_disabled", "supports": ["keyword"], "detail": "可选降级后端"},
             {"id": "yt_dlp", "ready": yt_dlp_ready, "configured": yt_dlp_ready, "state": "ready" if yt_dlp_ready else "not_configured", "supports": ["account", "direct_url"], "cookies_file": cookies_ready, "detail": "下载器已安装" if yt_dlp_ready else "未检测到 yt-dlp"},
@@ -747,23 +764,32 @@ def _require_standalone_agent_input(request: AgentRunRequest, action: str) -> No
 @app.post("/api/v2/admin/runtime/probe")
 def probe_runtime_provider(request: RuntimeProbeRequest) -> dict[str, Any]:
     provider = request.provider.strip().casefold()
-    if provider != "tiktok_api":
-        raise HTTPException(status_code=422, detail="当前仅支持 TikTok 自建采集的无费用实时探针")
+    if provider not in {"browser_search", "tiktok_api"}:
+        raise HTTPException(status_code=422, detail="当前仅支持 TikTok 浏览器搜索和 TikTokApi 的无费用实时探针")
     started = time.monotonic()
+    payload = (
+        {"target_type": "keyword", "target": "bottle warmer", "provider": "browser_search", "limit": 1, "expand_queries": False}
+        if provider == "browser_search"
+        else {"target_type": "trending", "target": "", "provider": "tiktok_api", "limit": 1}
+    )
     result = tool_registry.execute_tool(
         "tiktok_crawler",
-        {"target_type": "trending", "target": "", "provider": "tiktok_api", "limit": 1},
+        payload,
         context={"mock": False, "env": os.environ},
     )
     elapsed_ms = int((time.monotonic() - started) * 1000)
-    if result.ok and result.data.get("items"):
-        probe = {"state": "ready", "detail": "实时发现探针通过", "checked_at": _utc_now(), "latency_ms": elapsed_ms, "item_count": len(result.data.get("items") or [])}
+    items = list(result.data.get("items") or []) if result.ok else []
+    cached_only = bool(items) and all(item.get("discovery_source") == "cached_browser_search" for item in items)
+    if items and cached_only:
+        probe = {"state": "degraded", "detail": "实时搜索暂不可用，当前使用最近成功缓存", "checked_at": _utc_now(), "latency_ms": elapsed_ms, "item_count": len(items)}
+    elif items:
+        probe = {"state": "ready", "detail": "实时发现探针通过", "checked_at": _utc_now(), "latency_ms": elapsed_ms, "item_count": len(items)}
     else:
         probe = {"state": "error", "detail": _friendly_runtime_error(str((result.error or {}).get("message") or "实时发现探针失败")), "checked_at": _utc_now(), "latency_ms": elapsed_ms, "item_count": 0}
     probes = _load_runtime_probes()
     probes[provider] = probe
     _write_json_atomic(_runtime_probe_path(), probes)
-    return {"ok": probe["state"] == "ready", "provider": provider, "probe": probe}
+    return {"ok": probe["state"] in {"ready", "degraded"}, "provider": provider, "probe": probe}
 
 
 def _runtime_provider(
@@ -1360,6 +1386,12 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
         raise HTTPException(status_code=422 if error.get("category") == "validation" else 502, detail=error["message"])
 
     capture = captured.data
+    transcript_path = material_dir / "transcript.txt"
+    transcript_text = str(capture.get("transcript_text") or "").strip()
+    if transcript_text:
+        transcript_path.write_text(transcript_text, encoding="utf-8")
+    capture_manifest_path = material_dir / "capture_manifest.json"
+    capture_manifest_path.write_text(json.dumps(capture, ensure_ascii=False, indent=2), encoding="utf-8")
     current = manual_import.load_material_meta(material_id, root)
     intake = dict(current.get("asset_intake") or {})
     intake["notes"] = (
@@ -1369,7 +1401,9 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
         material_id,
         {
             "processing_status": "captured" if capture.get("local_video_path") else "metadata_only",
-            "transcript_text": str(capture.get("transcript_text") or "")[:12000],
+            "transcript_text": transcript_text[:12000],
+            "transcript_path": transcript_path.as_posix() if transcript_text else "",
+            "breakdown_path": "",
             "local_video_path": str(capture.get("local_video_path") or ""),
             "local_cover_path": str(capture.get("local_cover_path") or ""),
             "ai_analysis_json": json.dumps(
@@ -1389,9 +1423,66 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
         root,
     )
 
+    if request.analysis_only:
+        analysis: dict[str, Any] = {}
+        if transcript_text:
+            analyzed = tool_registry.execute_tool(
+                "doubao_analyze",
+                {
+                    "project_id": f"material-{material_id}",
+                    "source_material_id": material_id,
+                    "source_url": request.url,
+                    "transcript_text": transcript_text[:8000],
+                },
+                context={"mock": request.mock, "env": os.environ},
+            )
+            if not analyzed.ok:
+                error = analyzed.error or {"message": "素材拆解模型运行失败"}
+                raise HTTPException(status_code=502, detail=error.get("message") or error)
+            analysis = dict(analyzed.data.get("analysis_report") or {})
+            breakdown_path = material_dir / "analysis_report.json"
+            breakdown_path.write_text(json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8")
+            meta = manual_import.update_material_meta(
+                material_id,
+                {
+                    "processing_status": "analyzed",
+                    "breakdown_path": breakdown_path.as_posix(),
+                    "ai_analysis_json": json.dumps(
+                        {
+                            "capture_status": capture.get("status"),
+                            "transcript_source": capture.get("transcript_source"),
+                            "frame_paths": capture.get("frame_paths") or [],
+                            "analysis": {
+                                "hook_3s": analysis.get("hook_3s"),
+                                "structure": analysis.get("structure") or [],
+                                "pacing": analysis.get("pacing") or [],
+                                "keyframes": analysis.get("keyframes") or [],
+                                "shot_breakdown": analysis.get("shot_breakdown") or [],
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+                root,
+            )
+        readiness = _material_production_readiness(meta, material_dir)
+        return {
+            "ok": True,
+            "material": meta,
+            "capture": capture,
+            "project_id": None,
+            "task_id": None,
+            "engine": None,
+            "project": None,
+            "readiness": readiness,
+            "warnings": [] if transcript_text else ["未取得字幕或 ASR 转写，素材已留存但尚不能自动拆解。"],
+        }
+
     project_id = _validate_project_id(request.project_id or _new_project_id())
     run_root = _run_root(project_id)
-    source_text = str(meta.get("transcript_text") or meta.get("caption") or "")[:8000]
+    # A caption is discovery metadata, not a transcript. Keeping these separate
+    # prevents a short post description from being misreported as video analysis.
+    source_text = str(meta.get("transcript_text") or "")[:8000]
     task_id = engine.start_pipeline(
         project_id,
         product_id=request.product_id,
@@ -1404,11 +1495,14 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
     )
     status = engine.run_until_blocked(project_id, db_path=_db_path(), run_root=run_root, mock=request.mock)
     analysis = _load_artifact_or_none(project_id, "analysis_report") or {}
-    if analysis:
+    if analysis and (transcript_text or request.mock):
+        breakdown_path = material_dir / "analysis_report.json"
+        breakdown_path.write_text(json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8")
         meta = manual_import.update_material_meta(
             material_id,
             {
                 "processing_status": "analyzed",
+                "breakdown_path": breakdown_path.as_posix(),
                 "ai_analysis_json": json.dumps(
                     {
                         "capture_status": capture.get("status"),
@@ -1472,7 +1566,8 @@ def crawl_tiktok_and_run(request: TikTokCrawlRequest) -> dict[str, Any]:
     for item in discovered.data.get("items", [])[:limit]:
         url = str(item.get("url") or "")
         scored = relevance.score_item(item, request.target, target_type=request.target_type)
-        if not scored["relevant"]:
+        minimum_relevance = max(0.0, min(float(os.environ.get("VAF_TIKTOK_MIN_RELEVANCE") or 0.5), 1.0))
+        if not scored["relevant"] or float(scored["score"]) < minimum_relevance:
             filtered.append({"url": url, "title": str(item.get("title") or ""), "relevance": scored})
             continue
         try:
@@ -1588,7 +1683,7 @@ def update_auto_collector_settings(request: AutoCollectorSettingsRequest) -> dic
         raise HTTPException(status_code=422, detail="不支持的发现方式")
     if request.target_type != "trending" and not request.target.strip():
         raise HTTPException(status_code=422, detail="请填写自动采集目标")
-    if request.provider not in {"auto", "tiktok_api", "apify", "yt_dlp"}:
+    if request.provider not in {"auto", "browser_search", "tiktok_api", "apify", "yt_dlp"}:
         raise HTTPException(status_code=422, detail="不支持的采集后端")
     _save_auto_collector_settings(request)
     return _auto_collector_settings()
@@ -1613,6 +1708,9 @@ def _discovery_meta_updates(item: dict[str, Any] | None) -> dict[str, Any]:
         "like_count": _nonnegative_int(item.get("like_count")),
         "comment_count": _nonnegative_int(item.get("comment_count")),
         "share_count": _nonnegative_int(item.get("share_count")),
+        "play_count": _nonnegative_int(item.get("play_count")),
+        "discovery_query": str(item.get("discovery_query") or "")[:300],
+        "discovery_quality": item.get("quality") if isinstance(item.get("quality"), dict) else {},
     }
 
 
@@ -1651,7 +1749,7 @@ def _ensure_auto_collector_settings() -> None:
             (
                 enabled,
                 target_type if target_type in {"keyword", "account", "hashtag", "trending"} else "keyword",
-                provider if provider in {"auto", "tiktok_api", "apify", "yt_dlp"} else "auto",
+                provider if provider in {"auto", "browser_search", "tiktok_api", "apify", "yt_dlp"} else "auto",
                 target,
                 limit,
                 interval,
@@ -1888,40 +1986,45 @@ def _collect_relevant_job_items(job: dict[str, Any]) -> dict[str, Any]:
     failures: list[dict[str, str]] = []
     provider = job["provider"]
 
-    for round_index in range(3):
-        discovery_limit = min(100, max(12, requested * (3 + round_index)))
+    queries = relevance.query_plan(str(job["target"]), target_type=str(job["target_type"]), limit=6)
+    if not queries:
+        queries = [str(job["target"])]
+    candidates: list[dict[str, Any]] = []
+    discovery_errors: list[str] = []
+    for query_index, discovery_query in enumerate(queries):
+        discovery_limit = min(100, max(12, requested * (3 + min(query_index, 2))))
         discovered = tool_registry.execute_tool(
             "tiktok_crawler",
             {
                 "target_type": job["target_type"],
                 "provider": job["provider"],
-                "target": job["target"],
+                "target": discovery_query,
                 "limit": discovery_limit,
+                "expand_queries": False,
             },
             context={"mock": bool(job["mock"]), "env": os.environ},
         )
         if not discovered.ok:
             error = discovered.error or {"category": "provider", "message": "TikTok crawl failed"}
-            status_code = 422 if error.get("category") == "validation" else 503
-            raise HTTPException(status_code=status_code, detail=error["message"])
+            discovery_errors.append(f"{discovery_query}: {error['message']}")
+            continue
         provider = discovered.data.get("provider") or provider
-        new_in_round = 0
         for item in discovered.data.get("items", []):
             url = str(item.get("url") or "").strip()
             if not url or url in seen_urls:
                 continue
             seen_urls.add(url)
-            new_in_round += 1
             discovered_count += 1
             scored = relevance.score_item(item, str(job["target"]), target_type=str(job["target_type"]))
-            if not scored["relevant"]:
+            minimum_relevance = max(0.0, min(float(os.environ.get("VAF_TIKTOK_MIN_RELEVANCE") or 0.5), 1.0))
+            if not scored["relevant"] or float(scored["score"]) < minimum_relevance:
                 queue.upsert_collection_item(
                     job_id,
                     source_url=url,
                     item={**item, "relevance": scored},
                     relevance_score=float(scored["score"]),
                     status="filtered",
-                    error_message="与采集目标相关性不足",
+                    error_message=f"与采集目标相关性不足（要求 {minimum_relevance:.0%}）",
                     db_path=_db_path(),
                 )
                 continue
@@ -1936,11 +2039,50 @@ def _collect_relevant_job_items(job: dict[str, Any]) -> dict[str, Any]:
                     db_path=_db_path(),
                 )
                 continue
-            relevant_count += 1
+            quality = relevance.quality_score(item, scored)
+            minimum_plays = max(0, int(os.environ.get("VAF_TIKTOK_MIN_PLAYS") or 5000))
+            has_play_metric = item.get("play_count") not in (None, "")
+            if has_play_metric and int(quality["play_count"]) < minimum_plays:
+                queue.upsert_collection_item(
+                    job_id,
+                    source_url=url,
+                    item={**item, "relevance": scored, "quality": quality, "discovery_query": discovery_query},
+                    relevance_score=float(scored["score"]),
+                    status="filtered",
+                    error_message=f"播放量低于质量门槛 {minimum_plays}",
+                    db_path=_db_path(),
+                )
+                continue
+            candidates.append({**item, "relevance": scored, "quality": quality, "discovery_query": discovery_query})
+
+    if not candidates and discovery_errors and discovered_count == 0:
+        raise HTTPException(status_code=503, detail="；".join(discovery_errors[:3]))
+
+    candidates.sort(
+        key=lambda item: (
+            float((item.get("quality") or {}).get("score") or 0),
+            int((item.get("quality") or {}).get("play_count") or 0),
+        ),
+        reverse=True,
+    )
+    relevant_count = len(candidates)
+    queue.update_collection_job_progress(
+        job_id,
+        str(job.get("lease_owner") or ""),
+        discovered_count=discovered_count,
+        relevant_count=relevant_count,
+        downloaded_count=completed_count,
+        analyzed_count=completed_count,
+        failed_count=failed_count,
+        db_path=_db_path(),
+    )
+    for item in candidates:
+            url = str(item.get("url") or "").strip()
+            scored = dict(item.get("relevance") or {})
             queue.upsert_collection_item(
                 job_id,
                 source_url=url,
-                item={**item, "relevance": scored},
+                item=item,
                 relevance_score=float(scored["score"]),
                 status="downloading",
                 db_path=_db_path(),
@@ -1955,8 +2097,19 @@ def _collect_relevant_job_items(job: dict[str, Any]) -> dict[str, Any]:
                         source_target_type=str(job["target_type"]),
                         relevance=scored,
                         mock=bool(job["mock"]),
+                        analysis_only=True,
                     )
                 )
+                material_meta = intake.get("material") or {}
+                stored_item = {
+                    **item,
+                    "material_id": material_meta.get("material_id"),
+                    "project_id": intake.get("project_id"),
+                    "local_video_path": material_meta.get("local_video_path"),
+                    "local_cover_path": material_meta.get("local_cover_path"),
+                    "transcript_path": material_meta.get("transcript_path"),
+                    "breakdown_path": material_meta.get("breakdown_path"),
+                }
                 readiness = intake.get("readiness") or {}
                 if not bool(job["mock"]) and not readiness.get("ready"):
                     missing = "、".join(str(value) for value in readiness.get("missing") or []) or "素材处理未完成"
@@ -1965,17 +2118,23 @@ def _collect_relevant_job_items(job: dict[str, Any]) -> dict[str, Any]:
                     queue.upsert_collection_item(
                         job_id,
                         source_url=url,
-                        item={**item, "relevance": scored, "material_id": intake["material"]["material_id"]},
+                        item=stored_item,
                         relevance_score=float(scored["score"]),
                         status="failed",
                         error_message=f"已入库待补齐：{missing}",
                         db_path=_db_path(),
                     )
+                    queue.update_collection_job_progress(
+                        job_id, str(job.get("lease_owner") or ""),
+                        discovered_count=discovered_count, relevant_count=relevant_count,
+                        downloaded_count=completed_count, analyzed_count=completed_count,
+                        failed_count=failed_count, db_path=_db_path(),
+                    )
                     continue
                 queue.upsert_collection_item(
                     job_id,
                     source_url=url,
-                    item={**item, "relevance": scored, "material_id": intake["material"]["material_id"], "project_id": intake["project_id"]},
+                    item=stored_item,
                     relevance_score=float(scored["score"]),
                     status="ready",
                     db_path=_db_path(),
@@ -1987,16 +2146,20 @@ def _collect_relevant_job_items(job: dict[str, Any]) -> dict[str, Any]:
                 queue.upsert_collection_item(
                     job_id,
                     source_url=url,
-                    item={**item, "relevance": scored},
+                    item=item,
                     relevance_score=float(scored["score"]),
                     status="failed",
                     error_message=str(exc.detail),
                     db_path=_db_path(),
                 )
+            queue.update_collection_job_progress(
+                job_id, str(job.get("lease_owner") or ""),
+                discovered_count=discovered_count, relevant_count=relevant_count,
+                downloaded_count=completed_count, analyzed_count=completed_count,
+                failed_count=failed_count, db_path=_db_path(),
+            )
             if completed_count >= requested:
                 break
-        if completed_count >= requested or new_in_round == 0:
-            break
 
     return {
         "ok": completed_count > 0,
@@ -2010,6 +2173,8 @@ def _collect_relevant_job_items(job: dict[str, Any]) -> dict[str, Any]:
         "failed_count": failed_count,
         "shortfall_count": max(0, requested - completed_count),
         "failures": failures,
+        "discovery_queries": queries,
+        "discovery_errors": discovery_errors,
     }
 
 
@@ -2160,14 +2325,18 @@ def update_material_transcript(material_id: str, request: MaterialTranscriptRequ
     if len(transcript) > 12000:
         raise HTTPException(status_code=422, detail="转写内容不能超过 12000 个字符")
     try:
+        root = _material_library_root()
+        transcript_path = root / material_id / "transcript.txt"
+        transcript_path.write_text(transcript, encoding="utf-8")
         meta = manual_import.update_material_meta(
             material_id,
             {
                 "transcript_text": transcript,
+                "transcript_path": transcript_path.as_posix(),
                 "processing_status": "transcript_ready",
                 "ai_analysis_json": "",
             },
-            _material_library_root(),
+            root,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2195,9 +2364,9 @@ def batch_analyze_materials(request: MaterialBatchAnalyzeRequest) -> dict[str, A
     for material_id in material_ids:
         try:
             meta = manual_import.load_material_meta(material_id, root)
-            source_text = str(meta.get("transcript_text") or meta.get("caption") or "").strip()
+            source_text = str(meta.get("transcript_text") or "").strip()
             if not source_text:
-                raise ValueError("缺少转写或简介")
+                raise ValueError("缺少真实字幕或 ASR 转写；视频简介不能代替内容转写")
             result = tool_registry.execute_tool(
                 "doubao_analyze",
                 {
@@ -2218,9 +2387,15 @@ def batch_analyze_materials(request: MaterialBatchAnalyzeRequest) -> dict[str, A
             if not isinstance(previous, dict):
                 previous = {}
             previous["analysis"] = {key: report.get(key) for key in ("hook_3s", "structure", "pacing", "keyframes", "shot_breakdown")}
+            breakdown_path = root / material_id / "analysis_report.json"
+            breakdown_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             manual_import.update_material_meta(
                 material_id,
-                {"processing_status": "analyzed", "ai_analysis_json": json.dumps(previous, ensure_ascii=False)},
+                {
+                    "processing_status": "analyzed",
+                    "ai_analysis_json": json.dumps(previous, ensure_ascii=False),
+                    "breakdown_path": breakdown_path.as_posix(),
+                },
                 root,
             )
             completed.append(material_id)

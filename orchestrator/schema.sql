@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS collection_jobs (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     target_type         TEXT NOT NULL CHECK (target_type IN ('keyword','account','hashtag','trending')),
     provider            TEXT NOT NULL DEFAULT 'auto'
-                        CHECK (provider IN ('auto','tiktok_api','apify','yt_dlp')),
+                        CHECK (provider IN ('auto','browser_search','tiktok_api','apify','yt_dlp')),
     target              TEXT NOT NULL DEFAULT '',
     requested_count     INTEGER NOT NULL DEFAULT 10 CHECK (requested_count BETWEEN 1 AND 100),
     product_id          TEXT NOT NULL,

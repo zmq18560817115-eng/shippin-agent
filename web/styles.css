@@ -1457,6 +1457,13 @@ button.quietButton {
   font-size: 12px;
 }
 
+.collectionJobError {
+  margin: 0 12px 12px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .collectionProgress {
   height: 4px;
   overflow: hidden;

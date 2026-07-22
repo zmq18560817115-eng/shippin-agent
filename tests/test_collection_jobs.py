@@ -11,7 +11,7 @@ def test_collection_job_persists_progress_contract(tmp_path: Path) -> None:
     db_path = tmp_path / "agentflow.db"
     job = queue.create_collection_job(
         target_type="keyword",
-        provider="auto",
+        provider="browser_search",
         target="portable bottle warmer",
         requested_count=30,
         product_id="便携恒温杯",
@@ -20,6 +20,7 @@ def test_collection_job_persists_progress_contract(tmp_path: Path) -> None:
     )
 
     assert job["status"] == "queued"
+    assert job["provider"] == "browser_search"
     assert job["requested_count"] == 30
     assert job["progress"] == {
         "requested": 30,

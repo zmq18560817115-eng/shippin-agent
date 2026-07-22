@@ -45,7 +45,7 @@ def test_batch_material_analysis_reports_missing_transcript(monkeypatch, tmp_pat
         response = client.post("/api/v2/collect/materials/batch-analyze", json={"material_ids": [material_id], "mock": True})
         assert response.status_code == 200
         assert response.json()["completed"] == []
-        assert response.json()["failures"][0]["message"] == "缺少转写或简介"
+        assert response.json()["failures"][0]["message"] == "缺少真实字幕或 ASR 转写；视频简介不能代替内容转写"
 
 
 def test_batch_material_quarantine_restore_and_delete(monkeypatch, tmp_path):

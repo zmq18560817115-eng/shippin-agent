@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -59,6 +60,14 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "-o",
         str(material_dir / "source.%(ext)s"),
     ]
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        try:
+            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        except RuntimeError:
+            ffmpeg = None
+    if ffmpeg:
+        command.extend(["--ffmpeg-location", str(ffmpeg)])
     proxy = str(context.env.get("TIKTOK_PROXY") or "").strip()
     if proxy:
         command.extend(["--proxy", proxy])
@@ -70,9 +79,19 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         command.extend(["--cookies-from-browser", cookies_browser])
     command.append(url)
     try:
-        completed = subprocess.run(command, capture_output=True, text=True, timeout=300, check=False)
+        download_timeout = max(30, min(int(context.env.get("TIKTOK_DOWNLOAD_TIMEOUT_SEC") or 120), 600))
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            timeout=download_timeout,
+            check=False,
+        )
     except subprocess.TimeoutExpired:
-        return ToolResult.failure("provider", "TikTok video download timed out after 300 seconds")
+        return ToolResult.failure("provider", f"TikTok video download timed out after {download_timeout} seconds")
     if completed.returncode != 0:
         detail = _last_error(completed.stderr or completed.stdout)
         return ToolResult.failure("provider", f"TikTok video download failed: {detail}")

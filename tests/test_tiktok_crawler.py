@@ -9,6 +9,7 @@ from orchestrator.api import app
 from tools.base_tool import ToolContext
 from tools.collect import tiktok_crawler
 from tools.collect import tiktok_api_adapter
+from tools.collect import tiktok_browser_search
 
 
 def test_keyword_crawler_requires_provider_token() -> None:
@@ -30,6 +31,81 @@ def test_auto_provider_prefers_apify_for_keyword(monkeypatch) -> None:
     )
     assert result.ok is True
     assert result.data["provider"] == "apify"
+
+
+def test_auto_provider_prefers_authenticated_browser_search(monkeypatch, tmp_path: Path) -> None:
+    cookie_file = tmp_path / "cookies.txt"
+    cookie_file.write_text("# Netscape HTTP Cookie File\n" + "x" * 200, encoding="ascii")
+    monkeypatch.setattr(tiktok_browser_search, "package_available", lambda: True)
+    monkeypatch.setattr(
+        tiktok_browser_search,
+        "discover",
+        lambda **kwargs: [
+            {
+                "url": "https://www.tiktok.com/@brand/video/99",
+                "caption": "bottle warmer for night feeds",
+                "title": "bottle warmer for night feeds",
+            }
+        ],
+    )
+    monkeypatch.setattr(tiktok_crawler, "_enrich_browser_candidates", lambda items, limit, env: items)
+
+    result = tiktok_crawler.execute(
+        {"target_type": "keyword", "target": "bottle warmer", "limit": 1, "expand_queries": False},
+        ToolContext(mock=False, env={"TIKTOK_COOKIES_FILE": str(cookie_file)}),
+    )
+
+    assert result.ok is True
+    assert result.data["provider"] == "browser_search"
+    assert result.data["items"][0]["relevance"]["relevant"] is True
+
+
+def test_browser_search_uses_recent_cache_after_temporary_empty_page(monkeypatch, tmp_path: Path) -> None:
+    cookie_file = tmp_path / "cookies.txt"
+    cookie_file.write_text("# Netscape HTTP Cookie File\n" + "x" * 200, encoding="ascii")
+    cache_file = tmp_path / "search-cache.json"
+    env = {
+        "TIKTOK_COOKIES_FILE": str(cookie_file),
+        "TIKTOK_SEARCH_CACHE_PATH": str(cache_file),
+        "TIKTOK_BROWSER_SEARCH_RETRIES": "1",
+    }
+    cached_item = {"url": "https://www.tiktok.com/@brand/video/88", "title": "bottle warmer review"}
+    tiktok_browser_search._store_cache("keyword", "bottle warmer", [cached_item], env)
+    monkeypatch.setattr(tiktok_browser_search, "package_available", lambda: True)
+    monkeypatch.setattr(
+        tiktok_browser_search.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, stdout='{"ok":true,"items":[]}\n', stderr=""),
+    )
+
+    items = tiktok_browser_search.discover(
+        target_type="keyword", target="bottle warmer", limit=3, env=env
+    )
+
+    assert items[0]["title"] == "bottle warmer review"
+    assert items[0]["discovery_source"] == "cached_browser_search"
+
+
+def test_browser_candidates_are_enriched_with_real_metadata(monkeypatch) -> None:
+    monkeypatch.setattr(tiktok_crawler.shutil, "which", lambda name: "yt-dlp" if name == "yt-dlp" else None)
+    monkeypatch.setattr(
+        tiktok_crawler,
+        "_video_metadata",
+        lambda url, env: {
+            "url": "https://www.tiktok.com/@canonical-brand/video/1",
+            "title": "Portable bottle warmer for night feeds",
+            "caption": "Portable bottle warmer for night feeds",
+            "play_count": 120000,
+        },
+    )
+    items = [{"url": "https://www.tiktok.com/@brand/video/1", "title": "Top", "discovery_query": "bottle warmer"}]
+
+    enriched = tiktok_crawler._enrich_browser_candidates(items, 1, {})
+
+    assert enriched[0]["title"] == "Portable bottle warmer for night feeds"
+    assert enriched[0]["url"] == "https://www.tiktok.com/@canonical-brand/video/1"
+    assert enriched[0]["play_count"] == 120000
+    assert enriched[0]["discovery_query"] == "bottle warmer"
 
 
 def test_tiktok_api_provider_is_isolated_and_normalized(monkeypatch) -> None:
@@ -60,6 +136,46 @@ def test_tiktok_api_video_normalization() -> None:
     assert item["url"] == "https://www.tiktok.com/@brand/video/123"
     assert item["like_count"] == 9
     assert item["play_count"] == 20
+
+
+def test_netscape_cookie_file_is_converted_to_tiktok_api_session_mapping(tmp_path: Path) -> None:
+    cookie_file = tmp_path / "cookies.txt"
+    cookie_file.write_text(
+        "# Netscape HTTP Cookie File\n"
+        ".tiktok.com\tTRUE\t/\tTRUE\t1999999999\tmsToken\ttoken-value\n"
+        "#HttpOnly_.tiktok.com\tTRUE\t/\tTRUE\t1999999999\tsessionid\tsession-value\n",
+        encoding="ascii",
+    )
+
+    cookies = tiktok_api_adapter._load_netscape_cookies(str(cookie_file))
+
+    assert cookies == {"msToken": "token-value", "sessionid": "session-value"}
+    assert all(isinstance(value, str) for value in cookies.values())
+
+
+def test_keyword_discovery_expands_queries_and_deduplicates(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def discover(**kwargs):
+        calls.append(kwargs["target"])
+        return [
+            {
+                "url": "https://www.tiktok.com/@brand/video/42",
+                "caption": "portable bottle warmer",
+                "play_count": 20000,
+            }
+        ]
+
+    monkeypatch.setattr(tiktok_api_adapter, "discover", discover)
+    result = tiktok_crawler.execute(
+        {"target_type": "keyword", "provider": "tiktok_api", "target": "便携恒温杯", "limit": 3},
+        ToolContext(mock=False, env={"TIKTOK_MS_TOKEN": "secret"}),
+    )
+
+    assert result.ok is True
+    assert len(result.data["items"]) == 1
+    assert calls[0] == "便携恒温杯"
+    assert "portable bottle warmer" in calls
 
 
 def test_tiktok_api_worker_empty_output_becomes_actionable_error(monkeypatch) -> None:

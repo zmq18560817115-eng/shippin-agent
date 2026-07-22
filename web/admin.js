@@ -1,5 +1,5 @@
 const statusNames = { idle: "未开始", queued: "排队中", running: "运行中", awaiting_human: "待人工确认", succeeded: "已交付", failed: "失败", blocked: "已阻断", needs_review: "待复核", cancelled: "已取消" };
-const providerNames = { tiktok_api: "TikTok 自建采集", apify: "Apify 采集", yt_dlp: "视频下载", manual_url: "人工链接", doubao: "豆包文本模型", seedance: "Seedance 视频模型", speech_to_text: "语音转写" };
+const providerNames = { browser_search: "TikTok 浏览器搜索", tiktok_api: "TikTokApi 备用采集", apify: "Apify 采集", yt_dlp: "视频下载", manual_url: "人工链接", doubao: "豆包文本模型", seedance: "Seedance 视频模型", speech_to_text: "语音转写" };
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 const formatBytes = (bytes) => { const units = ["B", "KB", "MB", "GB", "TB"]; let value = Number(bytes || 0); let index = 0; while (value >= 1024 && index < units.length - 1) { value /= 1024; index += 1; } return `${value.toFixed(index ? 1 : 0)} ${units[index]}`; };
 const chartColors = ["#2563eb", "#7c3aed", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#64748b", "#94a3b8"];
@@ -236,8 +236,8 @@ document.querySelector("#probeTikTok")?.addEventListener("click", async (event) 
   button.disabled = true;
   button.textContent = "检测中…";
   try {
-    const result = await api("/api/v2/admin/runtime/probe", { method: "POST", body: JSON.stringify({ provider: "tiktok_api" }) });
-    window.alert(result.ok ? "TikTok 实时采集探针通过" : `采集探针失败：${result.probe?.detail || "未知错误"}`);
+    const result = await api("/api/v2/admin/runtime/probe", { method: "POST", body: JSON.stringify({ provider: "browser_search" }) });
+    window.alert(result.ok ? "TikTok 浏览器搜索探针通过" : `采集探针失败：${result.probe?.detail || "未知错误"}`);
     await loadAdmin();
   } catch (error) {
     window.alert(`采集探针失败：${error.message}`);

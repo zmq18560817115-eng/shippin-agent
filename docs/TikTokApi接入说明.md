@@ -41,7 +41,9 @@ TIKTOK_COOKIES_FILE=/srv/video-agent-factory/secrets/tiktok-cookies.txt
 APIFY_API_TOKEN=
 ```
 
-TikTokApi 采集在独立子进程中运行，超过 `TIKTOK_WORKER_TIMEOUT_SEC` 会被终止并返回明确错误，不会拖死 API 主进程。当前 TikTokApi 包的“关键词”路径实质上按话题标签发现；严格的自然语言关键词检索建议使用 Apify。无字幕视频下载后若要自动转写，还需配置独立的 `VOLCENGINE_ASR_API_KEY`，或旧版 `VOLCENGINE_ASR_APP_KEY` 与 `VOLCENGINE_ASR_ACCESS_KEY`。
+TikTokApi 采集在独立子进程中运行，超过 `TIKTOK_WORKER_TIMEOUT_SEC` 会被终止并返回明确错误，不会拖死 API 主进程。当前 TikTokApi 包的“关键词”路径实质上按话题标签发现；系统会自动用产品别名和中英文品类词扩展查询，再进行相关度与热度排序。严格的自然语言关键词检索建议使用 Apify。无字幕视频下载后若要自动转写，还需配置独立的 `VOLCENGINE_ASR_API_KEY`，或旧版 `VOLCENGINE_ASR_APP_KEY` 与 `VOLCENGINE_ASR_ACCESS_KEY`。
+
+`TIKTOK_COOKIES_FILE` 现在同时供 TikTokApi 发现和 yt-dlp 下载使用，建议导出专用服务账号的 Netscape 格式 Cookie 文件。生产入库默认要求 `VAF_TIKTOK_MIN_RELEVANCE=0.50`；当供应商提供播放量时还要求 `VAF_TIKTOK_MIN_PLAYS=5000`。低于门槛的候选会保留筛除原因，但不会下载。
 
 Cookies 文件只放在服务器密钥目录，权限建议为 `600`，禁止提交 Git、放入前端或写入日志。
 

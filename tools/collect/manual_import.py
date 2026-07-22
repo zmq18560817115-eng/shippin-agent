@@ -127,11 +127,11 @@ def update_material_meta(
     root = Path(library_root) if library_root is not None else default_library_root()
     payload = load_material_meta(material_id, root)
     allowed = {
-        "processing_status", "transcript_text", "ai_analysis_json", "local_video_path", "asset_intake",
+            "processing_status", "transcript_text", "transcript_path", "breakdown_path", "ai_analysis_json", "local_video_path", "asset_intake",
             "source_mode", "local_cover_path",
             "video_title", "caption", "author_name", "author_url", "cover_url",
-            "like_count", "comment_count", "share_count",
-            "source_target_type", "discovery_relevance",
+            "like_count", "comment_count", "share_count", "play_count",
+            "source_target_type", "discovery_relevance", "discovery_query", "discovery_quality",
     }
     unknown = set(updates) - allowed
     if unknown:
@@ -263,6 +263,7 @@ def _material_meta(
         "comment_count": _int_value(item.get("comment_count")),
         "share_count": _int_value(item.get("share_count")),
         "collect_count": _int_value(item.get("collect_count")),
+        "play_count": _int_value(item.get("play_count")),
         "publish_time": item.get("publish_time"),
         "hashtags": [str(tag).strip("# ") for tag in hashtags if str(tag).strip("# ")],
         "music_title": str(item.get("music_title") or ""),
@@ -272,6 +273,8 @@ def _material_meta(
         "crawl_time": crawl_time,
         "processing_status": str(item.get("processing_status") or "raw"),
         "transcript_text": str(item.get("transcript_text") or ""),
+        "transcript_path": str(item.get("transcript_path") or ""),
+        "breakdown_path": str(item.get("breakdown_path") or ""),
         "ai_analysis_json": str(item.get("ai_analysis_json") or ""),
         "local_video_path": str(item.get("local_video_path") or ""),
         "local_cover_path": str(item.get("local_cover_path") or ""),

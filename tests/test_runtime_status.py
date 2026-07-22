@@ -9,6 +9,7 @@ from tools.base_tool import ToolResult
 def test_runtime_status_never_exposes_secret_values(monkeypatch) -> None:
     monkeypatch.setenv("DOUBAO_API_KEY", "private-doubao-value")
     monkeypatch.delenv("SEEDANCE_API_KEY", raising=False)
+    monkeypatch.delenv("VAF_LOCAL_ASR_ENABLED", raising=False)
     with TestClient(app) as client:
         response = client.get("/api/v2/runtime")
     assert response.status_code == 200
@@ -24,6 +25,19 @@ def test_runtime_status_never_exposes_secret_values(monkeypatch) -> None:
     assert "tiktok_api" in payload["providers"]
     assert "installed" in payload["providers"]["tiktok_api"]
     assert "private-doubao-value" not in response.text
+
+
+def test_runtime_reports_local_asr_without_cloud_secret(monkeypatch) -> None:
+    monkeypatch.delenv("VOLCENGINE_ASR_API_KEY", raising=False)
+    monkeypatch.delenv("VOLCENGINE_ASR_APP_KEY", raising=False)
+    monkeypatch.delenv("VOLCENGINE_ASR_ACCESS_KEY", raising=False)
+    monkeypatch.setenv("VAF_LOCAL_ASR_ENABLED", "true")
+
+    with TestClient(app) as client:
+        payload = client.get("/api/v2/runtime").json()
+
+    assert payload["providers"]["speech_to_text"]["configured"] is True
+    assert payload["providers"]["speech_to_text"]["mode"] == "faster_whisper_local"
 
 
 def test_runtime_distinguishes_optional_and_builtin_collector_backends(monkeypatch) -> None:

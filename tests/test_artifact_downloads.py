@@ -38,4 +38,4 @@ def test_runtime_lists_collector_fallbacks(monkeypatch) -> None:
         response = client.get("/api/v2/runtime")
     assert response.status_code == 200
     backend_ids = [item["id"] for item in response.json()["collector_backends"]]
-    assert backend_ids == ["tiktok_api", "apify", "yt_dlp", "manual_url"]
+    assert backend_ids == ["browser_search", "tiktok_api", "apify", "yt_dlp", "manual_url"]

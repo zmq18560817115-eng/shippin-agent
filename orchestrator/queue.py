@@ -134,7 +134,7 @@ def create_collection_job(
 ) -> dict[str, Any]:
     if target_type not in {"keyword", "account", "hashtag", "trending"}:
         raise ValueError("unsupported target_type")
-    if provider not in {"auto", "tiktok_api", "apify", "yt_dlp"}:
+    if provider not in {"auto", "browser_search", "tiktok_api", "apify", "yt_dlp"}:
         raise ValueError("unsupported provider")
     if target_type != "trending" and not target.strip():
         raise ValueError("target is required")
@@ -142,14 +142,21 @@ def create_collection_job(
     now = utc_now()
     init_db(db_path)
     with get_conn(db_path) as conn:
-        cursor = conn.execute(
-            """
+        insert_sql = """
             INSERT INTO collection_jobs
             (target_type, provider, target, requested_count, product_id, mock, status, created_by, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
-            """,
-            (target_type, provider, target.strip(), count, product_id, int(mock), created_by, now, now),
-        )
+        """
+        values = (target_type, provider, target.strip(), count, product_id, int(mock), created_by, now, now)
+        try:
+            cursor = conn.execute(insert_sql, values)
+        except sqlite3.IntegrityError as exc:
+            # Databases created before browser_search was introduced have a
+            # provider CHECK constraint that cannot be altered in place. Auto
+            # has identical runtime behavior because it prioritizes browser search.
+            if provider != "browser_search" or "provider" not in str(exc):
+                raise
+            cursor = conn.execute(insert_sql, (target_type, "auto", *values[2:]))
         job_id = int(cursor.lastrowid)
     job = get_collection_job(job_id, db_path=db_path)
     if job is None:
@@ -317,6 +324,34 @@ def complete_collection_job(
     return job
 
 
+def update_collection_job_progress(
+    job_id: int,
+    worker_id: str,
+    *,
+    discovered_count: int,
+    relevant_count: int,
+    downloaded_count: int,
+    analyzed_count: int,
+    failed_count: int,
+    db_path: str | os.PathLike[str] | None = None,
+) -> bool:
+    now = utc_now()
+    with get_conn(db_path) as conn:
+        changed = conn.execute(
+            """
+            UPDATE collection_jobs
+            SET discovered_count = ?, relevant_count = ?, downloaded_count = ?, analyzed_count = ?,
+                failed_count = ?, heartbeat_at = ?, updated_at = ?
+            WHERE id = ? AND status = 'running' AND lease_owner = ?
+            """,
+            (
+                max(0, discovered_count), max(0, relevant_count), max(0, downloaded_count),
+                max(0, analyzed_count), max(0, failed_count), now, now, job_id, worker_id,
+            ),
+        ).rowcount
+    return bool(changed)
+
+
 def fail_collection_job(
     job_id: int,
     worker_id: str,
@@ -415,12 +450,15 @@ def upsert_collection_item(
         conn.execute(
             """
             INSERT INTO collection_items
-            (job_id, source_url, source_video_id, title, author_name, cover_url, relevance_score,
-             status, error_message, metadata_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (job_id, source_url, source_video_id, title, author_name, cover_url,
+             local_video_path, local_cover_path, transcript_path, breakdown_path,
+             relevance_score, status, error_message, metadata_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_id, source_url) DO UPDATE SET
                 source_video_id = excluded.source_video_id, title = excluded.title,
                 author_name = excluded.author_name, cover_url = excluded.cover_url,
+                local_video_path = excluded.local_video_path, local_cover_path = excluded.local_cover_path,
+                transcript_path = excluded.transcript_path, breakdown_path = excluded.breakdown_path,
                 relevance_score = excluded.relevance_score, status = excluded.status,
                 error_message = excluded.error_message, metadata_json = excluded.metadata_json,
                 updated_at = excluded.updated_at
@@ -430,6 +468,10 @@ def upsert_collection_item(
                 str(item.get("title") or item.get("caption") or "")[:500],
                 str(item.get("author_name") or item.get("author") or "")[:200],
                 str(item.get("cover_url") or item.get("thumbnail_url") or "")[:2000],
+                str(item.get("local_video_path") or "")[:2000] or None,
+                str(item.get("local_cover_path") or "")[:2000] or None,
+                str(item.get("transcript_path") or "")[:2000] or None,
+                str(item.get("breakdown_path") or "")[:2000] or None,
                 max(0.0, min(float(relevance_score), 1.0)), status, str(error_message)[:2000],
                 _dumps(item), now, now,
             ),

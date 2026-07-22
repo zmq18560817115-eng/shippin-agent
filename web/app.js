@@ -1313,6 +1313,7 @@ function renderCollectionJobs() {
     const requested = Number(progress.requested || job.requested_count || 0);
     const analyzed = Number(progress.analyzed || 0);
     const percent = requested ? Math.min(100, Math.round(analyzed / requested * 100)) : 0;
+    const errorSummary = String(job.error_message || "").trim();
     return `<article class="collectionJobCard ${job.id === state.selectedCollectionJobId ? "active" : ""}">
       <button type="button" class="collectionJobOpen" data-collection-job="${job.id}" aria-label="查看采集任务 ${job.id}">
         <span><strong>${escapeHtml(job.target || "热门视频")}</strong><small>#${job.id} · ${escapeHtml(collectionStatusLabel(job.status))}</small></span>
@@ -1320,6 +1321,7 @@ function renderCollectionJobs() {
         <span class="collectionProgress"><i style="width:${percent}%"></i></span>
       </button>
       ${["queued", "paused"].includes(job.status) ? `<button type="button" class="collectionCancel" data-cancel-job="${job.id}">取消</button>` : ""}
+      ${errorSummary ? `<p class="collectionJobError">${escapeHtml(errorSummary)}</p>` : ""}
     </article>`;
   }).join("");
   host.querySelectorAll("[data-collection-job]").forEach((button) => {
@@ -1341,12 +1343,18 @@ async function loadCollectionJobDetail(jobId) {
     const items = payload.items || [];
     host.hidden = false;
     host.innerHTML = `<div class="collectionDetailHead"><strong>任务 #${jobId} 素材明细</strong><span>${items.length} 条候选</span></div>
-      ${items.length ? `<div class="collectionItems">${items.map((item) => `<article>
+      ${items.length ? `<div class="collectionItems">${items.map((item) => {
+        const quality = item.metadata?.quality || {};
+        const playCount = Number(quality.play_count || item.metadata?.play_count || 0);
+        const sourceLabel = item.metadata?.discovery_source === "cached_browser_search" ? "缓存降级" : "实时搜索";
+        const retained = [item.local_video_path, item.local_cover_path, item.transcript_path, item.breakdown_path];
+        return `<article>
         ${item.cover_url ? `<img src="${escapeAttr(item.cover_url)}" alt="" loading="lazy" />` : `<span class="collectionCoverPlaceholder">无封面</span>`}
-        <div><strong>${escapeHtml(item.title || "未命名 TikTok 素材")}</strong><small>${escapeHtml(item.author_name || "未知作者")} · 相关度 ${Math.round(Number(item.relevance_score || 0) * 100)}%</small><a href="${escapeAttr(item.source_url)}" target="_blank" rel="noopener">查看来源</a></div>
+        <div><strong>${escapeHtml(item.title || "未命名 TikTok 素材")}</strong><small>${sourceLabel} · ${escapeHtml(item.author_name || "未知作者")} · 相关度 ${Math.round(Number(item.relevance_score || 0) * 100)}%${playCount ? ` · 播放 ${formatCompactNumber(playCount)}` : ""}</small><small>留存：${["视频", "封面", "转写", "拆解"].map((label, index) => `${retained[index] ? "✓" : "·"}${label}`).join(" ")}</small><a href="${escapeAttr(item.source_url)}" target="_blank" rel="noopener">查看来源</a></div>
         <span class="collectionItemStatus ${statusClass(item.status)}">${escapeHtml(collectionStatusLabel(item.status))}</span>
         ${item.error_message ? `<p>${escapeHtml(item.error_message)}</p>` : ""}
-      </article>`).join("")}</div>` : `<div class="emptyState">任务已创建，等待发现候选素材。</div>`}`;
+      </article>`;
+      }).join("")}</div>` : `<div class="emptyState">任务已创建，等待发现候选素材。</div>`}`;
   } catch (error) {
     host.hidden = false;
     host.innerHTML = `<div class="emptyState">无法读取任务详情：${escapeHtml(error.message)}</div>`;
@@ -2935,6 +2943,10 @@ function formatProjectTime(value) {
   if (!value) return "时间未知";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function formatCompactNumber(value) {
+  return new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(Number(value || 0));
 }
 
 async function sendFeedback(projectId) {

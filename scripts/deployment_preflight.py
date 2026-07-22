@@ -117,6 +117,12 @@ def main() -> int:
     data_root = Path(os.environ.get("VAF_DATA_ROOT", ROOT / "data"))
     db_path = Path(os.environ.get("VAF_DB_PATH", data_root / "video_agent_factory.db"))
     cookies = os.environ.get("TIKTOK_COOKIES_FILE", "").strip()
+    tiktok_session = bool(os.environ.get("TIKTOK_MS_TOKEN")) or bool(cookies and Path(cookies).is_file())
+    cloud_asr_ready = bool(os.environ.get("VOLCENGINE_ASR_API_KEY")) or bool(
+        os.environ.get("VOLCENGINE_ASR_APP_KEY") and os.environ.get("VOLCENGINE_ASR_ACCESS_KEY")
+    )
+    local_asr_ready = os.environ.get("VAF_LOCAL_ASR_ENABLED", "").strip().casefold() in {"1", "true", "yes", "on"} and importlib.util.find_spec("faster_whisper") is not None
+    asr_ready = cloud_asr_ready or local_asr_ready
     tool_context = ToolContext.from_mapping()
     priced_tools = (
         "doubao_analyze", "doubao_script", "doubao_shotplan",
@@ -142,6 +148,14 @@ def main() -> int:
             "ok": all(value > 0 for name, value in pricing.items() if name != "ffmpeg_compose")
             and pricing.get("ffmpeg_compose", -1) >= 0,
             "detail": pricing,
+        },
+        "tiktok_discovery_session": {
+            "ok": tiktok_session or bool(os.environ.get("APIFY_API_TOKEN")),
+            "detail": "configured" if tiktok_session or os.environ.get("APIFY_API_TOKEN") else "configure TikTok session cookies/msToken or APIFY_API_TOKEN",
+        },
+        "speech_to_text": {
+            "ok": asr_ready,
+            "detail": "local faster-whisper ready" if local_asr_ready else ("Volcengine ASR configured" if cloud_asr_ready else "subtitle-free videos cannot complete analysis until cloud or local ASR is configured"),
         },
         "budget_enforced": {"ok": budget_mode == "enforce", "detail": f"budget_mode={budget_mode}"},
     }
