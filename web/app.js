@@ -178,8 +178,9 @@ function renderAgentResult(host, payload) {
     : "";
   const promotable = payload.project_id && payload.project_id.startsWith("scratch-")
     && ["analysis_report", "script_copy", "shot_plan"].includes(payload.artifact_name);
+  const artifactProductId = String(payload.artifact?.product_id || "").trim();
   const promote = promotable
-    ? `<button type="button" class="promoteStandalone" data-project-id="${escapeAttr(payload.project_id)}" data-artifact-name="${escapeAttr(payload.artifact_name)}">用此产物创建生产项目</button>`
+    ? `<button type="button" class="promoteStandalone" data-project-id="${escapeAttr(payload.project_id)}" data-artifact-name="${escapeAttr(payload.artifact_name)}" data-product-id="${escapeAttr(artifactProductId)}">用此产物创建生产项目</button>`
     : "";
   const artifact = payload.artifact || {};
   const contract = payload.meta?.agent_contract || {};
@@ -637,7 +638,7 @@ async function promoteStandaloneArtifact(button) {
       body: JSON.stringify({
         source_project_id: button.dataset.projectId,
         artifact_name: button.dataset.artifactName,
-        product_id: $("#productSelect").value || "便携恒温杯",
+        product_id: button.dataset.productId || undefined,
         mock: $("#runtimeMode").value !== "real",
       }),
     });

@@ -453,6 +453,35 @@ def test_standalone_script_promotes_to_a_gated_production_project(tmp_path: Path
     assert promoted.json()["engine"]["status"] == "awaiting_human"
 
 
+def test_promoted_script_preserves_standalone_product_identity(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "promotion-product.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        standalone = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "script",
+                "product_id": "折叠雨伞",
+                "source_text": "为通勤人群创作一条雨天使用折叠雨伞的短视频脚本。",
+                "mock": True,
+            },
+        )
+        promoted = client.post(
+            "/api/v2/agents/promote",
+            json={
+                "source_project_id": standalone.json()["project_id"],
+                "artifact_name": "script_copy",
+                "mock": True,
+            },
+        )
+
+    assert standalone.status_code == 200, standalone.text
+    assert standalone.json()["artifact"]["product_id"] == "折叠雨伞"
+    assert promoted.status_code == 200, promoted.text
+    assert promoted.json()["project"]["product_id"] == "折叠雨伞"
+
+
 def test_independent_content_agents_preserve_distinct_user_intent(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "intent-aware.db"))
     monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
