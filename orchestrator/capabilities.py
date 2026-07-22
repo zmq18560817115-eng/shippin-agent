@@ -16,12 +16,24 @@ INDEPENDENT_INPUT_SCHEMAS: dict[str, list[dict[str, Any]]] = {
     "analysis": [{"name": "source_text", "label": "视频转写、素材说明或链接", "type": "textarea", "required": True, "placeholder": "粘贴转写、视频内容说明或参考链接，Agent 将拆解结构、节奏和镜头。"}],
     "research": [{"name": "source_text", "label": "研究样本与背景", "type": "textarea", "required": True, "placeholder": "输入竞品转写、市场观察、目标受众或已有分析结论。"}],
     "strategy": [{"name": "source_text", "label": "产品事实与传播目标", "type": "textarea", "required": True, "placeholder": "输入产品卖点、目标用户、平台和希望达成的内容目标。"}],
-    "script": [{"name": "prompt", "label": "脚本创作需求", "type": "textarea", "required": True, "placeholder": "说明产品、受众、场景、剧情方向、平台和时长。"}],
-    "script_breakdown": [{"name": "source_text", "label": "待拆解脚本", "type": "textarea", "required": True, "placeholder": "粘贴完整脚本，生成逐段意图、画面、动作和连续性要求。"}],
-    "storyboard": [{"name": "prompt", "label": "脚本或分镜需求", "type": "textarea", "required": True, "placeholder": "输入脚本，或明确场景、人物、动作、镜头运动和视觉风格。"}],
+    "script": [
+        {"name": "product_id", "label": "产品名称或创作主题", "type": "text", "required": True, "placeholder": "例如便携恒温杯、婴儿背带或品牌故事"},
+        {"name": "prompt", "label": "脚本创作需求", "type": "textarea", "required": True, "placeholder": "说明产品事实、受众、场景、剧情方向、平台和时长。"},
+    ],
+    "script_breakdown": [
+        {"name": "product_id", "label": "产品名称或创作主题", "type": "text", "required": True, "placeholder": "用于识别产品事实和安全边界"},
+        {"name": "source_text", "label": "待拆解脚本", "type": "textarea", "required": True, "placeholder": "粘贴完整脚本，生成逐段意图、画面、动作和连续性要求。"},
+    ],
+    "storyboard": [
+        {"name": "product_id", "label": "产品名称或创作主题", "type": "text", "required": True, "placeholder": "用于匹配产品事实与视觉约束"},
+        {"name": "prompt", "label": "脚本或分镜需求", "type": "textarea", "required": True, "placeholder": "输入脚本，或明确场景、人物、动作、镜头运动和视觉风格。"},
+    ],
     "asset": [{"name": "prompt", "label": "镜头素材需求", "type": "textarea", "required": True, "placeholder": "说明需要匹配的产品、动作、构图和关键帧要求。"}],
     "production": [{"name": "prompt", "label": "单镜视频 Prompt", "type": "textarea", "required": True, "placeholder": "描述单个 6 秒镜头的场景、人物、动作、产品状态、机位和光线。"}],
-    "review": [{"name": "source_text", "label": "待审核脚本或内容", "type": "textarea", "required": True, "placeholder": "粘贴脚本、分镜说明或广告文案，检查产品事实、合规和表达风险。"}],
+    "review": [
+        {"name": "product_id", "label": "产品名称或审核主题", "type": "text", "required": True, "placeholder": "用于加载对应产品事实；未入库产品请在正文写明事实"},
+        {"name": "source_text", "label": "待审核脚本或内容", "type": "textarea", "required": True, "placeholder": "粘贴脚本、分镜说明或广告文案，检查产品事实、合规和表达风险。"},
+    ],
     "feedback": [{"name": "source_text", "label": "复盘反馈", "type": "textarea", "required": True, "placeholder": "记录问题、原因、修改建议和希望沉淀的规则。"}],
 }
 

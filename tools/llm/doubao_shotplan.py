@@ -33,6 +33,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     project_id = str(payload.get("project_id") or "ref-real")
     script_copy = payload.get("script_copy") or mock_script_copy(project_id)
     product_facts = product_library.product_guardrail_text(str(script_copy.get("product_id") or ""))
+    product_id = str(script_copy.get("product_id") or "当前产品")
+    warming_product = _is_warming_product(product_id, product_facts)
     rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
     fallback_plan = mock_shot_plan(project_id, script_copy)
     response, meta = ark.chat_json(
@@ -59,7 +61,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "每个 seedance_prompt_zh 必须按顺序写清：场景环境、主体位置、产品动作、景别与镜头焦段、机位与运镜、光线、连续性锚点、禁止项、镜头结束状态。"
                     "下一镜开场要继承上一镜的主体位置、动作方向与视线；运镜以缓慢推近、平移或拉远为主，避免跳轴和无动机炫技。"
                     "提示词必须具体可见，禁止使用高级感、氛围感、电影感等空词代替画面设计；不得要求字幕、配文、标语、标签、Logo 或其他可读文字。"
-                    "每个文字字段保持简洁，不在逐镜重复全局产品规则。五镜依次完成喂养准备、等待痛点、独立恒温杯出现、正确倒液、产品与人物共同收束。"
+                    "每个文字字段保持简洁，不在逐镜重复全局产品规则。"
+                    f"产品专属叙事要求：{_storyboard_product_instruction(product_id, warming_product)}"
                     f"脚本段落：{_shotplan_input(script_copy)}。产品事实：{(product_facts or '未提供')[:900]}。"
                     f"必须修复的质量反馈：{rewrite_reason or '无'}。"
                     "交付前静默复看整条时间线：若镜头重复、转场不连续、动作不可生成或产品成为无意义摆拍，先重写再返回 JSON。"
@@ -83,6 +86,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             scene_continuity=scene_continuity,
             character_continuity=character_continuity,
             fallback_shots=fallback_plan.get("shots") or [],
+            product_id=product_id,
+            enforce_warming_flow=warming_product,
         ),
         "generation": {
             "provider": "ark",
@@ -121,6 +126,8 @@ def _normalize_shots(
     scene_continuity: str = "one stable feeding-prep scene",
     character_continuity: str = "same caregiver, wardrobe, hands, and props",
     fallback_shots: list[dict[str, Any]] | None = None,
+    product_id: str = "便携恒温杯",
+    enforce_warming_flow: bool = True,
 ) -> list[dict[str, Any]]:
     raw = value if isinstance(value, list) else []
     fallback_shots = fallback_shots or mock_shot_plan("fallback", script_copy).get("shots") or []
@@ -134,7 +141,7 @@ def _normalize_shots(
         visual_prompt = _clean_temperature_text(str(item.get("visual_prompt") or fallback.get("visual_prompt") or visual))
         # The two directional product-use shots are deterministic safety beats.
         # Free-form model copy is retained for the other three shots only.
-        safety_fallback = index in {3, 4}
+        safety_fallback = enforce_warming_flow and index in {3, 4}
         if safety_fallback:
             scenario_visual = str(fallback.get("visual") or "").strip()
             visual = _clean_temperature_text(
@@ -148,6 +155,8 @@ def _normalize_shots(
             shot_index=index,
             scene_continuity=scene_continuity,
             character_continuity=character_continuity,
+            product_id=product_id,
+            enforce_warming_flow=enforce_warming_flow,
         )
         motion_value = item.get("camera_motion", {}).get("type") if isinstance(item.get("camera_motion"), dict) else ""
         shots.append(
@@ -178,35 +187,48 @@ def _lock_prompt(
     shot_index: int = 1,
     scene_continuity: str = "one stable feeding-prep scene",
     character_continuity: str = "same caregiver, wardrobe, hands, and props",
+    product_id: str = "便携恒温杯",
+    enforce_warming_flow: bool = True,
 ) -> str:
     prompt = " ".join(prompt.strip().split())
     # Idempotent: never stack the safety lock if the prompt already carries it
     # (e.g. re-saving an edited shot plan). The lock is a hard product-identity
     # requirement, so it is always guaranteed on the seedance_prompt.
     lowered_prompt = prompt.casefold()
-    required_markers = ["continuity lock:", "product identity lock:", "separate products", "never insert"]
-    display_markers = (
-        ["temperature proof contract:", "fahrenheit", "never show celsius"]
-        if shot_index in {4, 5}
-        else ["not a temperature proof shot", "fully unlit", "do not render any digits"]
-    )
+    required_markers = ["continuity lock:", "product identity lock:"]
+    if enforce_warming_flow:
+        required_markers.extend(["separate products", "never insert"])
+    display_markers = []
+    if enforce_warming_flow:
+        display_markers = (
+            ["temperature proof contract:", "fahrenheit", "never show celsius"]
+            if shot_index in {4, 5}
+            else ["not a temperature proof shot", "fully unlit", "do not render any digits"]
+        )
     if all(marker in lowered_prompt for marker in [*required_markers, *display_markers]):
         return prompt
-    display_contract = (
+    display_contract = ""
+    if enforce_warming_flow:
+        display_contract = (
         "This shot is not a temperature proof shot. Keep the temperature display fully unlit, blank, "
         "or outside the readable crop; do not render any digits, temperature unit, or glowing symbols. "
         if shot_index not in {4, 5}
         else "Temperature proof contract: if the display is readable, it must show exactly 98 degrees "
         "Fahrenheit (98 F) with a single Fahrenheit symbol. Never show Celsius, 98 C, 90 C, mixed units, "
         "extra digits, or malformed glyphs. If exact 98 F cannot be rendered, keep the display unlit. "
+        )
+    product_lock = (
+        "Product identity lock: match the approved white-background hero reference exactly; preserve body proportions, "
+        "purple lid and ring, round pouring spout, vertical temperature display, oval power button, logo placement, and charging-port cover. "
+        "The warming cup and baby bottle are separate products. Never insert or attach a bottle, nipple, carton, or commercial milk bottle to the cup. "
+        if enforce_warming_flow
+        else f"Product identity lock: keep {product_id} consistent with supplied facts and approved references; do not invent structure, specifications, labels, accessories, or usage steps. "
     )
     lock = (
         "Continuity lock: same location and lighting across all five shots; "
         f"scene: {scene_continuity}; character: {character_continuity}. "
-        "Product identity lock: match the approved white-background hero reference exactly; preserve body proportions, "
-        "purple lid and ring, round pouring spout, vertical temperature display, oval power button, logo placement, and charging-port cover. "
+        f"{product_lock}"
         "Keep the product clearly lit and fully visible; even in the night scene a warm bedside lamp evenly illuminates the product, avoid an all-black or underexposed frame. "
-        "The warming cup and baby bottle are separate products. Never insert or attach a bottle, nipple, carton, or commercial milk bottle to the cup. "
         f"{display_contract}"
         f"Action continuity for shot {shot_index}: {_shot_action(shot_index)} "
         f"Camera contract: {_shot_camera_contract(shot_index)} "
@@ -225,6 +247,9 @@ def ensure_shot_locks(shot_plan: dict, script_copy: dict | None = None) -> dict:
     strip the safety constraint (which would otherwise deadlock the hero gate).
     """
     sections = (script_copy or {}).get("sections") or []
+    product_id = str((script_copy or {}).get("product_id") or "便携恒温杯")
+    product_facts = product_library.product_guardrail_text(product_id)
+    warming_product = _is_warming_product(product_id, product_facts)
     for index, shot in enumerate(shot_plan.get("shots") or [], start=1):
         if not isinstance(shot, dict):
             continue
@@ -235,8 +260,24 @@ def ensure_shot_locks(shot_plan: dict, script_copy: dict | None = None) -> dict:
             str(shot.get("seedance_prompt") or shot.get("visual_prompt") or shot.get("visual") or ""),
             voiceover,
             shot_index=index,
+            product_id=product_id,
+            enforce_warming_flow=warming_product,
         )
     return shot_plan
+
+
+def _is_warming_product(product_id: str, product_facts: str = "") -> bool:
+    normalized = f"{product_id} {product_facts}".casefold()
+    return any(token in normalized for token in ("恒温杯", "温奶", "warming cup", "bottle warmer", "98°f", "98 f"))
+
+
+def _storyboard_product_instruction(product_id: str, warming_product: bool) -> str:
+    if warming_product:
+        return "五镜依次完成喂养准备、等待痛点、独立恒温杯出现、正确倒液、产品与人物共同收束。"
+    return (
+        f"围绕“{product_id}”和脚本给出的动作建立五镜连续故事，不得引入恒温杯、奶液、奶瓶、温标或其他产品的固定流程；"
+        "未提供的产品结构、参数、文字和使用方法不得自行补造。"
+    )
 
 
 def _fallback_visual(index: int, role: str) -> str:

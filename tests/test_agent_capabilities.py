@@ -55,8 +55,8 @@ def test_agent_map_and_independent_research_strategy_breakdown(tmp_path: Path, m
     assert capability_map.json()["summary"] == {"total": 11, "deployed": 7, "partial": 4, "missing": 0}
     schemas = capability_map.json()["input_schemas"]
     assert {field["name"] for field in schemas["collector"]} == {"target_type", "target", "limit", "persist"}
-    assert schemas["script"][0]["name"] == "prompt"
-    assert schemas["script_breakdown"][0]["name"] == "source_text"
+    assert {field["name"] for field in schemas["script"]} == {"product_id", "prompt"}
+    assert {field["name"] for field in schemas["script_breakdown"]} == {"product_id", "source_text"}
     assert all(any(field.get("required") for field in fields) for action, fields in schemas.items() if action != "collector")
     assert [
         item["independent_action"]
@@ -373,6 +373,36 @@ def test_independent_content_agents_preserve_distinct_user_intent(tmp_path: Path
         joined = str(script)
         assert "98°C" not in joined
         assert "独立" in script["sections"][3]["action_zh"]
+
+
+def test_standalone_script_and_storyboard_support_non_library_product_context(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "generic-product.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+    brief = "为城市通勤人群创作折叠雨伞短视频，重点表现进地铁前突然下雨，不虚构材质和防风等级。"
+
+    with TestClient(app) as client:
+        script_response = client.post(
+            "/api/v2/agents/run",
+            json={"action": "script", "product_id": "折叠雨伞", "prompt": brief, "mock": True},
+        )
+        storyboard_response = client.post(
+            "/api/v2/agents/run",
+            json={"action": "storyboard", "product_id": "折叠雨伞", "prompt": brief, "mock": True},
+        )
+
+    assert script_response.status_code == 200, script_response.text
+    assert storyboard_response.status_code == 200, storyboard_response.text
+    script = script_response.json()["artifact"]
+    storyboard = storyboard_response.json()["artifact"]
+    assert script["product_id"] == "折叠雨伞"
+    assert "折叠雨伞" in str(script)
+    assert "恒温杯" not in str(script)
+    assert "奶瓶" not in str(script)
+    assert "98°F" not in str(script)
+    assert "折叠雨伞" in str(storyboard)
+    assert "warming cup" not in str(storyboard).casefold()
+    assert "baby bottle" not in str(storyboard).casefold()
+    assert "98 degrees fahrenheit" not in str(storyboard).casefold()
 
 
 def test_standalone_content_agents_reject_empty_default_generation(tmp_path: Path, monkeypatch) -> None:

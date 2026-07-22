@@ -10,6 +10,8 @@ def mock_script_copy(
     provider: str = "doubao",
     creative_request: str = "",
 ) -> dict[str, Any]:
+    if not _is_warming_product(product_id, creative_request):
+        return _generic_script_copy(project_id, product_id, provider=provider, creative_request=creative_request)
     profile = _creative_profile(creative_request)
     place = profile["place"]
     audience = profile["audience"]
@@ -89,6 +91,65 @@ def mock_script_copy(
     }
 
 
+def _is_warming_product(product_id: str, request: str) -> bool:
+    normalized = f"{product_id} {request}".casefold()
+    return any(token in normalized for token in ("恒温杯", "温奶", "warming cup", "bottle warmer"))
+
+
+def _generic_script_copy(
+    project_id: str,
+    product_id: str,
+    *,
+    provider: str,
+    creative_request: str,
+) -> dict[str, Any]:
+    product = product_id.strip() or "当前主题"
+    profile = _creative_profile(creative_request)
+    roles = ("钩子", "痛点", "方案", "证明", "行动号召")
+    timings = ("0-6s", "6-12s", "12-18s", "18-24s", "24-30s")
+    voiceovers = (
+        f"真正让人停下来的，不是口号，而是{product}正在解决的那个具体瞬间。",
+        "先让问题发生在真实生活里，观众才会在画面中认出自己。",
+        f"这时再让{product}进入画面，用一个清楚动作回应刚才的困扰。",
+        "不堆参数，只用使用前后的变化证明价值。",
+        "如果这个场景也属于你，先把这条思路收藏下来。",
+    )
+    actions = (
+        "人物停下一个尚未完成的动作，视线落向问题发生的位置。",
+        "人物尝试继续原动作，但被具体障碍打断。",
+        f"人物拿起{product}并完成一个与用户需求直接相关的主要动作。",
+        f"镜头贴近动作结果，清楚保留{product}与使用环境的关系。",
+        "人物完成原先被打断的事情，产品留在自然使用位置。",
+    )
+    sections = []
+    for index, (role, timing, voiceover, action) in enumerate(zip(roles, timings, voiceovers, actions), start=1):
+        sections.append({
+            "number": index,
+            "role": role,
+            "timing": timing,
+            "voiceover_zh": voiceover,
+            "scene_zh": f"{profile['place']}，{profile['light']}；同一人物、服装和主要道具保持连续，围绕用户输入的真实情境展开。",
+            "action_zh": action,
+            "story_beat_zh": (
+                "建立未完成动作" if index == 1 else "把阻碍具体化" if index == 2 else
+                "让产品自然进入解决过程" if index == 3 else "用可见结果完成证明" if index == 4 else "回到人物目标并收束"
+            ),
+            "subtitle_zh": voiceover,
+            "selling_points": [],
+        })
+    return {
+        "version": "2.0",
+        "project_id": project_id,
+        "product_id": product,
+        "source_link_id": None,
+        "total_duration_s": 30,
+        "generator": {"provider": provider, "model": "mock", "prompt_version": "generic-input-aware-mock-v1"},
+        "creative_request": creative_request.strip(),
+        "sections": sections,
+        "feedback_constraints_applied": [],
+    }
+
+
 def _creative_profile(request: str) -> dict[str, str]:
     text = " ".join(request.strip().split())
     if any(token in text for token in ("旅行", "旅途", "出行", "机场", "高铁", "酒店", "车内")):
@@ -141,13 +202,17 @@ def _creative_profile(request: str) -> dict[str, str]:
 
 
 def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, Any]:
+    warming_product = _is_warming_product(
+        str(script_copy.get("product_id") or ""),
+        str(script_copy.get("creative_request") or ""),
+    )
     shots = []
     for section in script_copy["sections"]:
         number = int(section["number"])
         role = section["role"]
         visual = " ".join(value for value in (section.get("scene_zh"), section.get("action_zh"), section.get("story_beat_zh")) if value)
         visual_prompt = f"{role}镜头。{visual} 产品外观严格锚定获批素材。"
-        if number == 4:
+        if warming_product and number == 4:
             visual = "近景展示恒温杯从圆形出液口向独立的干净奶瓶倒液；温度清晰可见时只能显示 98°F。"
             visual_prompt = visual
         shots.append(
@@ -158,18 +223,26 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
                 "seedance_prompt": (
                     "Continuity lock: same location, lighting, caregiver, wardrobe, hands, and props across all five shots. "
                     "Product appearance must match the white-background hero reference. "
-                    "Product identity lock: preserve the approved proportions, lid, ring, spout, display, button, and port cover. "
-                    "The warming cup and baby bottle are separate products; never insert or attach the bottle to the cup. "
-                    "If visible, the display reads 98 degrees Fahrenheit (98 F), never Celsius. "
-                    "Use scenario and detail references only as prompt guidance. "
+                    + (
+                        "Product identity lock: preserve the approved proportions, lid, ring, spout, display, button, and port cover. "
+                        "The warming cup and baby bottle are separate products; never insert or attach the bottle to the cup. "
+                        "If visible, the display reads 98 degrees Fahrenheit (98 F), never Celsius. "
+                        if warming_product
+                        else f"Product identity lock: keep {script_copy.get('product_id') or 'the product'} consistent with the supplied facts and references; do not invent specifications, labels, accessories, or usage steps. "
+                    )
+                    + "Use scenario and detail references only as prompt guidance. "
                     f"Action continuity for shot {number}: one motivated action that begins from the previous shot end state. "
                     f"Camera contract: shot {number} uses a distinct lens, framing, camera height, and restrained movement. "
                     "Negative constraints: no malformed hands, duplicated props, warped product, invented text, jump cuts, or continuity breaks. "
                     f"Shot role: {role}. Voiceover: {section.get('voiceover_zh', '')}. "
-                    + ("Pour from the warming cup through the round spout into a separate clean baby bottle." if number == 4 else "")
+                    + ("Pour from the warming cup through the round spout into a separate clean baby bottle." if warming_product and number == 4 else "")
                 ),
                 "visual_zh": visual,
-                "seedance_prompt_zh": "连续性锁定：同一场景、人物、服装、光线、产品外观与道具。" + visual_prompt,
+                "seedance_prompt_zh": (
+                    "连续性锁定：同一场景、人物、服装、光线、产品外观与道具。"
+                    + ("恒温杯与奶瓶保持独立，温度可见时只能显示 98 华氏度。" if warming_product else "不得补造未提供的产品结构、参数、文字或使用步骤。")
+                    + visual_prompt
+                ),
                 "footage_type": "AI_VIDEO" if role in {"方案", "证明", "行动号召"} else "AI_BROLL",
                 "camera_motion": {
                     "type": {

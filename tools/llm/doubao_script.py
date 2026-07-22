@@ -51,6 +51,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     strategy_brief = payload.get("strategy_brief") or {}
     rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
     product_facts = product_library.product_guardrail_text(product_id)
+    product_workflow = _product_workflow_instruction(product_id, product_facts)
     creative_request = " ".join(
         str(value).strip()
         for value in (
@@ -80,8 +81,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "action_zh 只写镜头中可以看见的一个主要动作；story_beat_zh 必须说明这一段相对上一段发生了什么变化、为何推动下一段。"
                     "五段必须是同一人物、同一时间和同一空间中的连续小故事。开头用异常、选择或未完成动作制造好奇，不使用空泛提问和广告口号；"
                     "痛点用人物行为表现，不直接宣讲；产品只能在冲突建立后自然出现；结尾给低压力行动号召。旁白应口语、克制、可朗读，删掉可套用到其他产品的句子。"
-                    "第 3 段只展示获批奶液来源倒入恒温杯；第 4 段只展示恒温杯经圆形出液口倒入独立干净奶瓶，不得在同一段合并两个方向。"
-                    "便携恒温杯与奶瓶是两个独立物体。不得虚构功能、品牌、医疗效果或保证性声明。"
+                    f"产品专属动作与安全规则：{product_workflow}"
+                    "不得虚构功能、品牌、医疗效果或保证性声明。"
                     f"获批产品事实与硬约束：{product_facts or '未提供'}。"
                     f"必须修复的上轮反馈：{rewrite_reason or '无'}。"
                     f"获批内容策略：{strategy_brief}。素材分析：{analysis_report}。"
@@ -97,7 +98,11 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         provider="doubao-fallback",
         creative_request=creative_request,
     )["sections"]
-    sections = _normalize_sections(raw_sections, fallback_sections=fallback_sections)
+    sections = _normalize_sections(
+        raw_sections,
+        fallback_sections=fallback_sections,
+        enforce_warming_flow=_is_warming_product(product_id, product_facts),
+    )
     structure_fallback_applied = not isinstance(raw_sections, list) or len(raw_sections) < 5
     script_copy = {
         "version": "2.0",
@@ -123,7 +128,29 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     )
 
 
-def _normalize_sections(value: Any, *, fallback_sections: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+def _product_workflow_instruction(product_id: str, product_facts: str) -> str:
+    if _is_warming_product(product_id, product_facts):
+        return (
+            "第 3 段只展示获批奶液来源倒入恒温杯；第 4 段只展示恒温杯经圆形出液口倒入独立干净奶瓶，"
+            "不得在同一段合并两个方向。便携恒温杯与奶瓶是两个独立物体；温度可见时只能显示 98°F。"
+        )
+    return (
+        f"围绕“{product_id}”及用户提供的事实设计可见、可执行的动作。产品未入库时，不得自行补造材质、参数、"
+        "功效、认证、品牌或使用步骤；缺少事实的卖点应改写为生活情境和用户感受，不得套用恒温杯、奶液、奶瓶或温标规则。"
+    )
+
+
+def _is_warming_product(product_id: str, product_facts: str = "") -> bool:
+    normalized = f"{product_id} {product_facts}".casefold()
+    return any(token in normalized for token in ("恒温杯", "温奶", "warming cup", "bottle warmer", "98°f", "98 f"))
+
+
+def _normalize_sections(
+    value: Any,
+    *,
+    fallback_sections: list[dict[str, Any]] | None = None,
+    enforce_warming_flow: bool = True,
+) -> list[dict[str, Any]]:
     fallback_sections = fallback_sections or mock_script_copy("fallback")["sections"]
     raw = value if isinstance(value, list) else []
     sections: list[dict[str, Any]] = []
@@ -140,7 +167,11 @@ def _normalize_sections(value: Any, *, fallback_sections: list[dict[str, Any]] |
                 "timing": timing,
                 "voiceover_zh": chinese_line or _default_chinese_voiceover(index),
                 "scene_zh": str(item.get("scene_zh") or fallback.get("scene_zh") or _default_scene(index)),
-                "action_zh": _default_action(index) if index in {3, 4} else str(item.get("action_zh") or fallback.get("action_zh") or _default_action(index)),
+                "action_zh": (
+                    _default_action(index)
+                    if enforce_warming_flow and index in {3, 4}
+                    else str(item.get("action_zh") or fallback.get("action_zh") or _default_action(index))
+                ),
                 "story_beat_zh": str(item.get("story_beat_zh") or fallback.get("story_beat_zh") or _default_story_beat(index)),
                 "subtitle_zh": chinese_line or _default_chinese_voiceover(index),
                 "selling_points": _string_list(item.get("selling_points"), []),
