@@ -1345,6 +1345,7 @@ function renderCollectionJobs() {
         <span class="collectionProgress"><i style="width:${percent}%"></i></span>
       </button>
       ${["queued", "paused"].includes(job.status) ? `<button type="button" class="collectionCancel" data-cancel-job="${job.id}">取消</button>` : ""}
+      ${["failed", "partial"].includes(job.status) ? `<button type="button" class="collectionRetry" data-retry-collection-job="${job.id}">重新排队</button>` : ""}
       ${errorSummary ? `<p class="collectionJobError">${escapeHtml(errorSummary)}</p>` : ""}
     </article>`;
   }).join("");
@@ -1357,6 +1358,9 @@ function renderCollectionJobs() {
   });
   host.querySelectorAll("[data-cancel-job]").forEach((button) => {
     button.addEventListener("click", () => cancelCollectionJob(Number(button.dataset.cancelJob)));
+  });
+  host.querySelectorAll("[data-retry-collection-job]").forEach((button) => {
+    button.addEventListener("click", () => retryCollectionJob(button, Number(button.dataset.retryCollectionJob)));
   });
 }
 
@@ -2781,6 +2785,18 @@ function renderHeroFrame(frame, shot, gateActive) {
       ${gateActive ? `<button type="button" data-regen="${frame.number}">编辑分镜</button>` : '<span class="gateState done">已确认</span>'}
     </article>
   `;
+}
+
+async function retryCollectionJob(button, jobId) {
+  button.disabled = true;
+  try {
+    await api(`/api/v2/collect/jobs/${jobId}/retry`, { method: "POST" });
+    toast(`采集任务 #${jobId} 已重新排队`);
+    await loadCollectionJobs();
+  } catch (error) {
+    toast(error.message, "error");
+    button.disabled = false;
+  }
 }
 
 async function analyzeLibraryMaterial(button, materialId) {

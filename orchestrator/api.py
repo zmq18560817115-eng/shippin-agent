@@ -1824,6 +1824,19 @@ def cancel_collection_job(job_id: int) -> dict[str, Any]:
     return {"ok": True, "job": job}
 
 
+@app.post("/api/v2/collect/jobs/{job_id}/retry")
+def retry_collection_job(job_id: int) -> dict[str, Any]:
+    existing = queue.get_collection_job(job_id, db_path=_db_path())
+    if existing is None:
+        raise HTTPException(status_code=404, detail="采集任务不存在")
+    if existing["status"] not in {"failed", "partial"}:
+        raise HTTPException(status_code=409, detail="只有失败或部分完成的采集任务可以重新排队")
+    job = queue.retry_collection_job(job_id, db_path=_db_path())
+    if job is None:
+        raise HTTPException(status_code=409, detail="采集任务状态已变化，请刷新后重试")
+    return {"ok": True, "job": job}
+
+
 @app.get("/api/v2/collect/tiktok/auto")
 def get_auto_collector_settings() -> dict[str, Any]:
     return _auto_collector_settings()

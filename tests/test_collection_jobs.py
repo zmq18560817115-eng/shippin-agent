@@ -177,6 +177,37 @@ def test_collection_job_failure_retries_then_stops(tmp_path: Path) -> None:
     assert stopped["status"] == "failed"
     assert stopped["next_attempt_at"] is None
 
+    manual_retry = queue.retry_collection_job(job["id"], db_path=db_path)
+    assert manual_retry is not None
+    assert manual_retry["status"] == "queued"
+    assert manual_retry["attempt"] == 0
+    assert manual_retry["error_message"] == ""
+
+
+def test_collection_job_api_manually_retries_failed_job(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "manual-retry.db"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_COLLECTION_WORKER_ENABLED", "false")
+    job = queue.create_collection_job(
+        target_type="keyword",
+        provider="auto",
+        target="heated cup",
+        requested_count=2,
+        product_id="便携恒温杯",
+        mock=True,
+        db_path=db_path,
+    )
+    claimed = queue.claim_collection_job("worker", db_path=db_path)
+    assert claimed is not None
+    queue.fail_collection_job(job["id"], "worker", "session expired", retryable=False, db_path=db_path)
+
+    with TestClient(app) as client:
+        response = client.post(f"/api/v2/collect/jobs/{job['id']}/retry")
+        assert response.status_code == 200, response.text
+        assert response.json()["job"]["status"] == "queued"
+        conflict = client.post(f"/api/v2/collect/jobs/{job['id']}/retry")
+        assert conflict.status_code == 409
+
 
 def test_background_worker_writes_job_progress(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "agentflow.db"

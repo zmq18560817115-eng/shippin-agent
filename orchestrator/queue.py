@@ -217,6 +217,36 @@ def cancel_collection_job(
     return get_collection_job(job_id, db_path=db_path)
 
 
+def retry_collection_job(
+    job_id: int,
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any] | None:
+    """Manually requeue a terminal collection job with a fresh retry budget."""
+    init_db(db_path)
+    now = utc_now()
+    with get_conn(db_path) as conn:
+        changed = conn.execute(
+            """
+            UPDATE collection_jobs
+            SET status = 'queued', attempt = 0, next_attempt_at = NULL,
+                lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+                finished_at = NULL, error_message = '', updated_at = ?
+            WHERE id = ? AND status IN ('failed','partial')
+            """,
+            (now, job_id),
+        ).rowcount
+    if not changed:
+        return None
+    record_event(
+        event_type="collector.job_manual_retry",
+        message=f"collection_job:{job_id}",
+        meta={"job_id": job_id},
+        db_path=db_path,
+    )
+    return get_collection_job(job_id, db_path=db_path)
+
+
 def claim_collection_job(
     worker_id: str,
     *,
