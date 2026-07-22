@@ -569,24 +569,36 @@ def agent_capabilities() -> dict[str, Any]:
 def admin_summary() -> dict[str, Any]:
     queue.init_db(db_path=_db_path())
     with queue.get_conn(_db_path()) as conn:
-        project_rows = conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall()
-        task_rows = conn.execute("SELECT status, COUNT(*) AS count FROM tasks GROUP BY status").fetchall()
+        all_project_rows = conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall()
+        project_rows = [row for row in all_project_rows if not _is_standalone_project(row)]
+        production_project_ids = [str(row["id"]) for row in project_rows]
+        if production_project_ids:
+            placeholders = ",".join("?" for _ in production_project_ids)
+            task_rows = conn.execute(
+                f"SELECT status, COUNT(*) AS count FROM tasks WHERE project_id IN ({placeholders}) GROUP BY status",
+                production_project_ids,
+            ).fetchall()
+        else:
+            task_rows = []
         total_cost = float(conn.execute("SELECT COALESCE(SUM(cost_cny), 0) FROM cost_entries").fetchone()[0])
         cost_rows = conn.execute("SELECT cost_cny, created_at FROM cost_entries ORDER BY created_at").fetchall()
-        failures = [
-            dict(row)
-            for row in conn.execute(
+        failures = []
+        if production_project_ids:
+            failures = [
+                dict(row)
+                for row in conn.execute(
                 """
                 SELECT tasks.id AS task_id, tasks.project_id, tasks.stage, tasks.agent,
                        tasks.error_json, tasks.updated_at, task_assignments.assignee
                 FROM tasks
                 LEFT JOIN task_assignments ON task_assignments.task_id = tasks.id
                 WHERE tasks.status = 'failed'
+                  AND tasks.project_id IN (SELECT id FROM projects WHERE json_extract(payload_json, '$.standalone') IS NOT 1)
                 ORDER BY tasks.updated_at DESC
                 LIMIT 12
                 """
-            ).fetchall()
-        ]
+                ).fetchall()
+            ]
     material_index = manual_import.load_library_index(_material_library_root())
     runs_root = _runs_root()
     users = user_store.list_users(db_path=_db_path())
@@ -624,6 +636,7 @@ def admin_summary() -> dict[str, Any]:
         "total_cost_cny": round(total_cost, 4),
         "material_count": len(material_index.get("items") or []),
         "run_count": len([path for path in runs_root.iterdir() if path.is_dir()]) if runs_root.exists() else 0,
+        "standalone_run_count": len(all_project_rows) - len(project_rows),
         "storage_bytes": {
             "database": _path_size(queue.resolve_db_path(_db_path())),
             "materials": _path_size(_material_library_root()),

@@ -53,6 +53,42 @@ def test_admin_endpoint_requires_admin_role(monkeypatch, tmp_path):
         assert summary.json()["analytics"]["project_status"] == summary.json()["projects"]
 
 
+def test_admin_summary_separates_standalone_runs_from_production_projects(monkeypatch, tmp_path):
+    db_path = tmp_path / "admin-counts.db"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_AUTH_ENABLED", "true")
+    monkeypatch.setenv("VAF_COOKIE_SECURE", "false")
+    monkeypatch.setenv("VAF_SESSION_SECRET", "test-session-secret-with-32-characters")
+    monkeypatch.setenv("VAF_ADMIN_USER", "admin")
+    monkeypatch.setenv("VAF_ADMIN_PASSWORD", "admin-pass")
+    queue.init_db(db_path=db_path)
+    queue.ensure_project("production-1", product_id="product", db_path=db_path)
+    queue.ensure_project(
+        "scratch-1",
+        product_id="product",
+        payload={"standalone": True, "standalone_action": "script"},
+        db_path=db_path,
+    )
+    standalone_task = queue.enqueue_task(
+        project_id="scratch-1", stage="script", agent="script", db_path=db_path
+    )
+    queue.mark_task_status(
+        standalone_task, "failed", error={"message": "standalone failure"}, db_path=db_path
+    )
+
+    with TestClient(app) as admin:
+        assert admin.post(
+            "/api/v2/auth/login",
+            json={"username": "admin", "password": "admin-pass", "portal": "admin"},
+        ).status_code == 200
+        summary = admin.get("/api/v2/admin/summary").json()
+
+    assert sum(summary["projects"].values()) == 1
+    assert summary["standalone_run_count"] == 1
+    assert summary["tasks"].get("failed", 0) == 0
+    assert summary["recent_failures"] == []
+
+
 def test_admin_can_ignore_failed_task_with_audit_event(monkeypatch, tmp_path):
     db_path = tmp_path / "ignore-task.db"
     monkeypatch.setenv("VAF_DB_PATH", str(db_path))

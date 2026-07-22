@@ -5,7 +5,6 @@ import shutil
 import subprocess
 import re
 import tempfile
-import os
 from pathlib import Path
 from typing import Any
 
@@ -129,7 +128,10 @@ def _compose_real(paths: list[Path], output: Path, ffmpeg: str | None, shot_repo
     # Smooth the seams between independently generated shots with a short
     # crossfade instead of a hard cut (removes the "jump" at each boundary).
     xfade_s = _xfade_seconds()
-    if len(normalized) >= 2 and xfade_s > 0 and _compose_with_xfade(normalized, output, ffmpeg, xfade_s):
+    target_duration = _duration_from_shots(shot_report)
+    if len(normalized) >= 2 and xfade_s > 0 and _compose_with_xfade(
+        normalized, output, ffmpeg, xfade_s, target_duration=target_duration
+    ):
         return
     _compose_concat(normalized, output, ffmpeg)
 
@@ -143,7 +145,14 @@ def _xfade_seconds() -> float:
     return max(0.0, min(value, 0.8))
 
 
-def _compose_with_xfade(clips: list[Path], output: Path, ffmpeg: str, xfade_s: float) -> bool:
+def _compose_with_xfade(
+    clips: list[Path],
+    output: Path,
+    ffmpeg: str,
+    xfade_s: float,
+    *,
+    target_duration: float,
+) -> bool:
     """Chain clips with xfade/acrossfade transitions. Returns False on failure
     so the caller can fall back to a plain concat."""
     transition = str(os.environ.get("COMPOSE_XFADE_TYPE") or "fade").strip() or "fade"
@@ -164,13 +173,17 @@ def _compose_with_xfade(clips: list[Path], output: Path, ffmpeg: str, xfade_s: f
         steps.append(f"{prev_v}{vlabels[i]}xfade=transition={transition}:duration={xfade_s}:offset={offset:.3f}{out_v}")
         steps.append(f"{prev_a}{alabels[i]}acrossfade=d={xfade_s}{out_a}")
         prev_v, prev_a = out_v, out_a
+    transition_loss = xfade_s * (len(clips) - 1)
+    video_out, audio_out = "[vout]", "[aout]"
+    steps.append(f"{prev_v}tpad=stop_mode=clone:stop_duration={transition_loss:.3f}{video_out}")
+    steps.append(f"{prev_a}apad=pad_dur={transition_loss:.3f}{audio_out}")
     command = [
         ffmpeg, "-y", *inputs,
         "-filter_complex", ";".join(steps),
-        "-map", prev_v, "-map", prev_a,
+        "-map", video_out, "-map", audio_out,
         "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-ar", "48000", "-ac", "2",
-        "-movflags", "+faststart", output.as_posix(),
+        "-t", f"{target_duration:.3f}", "-movflags", "+faststart", output.as_posix(),
     ]
     completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return completed.returncode == 0 and output.is_file()
