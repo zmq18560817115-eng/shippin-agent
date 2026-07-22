@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from libshared.agent_contracts import agent_system_prompt
@@ -115,10 +116,13 @@ def script_breakdown(payload: dict[str, Any], context: ToolContext) -> ToolResul
                 "human_editable": True,
             }
         )
+    source_text = str(payload.get("source_text") or "").strip()
+    if not beats and source_text:
+        beats = _raw_text_beats(source_text)
     artifact = {
         "version": "1.0",
         "project_id": project_id,
-        "total_duration_s": float(script.get("total_duration_s") or 0),
+        "total_duration_s": float(script.get("total_duration_s") or (30 if beats else 0)),
         "beats": beats,
         "continuity_requirements": [
             "所有出现人物的镜头必须保持同一位照护者身份。",
@@ -127,6 +131,38 @@ def script_breakdown(payload: dict[str, Any], context: ToolContext) -> ToolResul
         ],
     }
     return ToolResult.success({"script_breakdown": artifact}, meta={"tool": "script_breakdown", "model": "deterministic"})
+
+
+def _raw_text_beats(source_text: str) -> list[dict[str, Any]]:
+    normalized = source_text.replace("\r\n", "\n").strip()
+    paragraphs = [value.strip() for value in normalized.split("\n") if value.strip()]
+    if len(paragraphs) == 1:
+        paragraphs = [value.strip() for value in re.split(r"(?<=[。！？!?；;])", normalized) if value.strip()]
+    if not paragraphs:
+        return []
+    if len(paragraphs) > 5:
+        paragraphs = paragraphs[:4] + ["".join(paragraphs[4:])]
+    roles = ("钩子", "痛点", "方案", "证明", "行动号召")
+    beat_count = len(paragraphs)
+    duration = 30 / beat_count
+    beats = []
+    for index, paragraph in enumerate(paragraphs, start=1):
+        start = round((index - 1) * duration)
+        end = 30 if index == beat_count else round(index * duration)
+        role = roles[min(index - 1, len(roles) - 1)]
+        beats.append(
+            {
+                "number": index,
+                "timing": f"{start}-{end}s",
+                "role": role,
+                "voiceover": paragraph,
+                "intent": _intent(role),
+                "visual_requirement": f"围绕原句设计一个可见主要动作，并明确场景、人物状态、产品位置和镜头结束状态：{paragraph}",
+                "source_quote": paragraph,
+                "human_editable": True,
+            }
+        )
+    return beats
 
 
 def _list(value: Any) -> list[str]:

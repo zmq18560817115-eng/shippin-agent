@@ -1126,33 +1126,10 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     elif action == "script_breakdown":
         script = request.input_json
         if script is None:
-            source = _apply_creative_brief(
-                (request.source_text or request.prompt or "").strip(), creative_brief
-            )
+            source = (request.source_text or request.prompt or "").strip()
             if source:
-                script_result = tool_registry.execute_tool(
-                    "doubao_script",
-                    {
-                        "project_id": project_id,
-                        "product_id": request.product_id,
-                        "analysis_report": {
-                            "project_id": project_id,
-                            "voiceover_text": source,
-                            "hook_3s": source[:120],
-                            "structure": [],
-                        },
-                        "strategy_brief": {
-                            "content_direction": source,
-                            "product_guardrails": product_library.product_guardrail_text(request.product_id),
-                        },
-                    },
-                    context={"mock": request.mock, "run_root": root},
-                )
-                if not script_result.ok:
-                    error = script_result.error or {"message": "script foundation failed"}
-                    raise HTTPException(status_code=422, detail=error.get("message") or error)
-                script = script_result.data["script_copy"]
-                artifacts.save_artifact(project_id, "script_copy", script, run_root=root)
+                script = {}
+                payload["source_text"] = source
             else:
                 script = _load_artifact(project_id, "script_copy")
         payload["script_copy"] = script

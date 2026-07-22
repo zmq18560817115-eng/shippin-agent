@@ -130,7 +130,8 @@ def test_standalone_strategy_and_breakdown_cold_start_are_isolated(tmp_path: Pat
     assert strategy.json()["project_id"].startswith("scratch-")
     assert breakdown.json()["project_id"].startswith("scratch-")
     assert strategy.json()["artifact_name"] == "strategy_brief"
-    assert len(breakdown.json()["artifact"]["beats"]) == 5
+    assert len(breakdown.json()["artifact"]["beats"]) >= 1
+    assert breakdown.json()["artifact"]["beats"][0]["source_quote"].startswith("为便携恒温杯写一条")
     assert strategy_download.status_code == 200
     assert all(not item["standalone"] for item in visible.json()["items"])
     assert any(item["standalone"] for item in all_projects.json()["items"])
@@ -442,6 +443,27 @@ def test_generic_review_does_not_apply_warming_cup_temperature_rule(tmp_path: Pa
 
     assert response.status_code == 200, response.text
     assert response.json()["artifact"]["status"] == "PASS"
+
+
+def test_standalone_breakdown_preserves_original_lines_without_script_rewrite(tmp_path: Path, monkeypatch) -> None:
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "direct-breakdown.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    source = "雨突然落下。她在地铁入口停住。折叠雨伞从包侧袋取出。三秒撑开后继续赶路。"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={"action": "script_breakdown", "product_id": "折叠雨伞", "source_text": source, "mock": True},
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    beats = payload["artifact"]["beats"]
+    assert "".join(beat["source_quote"] for beat in beats) == source
+    assert all(beat["voiceover"] == beat["source_quote"] for beat in beats)
+    assert all(beat["human_editable"] is True for beat in beats)
+    assert not (runs_root / payload["project_id"] / "artifacts" / "script_copy.json").exists()
 
 
 def test_standalone_content_agents_reject_empty_default_generation(tmp_path: Path, monkeypatch) -> None:
