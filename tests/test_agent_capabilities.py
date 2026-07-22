@@ -399,7 +399,8 @@ def test_orchestrator_and_asset_are_independently_runnable(tmp_path: Path, monke
     assert orchestrator.json()["meta"]["agent_contract"]["identity"]
     assert asset.status_code == 200, asset.text
     assert asset.json()["artifact_name"] == "asset_manifest"
-    assert asset.json()["artifact"]["hero_frames"][0]["status"] == "generated"
+    assert asset.json()["artifact"]["hero_frames"][0]["status"] == "needs_review"
+    assert asset.json()["artifact"]["hero_frames"][0]["scene_preview_available"] is False
     assert asset_download.status_code == 200
 
 

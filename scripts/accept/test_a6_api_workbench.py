@@ -51,8 +51,8 @@ def test_a6_api_workbench_two_gate_flow_and_polling(tmp_path: Path, monkeypatch)
             "/api/v2/hero/regen",
             json={"project_id": "ref-a6", "shot_index": 1},
         )
-        assert regenerated.status_code == 200
-        assert regenerated.json()["shot_index"] == 1
+        assert regenerated.status_code == 409
+        assert "未配置场景关键帧图像模型" in regenerated.json()["detail"]
 
         hero_gate = client.post(
             "/api/v2/gates/approve",

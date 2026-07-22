@@ -3107,24 +3107,11 @@ def regen_hero(request: HeroRegenRequest) -> dict[str, Any]:
     if request.shot_index < 1:
         raise HTTPException(status_code=400, detail="shot_index must be >= 1")
     manifest = _load_artifact(project_id, "asset_manifest")
-    frame = _find_hero_frame(manifest, request.shot_index)
-    frame["status"] = "generated"
-    frame["regenerated_at"] = queue.utc_now()
-    artifacts.save_artifact(project_id, "asset_manifest", manifest, run_root=_run_root(project_id))
-    queue.record_event(
-        project_id=project_id,
-        event_type="hero.regenerated",
-        message=f"shot{request.shot_index}",
-        meta={"shot_index": request.shot_index},
-        db_path=_db_path(),
+    _find_hero_frame(manifest, request.shot_index)
+    raise HTTPException(
+        status_code=409,
+        detail="当前未配置场景关键帧图像模型，不能重新生成画面。请先编辑对应分镜；产品身份图仍用于锁定产品外观。",
     )
-    _attach_preview_urls(project_id, manifest)
-    return {
-        "ok": True,
-        "project_id": project_id,
-        "shot_index": request.shot_index,
-        "asset_manifest": manifest,
-    }
 
 
 @app.post("/api/v2/tasks/retry")

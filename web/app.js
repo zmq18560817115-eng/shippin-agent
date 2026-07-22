@@ -2733,7 +2733,7 @@ function renderHeroGate() {
     <div class="actionBar wide">${gateActive ? '<button type="button" id="approveHero" class="primary">确认全部关键帧并进入制作</button>' : `<span class="gateCompleteNote">关键帧已确认，项目当前位于“${escapeHtml(stageLabel(state.selected.current_gate || state.selected.current_stage))}”</span>`}</div>
   `;
   host.querySelectorAll("[data-regen]").forEach((button) => {
-    button.addEventListener("click", () => regenHero(Number(button.dataset.regen)));
+    button.addEventListener("click", () => focusStoryboardShot(Number(button.dataset.regen)));
   });
   host.querySelectorAll("[data-focus-storyboard-shot]").forEach((button) => {
     button.addEventListener("click", () => focusStoryboardShot(Number(button.dataset.focusStoryboardShot)));
@@ -2747,30 +2747,16 @@ function renderHeroFrame(frame, shot, gateActive) {
     : "";
   return `
     <article class="contactShot">
-      <button type="button" class="contactShotPreview" data-focus-storyboard-shot="${Number(frame.number)}" aria-label="定位镜头 ${Number(frame.number)} 分镜">
-        ${frame.preview_url ? `<img src="${escapeAttr(frame.preview_url)}" alt="镜头 ${Number(frame.number)} 关键帧" loading="lazy" />` : "暂无画面"}
-      </button>
+      <div class="contactShotIndex" aria-hidden="true">${Number(frame.number)}</div>
       <div class="heroMeta">
         <strong>镜头 ${frame.number}</strong>
         <span>${escapeHtml(camera)}</span>
-        <p>${escapeHtml(shot?.visual_zh || shot?.visual || "")}</p>
+        <p>${escapeHtml(shot?.visual_zh || shot?.visual || frame.scene_brief || "")}</p>
+        <small>${escapeHtml(frame.reference_reason || "使用左侧产品身份图核对外观")}</small>
       </div>
-      ${gateActive ? `<button type="button" data-regen="${frame.number}">重新生成</button>` : '<span class="gateState done">已确认</span>'}
+      ${gateActive ? `<button type="button" data-regen="${frame.number}">编辑分镜</button>` : '<span class="gateState done">已确认</span>'}
     </article>
   `;
-}
-
-async function regenHero(shotIndex) {
-  try {
-    await api("/api/v2/hero/regen", {
-      method: "POST",
-      body: JSON.stringify({ project_id: state.selectedId, shot_index: shotIndex }),
-    });
-    toast(`镜头 ${shotIndex} 已重新生成`);
-    await loadSelectedProject(state.selectedId);
-  } catch (error) {
-    toast(error.message, "error");
-  }
 }
 
 async function approveHeroGate() {

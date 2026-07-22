@@ -24,6 +24,9 @@ def test_real_hero_frames_are_materialized(tmp_path: Path) -> None:
         path = Path(frame["path"])
         assert path.is_absolute()
         assert path.read_bytes() == source.read_bytes()
+        assert frame["status"] == "needs_review"
+        assert frame["preview_role"] == "identity_reference"
+        assert frame["scene_preview_available"] is False
 
 
 def test_real_hero_frame_blocks_missing_source(tmp_path: Path) -> None:

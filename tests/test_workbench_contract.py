@@ -46,7 +46,9 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert "renderStoryboardContactSheet" in script
     assert "focusStoryboardShot" in script
     assert 'data-storyboard-shot="${Number(shot.number)}"' in script
-    assert 'class="contactShotPreview"' in script
+    assert 'class="contactShotIndex"' in script
+    assert "编辑分镜" in script
+    assert "重新生成关键帧" not in script
     assert "确认全部关键帧并进入制作" in script
     assert 'data-lock-section="${section.number}"' in script
     assert 'data-undo-section="${section.number}"' in script

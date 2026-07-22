@@ -29,6 +29,7 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     hero_frames = []
     for shot in shot_plan.get("shots", []):
         number = int(shot["number"])
+        scene_brief = str(shot.get("visual_zh") or shot.get("visual") or "").strip()
         target = shots_dir / f"hero_{number:03d}{source_path.suffix or '.png'}"
         shutil.copy2(source_path, target)
         if not target.is_file() or target.stat().st_size == 0:
@@ -38,7 +39,11 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "number": number,
                 "path": target.as_posix(),
                 "source_refs": [seedance_source],
-                "status": "generated",
+                "status": "needs_review",
+                "preview_role": "identity_reference",
+                "scene_preview_available": False,
+                "scene_brief": scene_brief,
+                "reference_reason": "产品身份锚点，仅用于核对外观；当前未配置图像模型，不代表场景关键帧。",
             }
         )
 
@@ -46,14 +51,21 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "version": "2.0",
         "project_id": project_id,
         "product_id": product_id,
+        "identity_mode": "product_reference",
         "seedance_source": seedance_source,
         "reference_paths": product_library.resolve_generation_references(product_id),
         "hero_frames": hero_frames,
+        "warnings": ["当前关键帧为产品身份审核板，不是场景生成图；场景与动作请在逐镜核对表确认。"],
     }
     artifacts.validate_artifact("asset_manifest", manifest)
     return ToolResult.success(
         {"asset_manifest": manifest},
-        meta={"tool": "hero_frame", "mock": context.mock, "hero_frame_count": len(hero_frames)},
+        meta={
+            "tool": "hero_frame",
+            "mock": context.mock,
+            "hero_frame_count": len(hero_frames),
+            "scene_preview_provider": "not_configured",
+        },
     )
 
 
