@@ -195,7 +195,7 @@ function renderAgentResult(host, payload) {
     <div class="resultHead"><strong>${escapeHtml(artifactLabel(payload.artifact_name))}</strong>${download}${promote}</div>
     ${executionContext}
     ${payload.project_id && payload.project_id.startsWith("scratch-") ? "<p>独立工作区产物已保存，不会出现在生产项目列表中。</p>" : ""}
-    <div class="agentFriendlyResult">${renderFriendlyArtifact(payload.artifact_name, artifact)}</div>
+    <div class="agentFriendlyResult">${renderFriendlyArtifact(payload.artifact_name, artifact, payload)}</div>
     <details class="rawArtifact"><summary>查看 JSON</summary><pre>${escapeHtml(JSON.stringify(artifact, null, 2))}</pre></details>
   `;
 }
@@ -224,7 +224,7 @@ function artifactLabel(name) {
   }[name] || name;
 }
 
-function renderFriendlyArtifact(name, artifact) {
+function renderFriendlyArtifact(name, artifact, payload = {}) {
   if (name === "orchestration_plan") {
     const route = Array.isArray(artifact.route) ? artifact.route : [];
     const gates = Array.isArray(artifact.human_gates) ? artifact.human_gates : [];
@@ -565,7 +565,10 @@ function updateIndependentAgentUI() {
   }
   if (name === "shot_report") {
     const shots = Array.isArray(artifact.shots) ? artifact.shots : [];
-    return `<div class="agentResultCards">${shots.map((shot) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(shot.number || "-")}</strong><p>${escapeHtml(takeStatusLabel(shot.status))}</p><small>${escapeHtml(shot.path || "")}</small></article>`).join("") || "<p>暂无镜头结果。</p>"}</div>`;
+    const media = payload.media_url
+      ? `<div class="standaloneVideoResult"><video controls preload="metadata" playsinline src="${escapeAttr(payload.media_url)}"></video><a class="buttonLink" href="${escapeAttr(payload.media_download_url || payload.media_url)}" download>下载 MP4</a></div>`
+      : '<p class="mediaUnavailable">视频文件尚未就绪，请查看运行结果后重试。</p>';
+    return `${media}<div class="agentResultCards">${shots.map((shot) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(shot.number || "-")}</strong><p>${escapeHtml(takeStatusLabel(shot.status))}</p><small>${escapeHtml(shot.duration_sec || 0)} 秒 · 720×1280 交付目标</small></article>`).join("") || "<p>暂无镜头结果。</p>"}</div>`;
   }
 }
 

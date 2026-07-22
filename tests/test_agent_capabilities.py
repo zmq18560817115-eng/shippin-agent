@@ -320,6 +320,11 @@ def test_standalone_non_pour_production_does_not_leak_action_references(tmp_path
 
     assert response.status_code == 200, response.text
     assert response.json()["meta"]["reference_paths"] == []
+    assert response.json()["media_url"].endswith("/shots/shot-001-take-a.mp4")
+    with TestClient(app) as client:
+        media = client.get(response.json()["media_url"])
+    assert media.status_code == 200
+    assert len(media.content) >= 1024
 
 
 def test_standalone_unknown_product_production_uses_prompt_only_identity(tmp_path: Path, monkeypatch) -> None:
@@ -343,6 +348,7 @@ def test_standalone_unknown_product_production_uses_prompt_only_identity(tmp_pat
     assert meta["reference_paths"] == []
     artifact = response.json()["artifact"]
     assert artifact["shots"][0]["status"] == "succeeded"
+    assert response.json()["media_download_url"] == response.json()["media_url"]
 
 
 def test_standalone_unknown_product_asset_requires_approved_material(tmp_path: Path, monkeypatch) -> None:

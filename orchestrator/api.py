@@ -1341,7 +1341,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         meta={"tool": tool_name, "artifact": artifact_name, "mock": request.mock},
         db_path=_db_path(),
     )
-    return {
+    response = {
         "ok": True,
         "project_id": project_id,
         "action": action,
@@ -1350,6 +1350,18 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         "download_url": f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
         "meta": _agent_execution_meta(action, creative_brief, **result.meta, **execution_meta),
     }
+    if artifact_name == "shot_report":
+        shots = artifact.get("shots") if isinstance(artifact.get("shots"), list) else []
+        media_path = str((shots[0] if shots else {}).get("path") or "")
+        if media_path:
+            try:
+                relative = Path(media_path).resolve().relative_to(root.resolve()).as_posix()
+            except ValueError:
+                relative = ""
+            if relative:
+                response["media_url"] = f"/api/v2/runs/{project_id}/{relative}"
+                response["media_download_url"] = response["media_url"]
+    return response
 
 
 @app.get("/api/v2/products")

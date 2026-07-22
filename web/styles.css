@@ -3562,6 +3562,24 @@ pre {
   margin-top: 8px;
 }
 
+.standaloneVideoResult {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.standaloneVideoResult video {
+  width: min(100%, 360px);
+  aspect-ratio: 9 / 16;
+  border-radius: 6px;
+  background: #0f172a;
+}
+
+.mediaUnavailable {
+  color: var(--amber);
+}
+
 .agentExecutionContext {
   display: flex;
   align-items: baseline;
