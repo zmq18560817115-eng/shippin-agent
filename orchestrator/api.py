@@ -996,6 +996,57 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         }
     if action == "analysis":
         source = (request.source_text or request.prompt or "").strip()
+        if standalone and source.startswith(("http://", "https://")):
+            if "tiktok.com/" not in source.casefold():
+                raise HTTPException(status_code=422, detail="视频链接分析当前支持 TikTok 链接；其他来源请上传转写文本")
+            intake = collect_tiktok_and_run(
+                TikTokIntakeRunRequest(
+                    url=source,
+                    product_id=request.product_id,
+                    source_query="standalone_analysis",
+                    source_target_type="manual_url",
+                    mock=request.mock,
+                    analysis_only=True,
+                )
+            )
+            material = dict(intake.get("material") or {})
+            breakdown_path = Path(str(material.get("breakdown_path") or ""))
+            if not breakdown_path.is_file():
+                raise HTTPException(
+                    status_code=422,
+                    detail="视频已保存，但没有取得字幕或 ASR 转写，暂时无法生成可信拆解；请在素材详情补充转写后重试",
+                )
+            try:
+                artifact = json.loads(breakdown_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise HTTPException(status_code=500, detail="素材分析报告读取失败，请重新分析该素材") from exc
+            artifact["project_id"] = project_id
+            artifacts.validate_artifact("analysis_report", artifact)
+            artifacts.save_artifact(project_id, "analysis_report", artifact, run_root=root)
+            queue.record_event(
+                project_id=project_id,
+                event_type="agent.standalone.completed",
+                message="analysis:analysis_report",
+                meta={"standalone": True, "source_material_id": material.get("material_id")},
+                db_path=_db_path(),
+            )
+            return {
+                "ok": True,
+                "project_id": project_id,
+                "action": action,
+                "artifact_name": "analysis_report",
+                "artifact": artifact,
+                "download_url": f"/api/v2/artifacts/{project_id}/analysis_report/download",
+                "material": material,
+                "readiness": intake.get("readiness") or {},
+                "meta": _agent_execution_meta(
+                    "analysis",
+                    creative_brief,
+                    standalone=True,
+                    source_mode="tiktok_capture",
+                    source_material_id=material.get("material_id"),
+                ),
+            }
         payload.update(
             {
                 "transcript_text": source,

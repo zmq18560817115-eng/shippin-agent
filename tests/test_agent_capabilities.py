@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from orchestrator import engine, queue
+from orchestrator import api, engine, queue
 from orchestrator.api import app
 
 
@@ -178,6 +179,75 @@ def test_standalone_analysis_review_and_feedback_are_downloadable(tmp_path: Path
     assert feedback.json()["meta"]["agent_contract"]["identity"]
     assert feedback.json()["meta"]["creative_brief"]["freedom"] == "exploratory"
     assert all(response.status_code == 200 for response in (analysis_download, review_download, feedback_download))
+
+
+def test_standalone_analysis_tiktok_url_uses_capture_transcript_pipeline(tmp_path: Path, monkeypatch) -> None:
+    runs_root = tmp_path / "runs"
+    material_root = tmp_path / "materials"
+    report_path = material_root / "tt_123" / "analysis_report.json"
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text(
+        json.dumps(
+            {
+                "version": "2.0",
+                "project_id": "material-tt_123",
+                "source_link_id": None,
+                "material_meta_ref": "tt_123",
+                "hook_3s": "地铁门即将关闭",
+                "structure": ["钩子", "展开", "结果"],
+                "voiceover_text": "真实 ASR 转写内容",
+                "pacing": [{"start_s": 0, "end_s": 6, "role": "钩子"}],
+                "keyframes": [],
+                "shot_breakdown": [],
+                "fingerprint": "captured-test",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "url-analysis.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+
+    def fake_capture(request):
+        assert request.analysis_only is True
+        return {
+            "ok": True,
+            "material": {"material_id": "tt_123", "breakdown_path": report_path.as_posix()},
+            "readiness": {"ready": True},
+        }
+
+    monkeypatch.setattr(api, "collect_tiktok_and_run", fake_capture)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "analysis",
+                "source_text": "https://www.tiktok.com/@demo/video/123",
+                "mock": False,
+            },
+        )
+        download = client.get(response.json()["download_url"])
+
+    assert response.status_code == 200, response.text
+    assert response.json()["artifact"]["voiceover_text"] == "真实 ASR 转写内容"
+    assert response.json()["artifact"]["project_id"].startswith("scratch-")
+    assert response.json()["meta"]["source_mode"] == "tiktok_capture"
+    assert download.status_code == 200
+
+
+def test_standalone_analysis_rejects_unsupported_video_url(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "unsupported-url.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={"action": "analysis", "source_text": "https://example.com/video/123", "mock": True},
+        )
+
+    assert response.status_code == 422
+    assert "当前支持 TikTok" in response.json()["detail"]
 
 
 def test_standalone_non_pour_production_does_not_leak_action_references(tmp_path: Path, monkeypatch) -> None:
