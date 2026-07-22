@@ -51,6 +51,16 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     strategy_brief = payload.get("strategy_brief") or {}
     rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
     product_facts = product_library.product_guardrail_text(product_id)
+    creative_request = " ".join(
+        str(value).strip()
+        for value in (
+            strategy_brief.get("content_direction"),
+            analysis_report.get("voiceover_text"),
+            analysis_report.get("hook_3s"),
+            rewrite_reason,
+        )
+        if str(value or "").strip()
+    )
     response, meta = ark.chat_json(
         context,
         api_key_names=("DOUBAO_API_KEY", "ARK_DOUBAO_API_KEY", "ARK_API_KEY"),
@@ -80,7 +90,15 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             },
         ],
     )
-    sections = _normalize_sections(response.get("sections"))
+    raw_sections = response.get("sections")
+    fallback_sections = mock_script_copy(
+        project_id,
+        product_id,
+        provider="doubao-fallback",
+        creative_request=creative_request,
+    )["sections"]
+    sections = _normalize_sections(raw_sections, fallback_sections=fallback_sections)
+    structure_fallback_applied = not isinstance(raw_sections, list) or len(raw_sections) < 5
     script_copy = {
         "version": "2.0",
         "project_id": project_id,
@@ -90,8 +108,10 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "generator": {
             "provider": "ark",
             "model": str(meta.get("model") or "doubao"),
-            "prompt_version": "real-ark-v1",
+            "prompt_version": "real-ark-v2-input-aware-fallback",
+            "structure_fallback_applied": structure_fallback_applied,
         },
+        "creative_request": creative_request,
         "sections": sections,
         "feedback_constraints_applied": _string_list(response.get("feedback_constraints_applied"), []),
     }
@@ -103,17 +123,14 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     )
 
 
-def _normalize_sections(value: Any) -> list[dict[str, Any]]:
-    defaults = [
-        ("钩子", "0-6s", "夜间准备，不必占满你的休息时间。"),
-        ("痛点", "6-12s", "奶液变冷和等待，会让夜间准备更困难。"),
-        ("方案", "12-18s", "将允许的奶液来源倒入恒温杯。"),
-        ("证明", "18-24s", "准备完成后，经圆形出液口倒入独立的干净奶瓶。"),
-        ("行动号召", "24-30s", "收藏这套更从容的夜间准备方法。"),
-    ]
+def _normalize_sections(value: Any, *, fallback_sections: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    fallback_sections = fallback_sections or mock_script_copy("fallback")["sections"]
     raw = value if isinstance(value, list) else []
     sections: list[dict[str, Any]] = []
-    for index, (role, timing, voiceover) in enumerate(defaults, start=1):
+    for index, fallback in enumerate(fallback_sections[:5], start=1):
+        role = str(fallback.get("role") or "")
+        timing = str(fallback.get("timing") or "")
+        voiceover = str(fallback.get("voiceover_zh") or "")
         item = raw[index - 1] if index - 1 < len(raw) and isinstance(raw[index - 1], dict) else {}
         chinese_line = _clean_voiceover(str(item.get("voiceover_zh") or item.get("voiceover_en") or voiceover))
         sections.append(
@@ -122,9 +139,9 @@ def _normalize_sections(value: Any) -> list[dict[str, Any]]:
                 "role": role,
                 "timing": timing,
                 "voiceover_zh": chinese_line or _default_chinese_voiceover(index),
-                "scene_zh": str(item.get("scene_zh") or _default_scene(index)),
-                "action_zh": _default_action(index) if index in {3, 4} else str(item.get("action_zh") or _default_action(index)),
-                "story_beat_zh": str(item.get("story_beat_zh") or _default_story_beat(index)),
+                "scene_zh": str(item.get("scene_zh") or fallback.get("scene_zh") or _default_scene(index)),
+                "action_zh": _default_action(index) if index in {3, 4} else str(item.get("action_zh") or fallback.get("action_zh") or _default_action(index)),
+                "story_beat_zh": str(item.get("story_beat_zh") or fallback.get("story_beat_zh") or _default_story_beat(index)),
                 "subtitle_zh": chinese_line or _default_chinese_voiceover(index),
                 "selling_points": _string_list(item.get("selling_points"), []),
             }

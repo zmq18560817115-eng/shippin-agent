@@ -373,3 +373,35 @@ def test_independent_content_agents_preserve_distinct_user_intent(tmp_path: Path
         joined = str(script)
         assert "98°C" not in joined
         assert "独立" in script["sections"][3]["action_zh"]
+
+
+def test_standalone_content_agents_reject_empty_default_generation(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "empty-input.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        responses = {
+            action: client.post("/api/v2/agents/run", json={"action": action, "mock": True})
+            for action in (
+                "analysis", "research", "strategy", "script", "script_breakdown",
+                "storyboard", "asset", "production", "review", "feedback",
+            )
+        }
+
+    assert all(response.status_code == 422 for response in responses.values())
+    assert all("不会用默认模板" in response.json()["detail"] for response in responses.values())
+
+
+def test_real_script_normalizer_fallback_preserves_user_scenario() -> None:
+    from tools.llm.doubao_script import _normalize_sections
+    from tools.llm.mock_artifacts import mock_script_copy
+
+    fallback = mock_script_copy(
+        "fallback-test",
+        creative_request="高铁旅行途中，新手照护者携带宝宝出行",
+    )["sections"]
+    sections = _normalize_sections({}, fallback_sections=fallback)
+
+    assert "高铁" in sections[0]["scene_zh"]
+    assert "行程" in sections[0]["voiceover_zh"]
+    assert "卧室" not in str(sections)

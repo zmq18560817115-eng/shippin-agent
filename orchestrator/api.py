@@ -723,6 +723,27 @@ def _creative_brief(request: AgentRunRequest) -> dict[str, str]:
     }
 
 
+def _require_standalone_agent_input(request: AgentRunRequest, action: str) -> None:
+    if request.project_id or action in {"collector", "orchestrator"}:
+        return
+    if (request.source_text or "").strip() or (request.prompt or "").strip() or request.input_json:
+        return
+    labels = {
+        "analysis": "视频转写、素材说明或链接",
+        "research": "研究样本与背景",
+        "strategy": "产品事实与传播目标",
+        "script": "脚本创作需求",
+        "script_breakdown": "待拆解脚本",
+        "storyboard": "脚本或分镜需求",
+        "asset": "镜头素材需求",
+        "production": "单镜视频 Prompt",
+        "review": "待审核脚本或内容",
+        "feedback": "复盘反馈",
+    }
+    if action in labels:
+        raise HTTPException(status_code=422, detail=f"请填写{labels[action]}，系统不会用默认模板代替你的需求")
+
+
 @app.post("/api/v2/admin/runtime/probe")
 def probe_runtime_provider(request: RuntimeProbeRequest) -> dict[str, Any]:
     provider = request.provider.strip().casefold()
@@ -861,6 +882,7 @@ def _feedback_insights(text: str) -> dict[str, Any]:
 def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     standalone = not request.project_id
     action = request.action.strip().casefold()
+    _require_standalone_agent_input(request, action)
     project_id = _validate_project_id(request.project_id or _new_standalone_id())
     if standalone and action not in {"collector", "orchestrator"}:
         queue.ensure_project(
