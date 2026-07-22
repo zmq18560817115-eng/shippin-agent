@@ -749,6 +749,7 @@ def _build_final_qa_report(
         "output_file_playable": _is_playable_mp4(output_path),
         "source_clips_vertical": _source_clips_vertical(render_report),
         "review_frames_sampled": len(render_report.get("review_frame_paths") or []) >= 3,
+        "automated_visual_qa": str((render_report.get("automated_visual_qa") or {}).get("status") or "NEEDS_REVIEW") != "BLOCKED",
         "human_visual_review": _approved_visual_review(visual_review),
     }
     failed = [name for name, passed in checks.items() if not passed]

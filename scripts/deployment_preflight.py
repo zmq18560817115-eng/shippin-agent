@@ -157,6 +157,10 @@ def main() -> int:
             "ok": asr_ready,
             "detail": "local faster-whisper ready" if local_asr_ready else ("Volcengine ASR configured" if cloud_asr_ready else "subtitle-free videos cannot complete analysis until cloud or local ASR is configured"),
         },
+        "visual_ocr": {
+            "ok": bool(shutil.which("tesseract")),
+            "detail": "Tesseract OCR ready" if shutil.which("tesseract") else "optional but recommended: install Tesseract for automated 98°F/98°C checks; human review remains mandatory",
+        },
         "budget_enforced": {"ok": budget_mode == "enforce", "detail": f"budget_mode={budget_mode}"},
     }
     checks.update(security_checks())

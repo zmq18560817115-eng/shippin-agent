@@ -105,3 +105,11 @@ def test_final_qa_requires_human_visual_review(tmp_path: Path) -> None:
     report = _build_final_qa_report("review-required", tmp_path, render, plan, shots)
     assert report["status"] == "BLOCKED"
     assert "human_visual_review" in report["failed_checks"]
+
+
+def test_final_qa_blocks_automated_visual_failure(tmp_path: Path) -> None:
+    render, plan, shots = _inputs(tmp_path)
+    render["automated_visual_qa"] = {"status": "BLOCKED", "summary": "OCR detected 98 C"}
+    report = _build_final_qa_report("ocr-block", tmp_path, render, plan, shots, visual_review=_visual_review())
+    assert report["status"] == "BLOCKED"
+    assert "automated_visual_qa" in report["failed_checks"]

@@ -13,6 +13,7 @@ from libshared import artifacts
 from libshared.paths import ROOT
 from tools.base_tool import ToolContext, ToolResult, ToolNotConfiguredError
 from tools.tool_registry import register_tool
+from tools.video.visual_qa import inspect_review_frames
 
 DELIVERY_WIDTH = 720
 DELIVERY_HEIGHT = 1280
@@ -64,6 +65,10 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "ffprobe": ffprobe,
         "input_probes": input_probes,
         "review_frame_paths": [path.as_posix() for path in review_frames],
+        "automated_visual_qa": inspect_review_frames(
+            [path.as_posix() for path in review_frames],
+            product_id=str((payload.get("script_copy") or {}).get("product_id") or payload.get("product_id") or ""),
+        ),
     }
     artifacts.validate_artifact("render_report", render_report)
     return ToolResult.success(
