@@ -3079,7 +3079,7 @@ pre {
 
 .standaloneLauncher {
   display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 2fr) auto;
+  grid-template-columns: minmax(210px, 0.75fr) minmax(170px, 0.55fr) minmax(300px, 1.7fr) auto;
   gap: 12px;
   align-items: start;
   margin: 18px 0;
@@ -3133,6 +3133,11 @@ pre {
   grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
+}
+
+.standaloneLauncher [data-standalone-product] {
+  width: 100%;
+  min-height: 44px;
 }
 
 .storyboardContactSheet {

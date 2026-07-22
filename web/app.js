@@ -493,6 +493,9 @@ async function runStandaloneLauncher(button) {
   const launcher = button.closest("[data-standalone-action]");
   const action = launcher.dataset.standaloneAction;
   const prompt = launcher.querySelector("[data-standalone-prompt]").value.trim();
+  const productId = launcher.querySelector("[data-standalone-product]")?.value.trim()
+    || $("#productSelect").value
+    || "便携恒温杯";
   const resultHost = launcher.querySelector("[data-standalone-result]");
   if (!prompt) {
     toast("请先输入本功能的需求或 Prompt", "error");
@@ -508,7 +511,7 @@ async function runStandaloneLauncher(button) {
       method: "POST",
       body: JSON.stringify({
         action,
-        product_id: $("#productSelect").value || "便携恒温杯",
+        product_id: productId,
         prompt,
         source_text: prompt,
         provider: "auto",
