@@ -1161,33 +1161,14 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         script = request.input_json
         if script is None:
             source = (request.source_text or request.prompt or "").strip()
-            if not source:
-                raise HTTPException(status_code=400, detail="独立审核需要脚本文本、内容需求或 script_copy JSON")
-            script_result = tool_registry.execute_tool(
-                "doubao_script",
-                {
-                    "project_id": project_id,
-                    "product_id": request.product_id,
-                    "analysis_report": {
-                        "project_id": project_id,
-                        "voiceover_text": source,
-                        "hook_3s": source[:120],
-                        "structure": [],
-                    },
-                    "strategy_brief": {
-                        "content_direction": source,
-                        "product_guardrails": product_library.product_guardrail_text(request.product_id),
-                    },
-                },
-                context={"mock": request.mock, "run_root": root},
-            )
-            if not script_result.ok:
-                error = script_result.error or {"message": "script foundation failed"}
-                raise HTTPException(status_code=422, detail=error.get("message") or error)
-            script = script_result.data["script_copy"]
-            artifacts.save_artifact(project_id, "script_copy", script, run_root=root)
+            if not source and not standalone:
+                script = _load_artifact(project_id, "script_copy")
+            else:
+                script = {}
         payload.update(
             {
+                "product_id": request.product_id,
+                "product_guardrails": product_library.product_guardrail_text(request.product_id),
                 "script_copy": script,
                 "analysis_report": _load_artifact_or_none(project_id, "analysis_report") or {},
                 "review_source_text": (request.source_text or request.prompt or "").strip(),

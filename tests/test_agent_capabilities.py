@@ -365,7 +365,7 @@ def test_independent_content_agents_preserve_distinct_user_intent(tmp_path: Path
 
     review = unsafe_review.json()["artifact"]
     assert review["status"] == "BLOCKED"
-    assert all(comment.startswith("源需求：") for comment in review["comments"])
+    assert all(comment.startswith("源稿：") for comment in review["comments"])
     assert any("98°F" in comment for comment in review["comments"])
     assert any("独立物体" in comment for comment in review["comments"])
 
@@ -403,6 +403,45 @@ def test_standalone_script_and_storyboard_support_non_library_product_context(tm
     assert "warming cup" not in str(storyboard).casefold()
     assert "baby bottle" not in str(storyboard).casefold()
     assert "98 degrees fahrenheit" not in str(storyboard).casefold()
+
+
+def test_standalone_review_audits_original_text_without_rewriting_script(tmp_path: Path, monkeypatch) -> None:
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "direct-review.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    source = "折叠雨伞是全网第一，保证百分百防风。"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={"action": "review", "product_id": "折叠雨伞", "source_text": source, "mock": True},
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["artifact"]["status"] == "BLOCKED"
+    assert payload["artifact"]["input_summary"] == source
+    assert any("绝对化" in comment for comment in payload["artifact"]["comments"])
+    assert not (runs_root / payload["project_id"] / "artifacts" / "script_copy.json").exists()
+
+
+def test_generic_review_does_not_apply_warming_cup_temperature_rule(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "generic-review.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "review",
+                "product_id": "厨房温度计",
+                "source_text": "演示厨房温度计测量烤箱内部达到 98°C。",
+                "mock": True,
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["artifact"]["status"] == "PASS"
 
 
 def test_standalone_content_agents_reject_empty_default_generation(tmp_path: Path, monkeypatch) -> None:
