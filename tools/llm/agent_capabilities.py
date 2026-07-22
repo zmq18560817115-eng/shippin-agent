@@ -56,15 +56,21 @@ def competitor_research(payload: dict[str, Any], context: ToolContext) -> ToolRe
 @register_tool("content_strategy")
 def content_strategy(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     project_id = str(payload["project_id"])
+    product_id = str(payload.get("product_id") or "当前产品")
     research = payload.get("research_brief") or {}
     guardrails = _object(payload.get("product_guardrails"))
+    warming_product = _is_warming_product(product_id, guardrails)
     if context.mock:
         research_text = json.dumps(research, ensure_ascii=False)
         situation = _situation(research_text)
         body = {
             "content_direction": situation["direction"],
             "target_audience": [situation["audience"]],
-            "selling_point_priority": ["便携机身", "准备步骤清晰", situation["use_case"]],
+            "selling_point_priority": (
+                ["便携机身", "准备步骤清晰", situation["use_case"]]
+                if warming_product
+                else [f"{product_id}在目标场景中的可见作用", "用户输入中已确认的产品事实", situation["use_case"]]
+            ),
             "hook_options": [situation["hook"]],
             "cta_options": [situation["cta"]],
             "forbidden_claims": ["医疗效果", "保证性性能宣称", "贬低竞品", "98°C"],
@@ -75,12 +81,14 @@ def content_strategy(payload: dict[str, Any], context: ToolContext) -> ToolResul
             context,
             "strategy",
             "你是品牌安全内容策略 Agent。必须以获批产品事实为依据，严格返回 JSON，所有字段值使用简体中文。",
-            "研究结论：" + json.dumps(research, ensure_ascii=False) + "\n产品安全规则：" + json.dumps(guardrails, ensure_ascii=False)
+            f"策略对象：{product_id}。研究结论：" + json.dumps(research, ensure_ascii=False) + "\n产品安全规则：" + json.dumps(guardrails, ensure_ascii=False)
+            + ("\n产品尚无结构化事实，不得自行补造参数、材质、认证、功效或使用步骤。" if not guardrails else "")
             + "\n返回 content_direction、target_audience、selling_point_priority、hook_options、cta_options、forbidden_claims。",
         )
     artifact = {
         "version": "1.0",
         "project_id": project_id,
+        "product_id": product_id,
         "content_direction": str(body.get("content_direction") or "符合产品安全规则的照护者故事。"),
         "target_audience": _list(body.get("target_audience")),
         "selling_point_priority": _list(body.get("selling_point_priority")),
@@ -179,6 +187,11 @@ def _object(value: Any) -> dict[str, Any]:
             return {"说明": value.strip()}
         return parsed if isinstance(parsed, dict) else {"说明": parsed}
     return {}
+
+
+def _is_warming_product(product_id: str, guardrails: dict[str, Any]) -> bool:
+    normalized = f"{product_id} {json.dumps(guardrails, ensure_ascii=False)}".casefold()
+    return any(token in normalized for token in ("恒温杯", "温奶", "warming cup", "bottle warmer", "98°f", "98 f"))
 
 
 def _intent(role: str) -> str:

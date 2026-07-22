@@ -15,7 +15,10 @@ INDEPENDENT_INPUT_SCHEMAS: dict[str, list[dict[str, Any]]] = {
     ],
     "analysis": [{"name": "source_text", "label": "视频转写、素材说明或链接", "type": "textarea", "required": True, "placeholder": "粘贴转写、视频内容说明或参考链接，Agent 将拆解结构、节奏和镜头。"}],
     "research": [{"name": "source_text", "label": "研究样本与背景", "type": "textarea", "required": True, "placeholder": "输入竞品转写、市场观察、目标受众或已有分析结论。"}],
-    "strategy": [{"name": "source_text", "label": "产品事实与传播目标", "type": "textarea", "required": True, "placeholder": "输入产品卖点、目标用户、平台和希望达成的内容目标。"}],
+    "strategy": [
+        {"name": "product_id", "label": "产品名称或策略主题", "type": "text", "required": True, "placeholder": "例如便携恒温杯、折叠雨伞或品牌故事"},
+        {"name": "source_text", "label": "产品事实与传播目标", "type": "textarea", "required": True, "placeholder": "输入已确认卖点、目标用户、平台和希望达成的内容目标。"},
+    ],
     "script": [
         {"name": "product_id", "label": "产品名称或创作主题", "type": "text", "required": True, "placeholder": "例如便携恒温杯、婴儿背带或品牌故事"},
         {"name": "prompt", "label": "脚本创作需求", "type": "textarea", "required": True, "placeholder": "说明产品事实、受众、场景、剧情方向、平台和时长。"},

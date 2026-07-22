@@ -250,6 +250,59 @@ def test_standalone_analysis_rejects_unsupported_video_url(tmp_path: Path, monke
     assert "当前支持 TikTok" in response.json()["detail"]
 
 
+def test_standalone_research_tiktok_url_uses_captured_transcript(tmp_path: Path, monkeypatch) -> None:
+    report_path = tmp_path / "materials" / "tt_456" / "analysis_report.json"
+    report_path.parent.mkdir(parents=True)
+    transcript = "创作者在机场登机口展示收纳流程，先整理证件，再把随身用品放入侧袋。"
+    report_path.write_text(
+        json.dumps(
+            {
+                "version": "2.0",
+                "project_id": "material-tt_456",
+                "source_link_id": None,
+                "material_meta_ref": "tt_456",
+                "hook_3s": "登机广播响起",
+                "structure": ["钩子", "步骤", "结果"],
+                "voiceover_text": transcript,
+                "pacing": [{"start_s": 0, "end_s": 6, "role": "钩子"}],
+                "keyframes": [],
+                "shot_breakdown": [],
+                "fingerprint": "research-capture-test",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "url-research.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    def fake_capture(request):
+        assert request.analysis_only is True
+        return {
+            "ok": True,
+            "material": {"material_id": "tt_456", "breakdown_path": report_path.as_posix()},
+            "readiness": {"ready": True},
+        }
+
+    monkeypatch.setattr(api, "collect_tiktok_and_run", fake_capture)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "research",
+                "source_text": "https://www.tiktok.com/@demo/video/456",
+                "mock": True,
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    artifact = response.json()["artifact"]
+    assert transcript in artifact["source_summary"]
+    assert "tt_456" in artifact["source_refs"]
+    assert response.json()["meta"]["source_mode"] == "tiktok_capture"
+
+
 def test_standalone_non_pour_production_does_not_leak_action_references(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "standalone-production.db"))
     monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
@@ -460,9 +513,14 @@ def test_standalone_script_and_storyboard_support_non_library_product_context(tm
             "/api/v2/agents/run",
             json={"action": "storyboard", "product_id": "折叠雨伞", "prompt": brief, "mock": True},
         )
+        strategy_response = client.post(
+            "/api/v2/agents/run",
+            json={"action": "strategy", "product_id": "折叠雨伞", "source_text": brief, "mock": True},
+        )
 
     assert script_response.status_code == 200, script_response.text
     assert storyboard_response.status_code == 200, storyboard_response.text
+    assert strategy_response.status_code == 200, strategy_response.text
     script = script_response.json()["artifact"]
     storyboard = storyboard_response.json()["artifact"]
     assert script["product_id"] == "折叠雨伞"
@@ -474,6 +532,11 @@ def test_standalone_script_and_storyboard_support_non_library_product_context(tm
     assert "warming cup" not in str(storyboard).casefold()
     assert "baby bottle" not in str(storyboard).casefold()
     assert "98 degrees fahrenheit" not in str(storyboard).casefold()
+    strategy = strategy_response.json()["artifact"]
+    assert strategy["product_id"] == "折叠雨伞"
+    assert "折叠雨伞" in str(strategy["selling_point_priority"])
+    assert "便携机身" not in str(strategy["selling_point_priority"])
+    assert "准备步骤清晰" not in str(strategy["selling_point_priority"])
 
 
 def test_standalone_review_audits_original_text_without_rewriting_script(tmp_path: Path, monkeypatch) -> None:

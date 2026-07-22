@@ -921,6 +921,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     root = _run_root(project_id)
     payload: dict[str, Any] = {"project_id": project_id}
     creative_brief = _creative_brief(request)
+    execution_meta: dict[str, Any] = {}
 
     if action == "orchestrator":
         goal = (request.prompt or request.source_text or "").strip()
@@ -1057,13 +1058,55 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         tool_name, artifact_name = "doubao_analyze", "analysis_report"
     elif action == "research":
         analysis = _load_artifact_or_none(project_id, "analysis_report") or {}
+        source_input = (request.source_text or request.prompt or "").strip()
+        if standalone and source_input.startswith(("http://", "https://")):
+            if "tiktok.com/" not in source_input.casefold():
+                raise HTTPException(status_code=422, detail="参考链接研究当前支持 TikTok 链接；其他来源请粘贴转写或研究样本")
+            intake = collect_tiktok_and_run(
+                TikTokIntakeRunRequest(
+                    url=source_input,
+                    product_id=request.product_id,
+                    source_query="standalone_research",
+                    source_target_type="manual_url",
+                    mock=request.mock,
+                    analysis_only=True,
+                )
+            )
+            material = dict(intake.get("material") or {})
+            breakdown_path = Path(str(material.get("breakdown_path") or ""))
+            if not breakdown_path.is_file():
+                raise HTTPException(
+                    status_code=422,
+                    detail="参考视频已保存，但没有取得字幕或 ASR 转写，暂时无法形成可信研究；请补充转写后重试",
+                )
+            try:
+                analysis = json.loads(breakdown_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise HTTPException(status_code=500, detail="参考视频分析报告读取失败，请重新分析该素材") from exc
+            analysis["project_id"] = project_id
+            artifacts.validate_artifact("analysis_report", analysis)
+            artifacts.save_artifact(project_id, "analysis_report", analysis, run_root=root)
+            execution_meta.update(
+                {
+                    "source_mode": "tiktok_capture",
+                    "source_material_id": material.get("material_id"),
+                }
+            )
         payload.update(
             {
-                "source_text": request.source_text
+                "source_text": (
+                    str(analysis.get("voiceover_text") or "")
+                    if execution_meta.get("source_mode") == "tiktok_capture"
+                    else request.source_text
+                )
                 or analysis.get("voiceover_text")
                 or project.get("source_url")
                 or "",
-                "source_refs": request.source_refs
+                "source_refs": (
+                    [str(execution_meta["source_material_id"]), source_input]
+                    if execution_meta.get("source_material_id")
+                    else request.source_refs
+                )
                 or [value for value in (project.get("source_material_id"), project.get("source_url")) if value],
             }
         )
@@ -1088,6 +1131,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         )
         payload.update(
             {
+                "product_id": request.product_id,
                 "research_brief": research_brief,
                 "product_guardrails": product_library.product_guardrail_text(project["product_id"]),
             }
@@ -1280,7 +1324,7 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         "artifact_name": artifact_name,
         "artifact": artifact,
         "download_url": f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
-        "meta": _agent_execution_meta(action, creative_brief, **result.meta),
+        "meta": _agent_execution_meta(action, creative_brief, **result.meta, **execution_meta),
     }
 
 
