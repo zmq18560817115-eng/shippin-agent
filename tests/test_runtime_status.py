@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.util
+
 from fastapi.testclient import TestClient
 
 from orchestrator.api import app
@@ -32,6 +34,18 @@ def test_runtime_reports_local_asr_without_cloud_secret(monkeypatch) -> None:
     monkeypatch.delenv("VOLCENGINE_ASR_APP_KEY", raising=False)
     monkeypatch.delenv("VOLCENGINE_ASR_ACCESS_KEY", raising=False)
     monkeypatch.setenv("VAF_LOCAL_ASR_ENABLED", "true")
+
+    # faster-whisper 是可选依赖，不在默认 requirements.txt/CI 中安装。
+    # 运行时只有在包真正可导入时才把本地 ASR 标记为 configured，
+    # 因此这里模拟该包已安装，其余模块的探测委托给真实实现。
+    real_find_spec = importlib.util.find_spec
+
+    def fake_find_spec(name, *args, **kwargs):
+        if name == "faster_whisper":
+            return object()
+        return real_find_spec(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
 
     with TestClient(app) as client:
         payload = client.get("/api/v2/runtime").json()
