@@ -3562,6 +3562,50 @@ pre {
   margin-top: 8px;
 }
 
+.standaloneAssetResult {
+  display: grid;
+  grid-template-columns: minmax(160px, 240px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.assetIdentityPreview {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.assetIdentityPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.assetReviewSummary {
+  display: grid;
+  gap: 8px;
+}
+
+.assetReviewSummary p,
+.assetReviewSummary small {
+  margin: 0;
+  color: var(--muted);
+}
+
+.standaloneAssetResult > .agentResultCards {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .standaloneAssetResult {
+    grid-template-columns: 1fr;
+  }
+}
+
 .standaloneVideoResult {
   display: grid;
   justify-items: start;

@@ -561,7 +561,16 @@ function updateIndependentAgentUI() {
   }
   if (name === "asset_manifest") {
     const frames = Array.isArray(artifact.hero_frames) ? artifact.hero_frames : [];
-    return `<div class="agentResultCards">${frames.map((frame) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(frame.number || "-")} 素材</strong><p>${escapeHtml(frame.reference_reason || frame.status || "已匹配")}</p></article>`).join("") || "<p>暂无素材匹配结果。</p>"}</div>`;
+    const identity = frames.find((frame) => frame.preview_url) || frames[0];
+    const warnings = Array.isArray(artifact.warnings) ? artifact.warnings : [];
+    return `<div class="standaloneAssetResult">
+      <div class="assetIdentityPreview">${identity?.preview_url ? `<img src="${escapeAttr(identity.preview_url)}" alt="${escapeAttr(artifact.product_id || "产品")}身份参考" loading="lazy" />` : '<span>暂无产品身份图</span>'}</div>
+      <div class="assetReviewSummary"><strong>${escapeHtml(artifact.product_id || "产品")} · 产品身份锚点</strong>
+        <p>${escapeHtml(identity?.reference_reason || "用于核对产品外观，不代表场景生成图。")}</p>
+        ${warnings.map((item) => `<small>${escapeHtml(item)}</small>`).join("")}
+      </div>
+      <div class="agentResultCards">${frames.map((frame) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(frame.number || "-")} 场景需求</strong><p>${escapeHtml(frame.scene_brief || "请在分镜节点补充场景与动作")}</p><small>${frame.scene_preview_available ? "场景预览已生成" : "待场景生成，当前仅锁定产品身份"}</small></article>`).join("") || "<p>暂无素材匹配结果。</p>"}</div>
+    </div>`;
   }
   if (name === "shot_report") {
     const shots = Array.isArray(artifact.shots) ? artifact.shots : [];

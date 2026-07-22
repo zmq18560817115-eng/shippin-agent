@@ -1334,6 +1334,8 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         script_copy = payload.get("script_copy") if isinstance(payload.get("script_copy"), dict) else None
         artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
     artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
+    if artifact_name == "asset_manifest":
+        _attach_preview_urls(project_id, artifact)
     queue.record_event(
         project_id=project_id,
         event_type="agent.capability_completed",

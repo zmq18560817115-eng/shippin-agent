@@ -397,6 +397,7 @@ def test_orchestrator_and_asset_are_independently_runnable(tmp_path: Path, monke
             },
         )
         asset_download = client.get(asset.json()["download_url"])
+        asset_preview = client.get(asset.json()["artifact"]["hero_frames"][0]["preview_url"])
 
     assert orchestrator.status_code == 200, orchestrator.text
     assert orchestrator.json()["artifact_name"] == "orchestration_plan"
@@ -408,6 +409,8 @@ def test_orchestrator_and_asset_are_independently_runnable(tmp_path: Path, monke
     assert asset.json()["artifact"]["hero_frames"][0]["status"] == "needs_review"
     assert asset.json()["artifact"]["hero_frames"][0]["scene_preview_available"] is False
     assert asset_download.status_code == 200
+    assert asset_preview.status_code == 200
+    assert asset_preview.content
 
 
 def test_independent_agent_rejects_unknown_creative_freedom(tmp_path: Path, monkeypatch) -> None:
