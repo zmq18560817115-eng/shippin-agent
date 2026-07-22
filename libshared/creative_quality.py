@@ -28,7 +28,7 @@ def assess_script(script: dict[str, Any]) -> dict[str, Any]:
             [
                 _check("fill_direction", "倒入恒温杯" in solution, "方案镜头必须明确液体倒入恒温杯"),
                 _check("pour_direction", "圆形出液口" in proof and "奶瓶" in proof, "证明镜头必须明确从圆形出液口倒入独立奶瓶"),
-                _check("temperature", "98°C" not in str(script) and "98℃" not in str(script), "禁止出现 98°C，只允许 98°F"),
+                _check("temperature", "98°C" not in str(script) and "98℃" not in str(script), "温标只能使用 98°F 华氏度"),
             ]
         )
     return _report("script", checks)

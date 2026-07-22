@@ -405,3 +405,22 @@ def test_real_script_normalizer_fallback_preserves_user_scenario() -> None:
     assert "高铁" in sections[0]["scene_zh"]
     assert "行程" in sections[0]["voiceover_zh"]
     assert "卧室" not in str(sections)
+
+
+def test_real_storyboard_normalizer_fallback_preserves_script_scenario() -> None:
+    from tools.llm.doubao_shotplan import _normalize_shots
+    from tools.llm.mock_artifacts import mock_script_copy, mock_shot_plan
+
+    script = mock_script_copy("storyboard-fallback", creative_request="高铁旅行途中，新手照护者携带宝宝出行")
+    fallback = mock_shot_plan("storyboard-fallback", script)
+    shots = _normalize_shots(
+        {},
+        script,
+        scene_continuity=fallback["scene_continuity"],
+        character_continuity=fallback["character_continuity"],
+        fallback_shots=fallback["shots"],
+    )
+
+    assert "高铁" in shots[0]["visual"]
+    assert "高铁" in shots[2]["visual"]
+    assert "卧室" not in " ".join(shot["visual"] for shot in shots)

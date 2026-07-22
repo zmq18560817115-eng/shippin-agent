@@ -34,6 +34,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     script_copy = payload.get("script_copy") or mock_script_copy(project_id)
     product_facts = product_library.product_guardrail_text(str(script_copy.get("product_id") or ""))
     rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
+    fallback_plan = mock_shot_plan(project_id, script_copy)
     response, meta = ark.chat_json(
         context,
         api_key_names=("DOUBAO_API_KEY", "ARK_DOUBAO_API_KEY", "ARK_API_KEY"),
@@ -66,8 +67,9 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             },
         ],
     )
-    scene_continuity = str(response.get("scene_continuity") or "one stable night feeding-prep scene")
-    character_continuity = str(response.get("character_continuity") or "same caregiver, wardrobe, hands, and props")
+    raw_shots = response.get("shots")
+    scene_continuity = str(response.get("scene_continuity") or fallback_plan.get("scene_continuity") or "同一生活场景与光线")
+    character_continuity = str(response.get("character_continuity") or fallback_plan.get("character_continuity") or "同一位照护者与服装道具")
     shot_plan = {
         "version": "2.0",
         "project_id": project_id,
@@ -76,11 +78,18 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         "scene_continuity": scene_continuity,
         "character_continuity": character_continuity,
         "shots": _normalize_shots(
-            response.get("shots"),
+            raw_shots,
             script_copy,
             scene_continuity=scene_continuity,
             character_continuity=character_continuity,
+            fallback_shots=fallback_plan.get("shots") or [],
         ),
+        "generation": {
+            "provider": "ark",
+            "model": str(meta.get("model") or "doubao"),
+            "prompt_version": "storyboard-v2-input-aware-fallback",
+            "structure_fallback_applied": not isinstance(raw_shots, list) or len(raw_shots) < 5,
+        },
     }
     artifacts.validate_artifact("shot_plan", shot_plan, script_copy=script_copy)
     return ToolResult.success(
@@ -111,20 +120,26 @@ def _normalize_shots(
     *,
     scene_continuity: str = "one stable feeding-prep scene",
     character_continuity: str = "same caregiver, wardrobe, hands, and props",
+    fallback_shots: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     raw = value if isinstance(value, list) else []
+    fallback_shots = fallback_shots or mock_shot_plan("fallback", script_copy).get("shots") or []
     motions = ("dolly_in", "static", "pan_right", "static", "dolly_out")
     shots: list[dict[str, Any]] = []
     for index, section in enumerate(script_copy.get("sections") or [], start=1):
         item = raw[index - 1] if index - 1 < len(raw) and isinstance(raw[index - 1], dict) else {}
+        fallback = fallback_shots[index - 1] if index - 1 < len(fallback_shots) else {}
         role = str(section.get("role") or "")
-        visual = _clean_temperature_text(str(item.get("visual") or _fallback_visual(index, role)))
-        visual_prompt = _clean_temperature_text(str(item.get("visual_prompt") or visual))
+        visual = _clean_temperature_text(str(item.get("visual") or fallback.get("visual") or _fallback_visual(index, role)))
+        visual_prompt = _clean_temperature_text(str(item.get("visual_prompt") or fallback.get("visual_prompt") or visual))
         # The two directional product-use shots are deterministic safety beats.
         # Free-form model copy is retained for the other three shots only.
         safety_fallback = index in {3, 4}
         if safety_fallback:
-            visual = _fallback_visual(index, role)
+            scenario_visual = str(fallback.get("visual") or "").strip()
+            visual = _clean_temperature_text(
+                f"{_fallback_visual(index, role)} Context from approved script: {scenario_visual}".strip()
+            )
             visual_prompt = visual
         prompt = visual_prompt if safety_fallback else _clean_temperature_text(str(item.get("seedance_prompt") or visual_prompt or visual))
         prompt = _lock_prompt(
@@ -141,8 +156,8 @@ def _normalize_shots(
                 "visual": visual,
                 "visual_prompt": visual_prompt,
                 "seedance_prompt": prompt,
-                "visual_zh": _fallback_visual_zh(index) if safety_fallback else _without_generated_text(str(item.get("visual_zh") or _fallback_visual_zh(index)), index),
-                "seedance_prompt_zh": _fallback_prompt_zh(index) if safety_fallback else _without_generated_text(str(item.get("seedance_prompt_zh") or _fallback_prompt_zh(index)), index),
+                "visual_zh": _clean_temperature_text(str(fallback.get("visual_zh") or _fallback_visual_zh(index))) if safety_fallback else _clean_temperature_text(_without_generated_text(str(item.get("visual_zh") or fallback.get("visual_zh") or _fallback_visual_zh(index)), index)),
+                "seedance_prompt_zh": _clean_temperature_text(str(fallback.get("seedance_prompt_zh") or _fallback_prompt_zh(index))) if safety_fallback else _clean_temperature_text(_without_generated_text(str(item.get("seedance_prompt_zh") or fallback.get("seedance_prompt_zh") or _fallback_prompt_zh(index)), index)),
                 "footage_type": "AI_VIDEO",
                 "camera_motion": {
                     "type": _motion_type(str(motion_value or motions[min(index - 1, len(motions) - 1)])),

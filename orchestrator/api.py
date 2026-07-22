@@ -1225,6 +1225,11 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         error = result.error or {"message": f"{tool_name} failed"}
         raise HTTPException(status_code=422, detail=error.get("message") or error)
     artifact = result.data[artifact_name]
+    if artifact_name == "script_copy":
+        artifact["quality_assessment"] = creative_quality.assess_script(artifact)
+    elif artifact_name == "shot_plan":
+        script_copy = payload.get("script_copy") if isinstance(payload.get("script_copy"), dict) else None
+        artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
     artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
     queue.record_event(
         project_id=project_id,

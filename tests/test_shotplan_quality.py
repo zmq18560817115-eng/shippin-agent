@@ -44,8 +44,9 @@ def test_real_shotplan_reads_product_facts_and_returns_five_shots(monkeypatch) -
 
     assert result.ok is True
     assert len(result.data["shot_plan"]["shots"]) == 5
-    assert result.data["shot_plan"]["scene_continuity"] == "one stable night feeding-prep scene"
-    assert result.data["shot_plan"]["character_continuity"] == "same caregiver, wardrobe, hands, and props"
+    assert "深夜卧室" in result.data["shot_plan"]["scene_continuity"]
+    assert "同一位" in result.data["shot_plan"]["character_continuity"]
+    assert result.data["shot_plan"]["generation"]["structure_fallback_applied"] is True
     assert "Approved product facts" in captured["messages"][1]["content"]
 
 
