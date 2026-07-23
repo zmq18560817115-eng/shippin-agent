@@ -2516,6 +2516,18 @@ def _collect_relevant_job_items(job: dict[str, Any]) -> dict[str, Any]:
             quality = relevance.quality_score(item, scored)
             minimum_plays = max(0, int(os.environ.get("VAF_TIKTOK_MIN_PLAYS") or 5000))
             has_play_metric = item.get("play_count") not in (None, "")
+            require_play_metric = _env_bool("VAF_TIKTOK_REQUIRE_PLAY_METRIC", True) and not bool(job["mock"])
+            if require_play_metric and not has_play_metric:
+                queue.upsert_collection_item(
+                    job_id,
+                    source_url=url,
+                    item={**item, "relevance": scored, "quality": quality, "discovery_query": discovery_query},
+                    relevance_score=float(scored["score"]),
+                    status="filtered",
+                    error_message="缺少真实播放量，无法证明素材热度",
+                    db_path=_db_path(),
+                )
+                continue
             if has_play_metric and int(quality["play_count"]) < minimum_plays:
                 queue.upsert_collection_item(
                     job_id,
@@ -2920,13 +2932,13 @@ def batch_material_action(request: MaterialBatchActionRequest) -> dict[str, Any]
     failures: list[dict[str, str]] = []
     for material_id in material_ids:
         try:
-            meta = manual_import.load_material_meta(material_id, root)
             if request.action == "delete":
-                references = _material_project_references(material_id)
+                references = _detach_terminal_material_references(material_id)
                 if references:
-                    raise ValueError(f"已被项目引用，不能删除：{', '.join(references[:3])}")
+                    raise ValueError(f"素材仍被进行中的项目引用，不能删除：{', '.join(references[:3])}")
                 manual_import.delete_material(material_id, root)
             else:
+                meta = manual_import.load_material_meta(material_id, root)
                 intake = dict(meta.get("asset_intake") or {})
                 if request.action == "quarantine":
                     intake["moderation_status"] = "quarantined"
@@ -2939,7 +2951,7 @@ def batch_material_action(request: MaterialBatchActionRequest) -> dict[str, Any]
                     status = str(intake.pop("status_before_quarantine", "raw") or "raw")
                 manual_import.update_material_meta(material_id, {"processing_status": status, "asset_intake": intake}, root)
             completed.append(material_id)
-        except (FileNotFoundError, ValueError) as exc:
+        except (FileNotFoundError, OSError, ValueError) as exc:
             failures.append({"material_id": material_id, "message": str(exc)})
     queue.record_event(
         event_type=f"collector.materials_{request.action}",
@@ -4743,6 +4755,33 @@ def _material_project_references(material_id: str) -> list[str]:
         if str(payload.get("source_material_id") or "") == material_id:
             references.append(str(row["id"]))
     return references
+
+
+def _detach_terminal_material_references(material_id: str) -> list[str]:
+    """Detach historical references while preserving active production safety."""
+    queue.init_db(db_path=_db_path())
+    active_references: list[str] = []
+    terminal_statuses = {"succeeded", "failed", "cancelled"}
+    with queue.get_conn(_db_path()) as conn:
+        rows = conn.execute("SELECT id, status, payload_json FROM projects").fetchall()
+        for row in rows:
+            try:
+                payload = json.loads(str(row["payload_json"] or "{}"))
+            except json.JSONDecodeError:
+                continue
+            if str(payload.get("source_material_id") or "") != material_id:
+                continue
+            project_id = str(row["id"])
+            if str(row["status"] or "") not in terminal_statuses:
+                active_references.append(project_id)
+                continue
+            payload["deleted_source_material_id"] = material_id
+            payload["source_material_id"] = None
+            conn.execute(
+                "UPDATE projects SET payload_json = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(payload, ensure_ascii=False), _utc_now(), project_id),
+            )
+    return active_references
 
 
 def _safe_run_file(run_root: Path, relative_path: str) -> Path:

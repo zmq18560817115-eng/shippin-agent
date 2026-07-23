@@ -152,12 +152,11 @@ def delete_material(material_id: str, library_root: str | os.PathLike[str] | Non
         material_dir.relative_to(root)
     except ValueError as exc:
         raise ValueError("invalid material path") from exc
-    if not material_dir.is_dir():
-        raise FileNotFoundError(f"material not found: {material_id}")
     index = load_library_index(root)
     index["items"] = [item for item in index.get("items", []) if str(item.get("material_id")) != material_id]
     artifacts.validate_artifact("library_index", index)
-    shutil.rmtree(material_dir)
+    if material_dir.is_dir():
+        shutil.rmtree(material_dir)
     _atomic_write_json(root / LIBRARY_INDEX_NAME, index)
 
 

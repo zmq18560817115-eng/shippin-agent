@@ -2119,8 +2119,14 @@ async function batchMaterialAction(action) {
       method: "POST",
       body: JSON.stringify({ material_ids: materialIds, action, reason }),
     });
-    state.selectedMaterials.clear();
-    toast(payload.failures.length ? `${labels[action]}完成 ${payload.completed.length} 条，失败 ${payload.failures.length} 条` : `已${labels[action]} ${payload.completed.length} 条素材`, payload.failures.length ? "error" : "success");
+    state.selectedMaterials = new Set((payload.failures || []).map((item) => item.material_id));
+    const firstFailure = payload.failures?.[0]?.message;
+    toast(
+      payload.failures.length
+        ? `${labels[action]}完成 ${payload.completed.length} 条，失败 ${payload.failures.length} 条：${firstFailure || "请检查素材状态"}`
+        : `已${labels[action]} ${payload.completed.length} 条素材`,
+      payload.failures.length ? "error" : "success",
+    );
     await loadMaterials();
   } catch (error) {
     toast(error.message, "error");

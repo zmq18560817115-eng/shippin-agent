@@ -1,3 +1,6 @@
+import json
+import shutil
+
 from fastapi.testclient import TestClient
 
 from orchestrator.api import app
@@ -180,5 +183,61 @@ def test_batch_delete_refuses_material_referenced_by_project(monkeypatch, tmp_pa
         response = client.post("/api/v2/collect/materials/batch-action", json={"material_ids": [material_id], "action": "delete"})
         assert response.status_code == 200
         assert response.json()["completed"] == []
-        assert "已被项目引用" in response.json()["failures"][0]["message"]
+        assert "进行中的项目引用" in response.json()["failures"][0]["message"]
         assert (library_root / material_id / "material_meta.json").is_file()
+
+
+def test_batch_delete_cleans_stale_index_entry(monkeypatch, tmp_path):
+    library_root = tmp_path / "materials"
+    monkeypatch.setenv("VAF_MATERIAL_LIBRARY_ROOT", str(library_root))
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "stale-index.db"))
+    imported = manual_import.import_links(
+        [{"url": "https://www.tiktok.com/@demo/video/998", "caption": "stale material"}],
+        product_id="便携恒温杯",
+        source_keyword="恒温杯",
+        library_root=library_root,
+    )
+    material_id = imported["items"][0]["material_id"]
+    shutil.rmtree(library_root / material_id)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/collect/materials/batch-action",
+            json={"material_ids": [material_id], "action": "delete"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["completed"] == [material_id]
+    assert manual_import.load_library_index(library_root)["items"] == []
+
+
+def test_batch_delete_detaches_terminal_project_reference(monkeypatch, tmp_path):
+    library_root = tmp_path / "materials"
+    db_path = tmp_path / "terminal-reference.db"
+    monkeypatch.setenv("VAF_MATERIAL_LIBRARY_ROOT", str(library_root))
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    imported = manual_import.import_links(
+        [{"url": "https://www.tiktok.com/@demo/video/999", "caption": "historical material"}],
+        product_id="便携恒温杯",
+        source_keyword="恒温杯",
+        library_root=library_root,
+    )
+    material_id = imported["items"][0]["material_id"]
+    queue.init_db(db_path=db_path)
+    queue.ensure_project("completed-project", payload={"source_material_id": material_id}, db_path=db_path)
+    with queue.get_conn(db_path) as conn:
+        conn.execute("UPDATE projects SET status = 'succeeded' WHERE id = ?", ("completed-project",))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/collect/materials/batch-action",
+            json={"material_ids": [material_id], "action": "delete"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["completed"] == [material_id]
+    with queue.get_conn(db_path) as conn:
+        row = conn.execute("SELECT payload_json FROM projects WHERE id = ?", ("completed-project",)).fetchone()
+    payload = json.loads(row["payload_json"])
+    assert payload["source_material_id"] is None
+    assert payload["deleted_source_material_id"] == material_id

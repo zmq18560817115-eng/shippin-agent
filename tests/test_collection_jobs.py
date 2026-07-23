@@ -250,6 +250,47 @@ def test_collection_job_api_manually_retries_failed_job(tmp_path: Path, monkeypa
         assert conflict.status_code == 409
 
 
+def test_real_collection_filters_candidates_without_verified_heat(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "missing-heat.db"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_TIKTOK_REQUIRE_PLAY_METRIC", "true")
+    job = queue.create_collection_job(
+        target_type="keyword",
+        provider="auto",
+        target="portable bottle warmer",
+        requested_count=1,
+        product_id="便携恒温杯",
+        mock=False,
+        db_path=db_path,
+    )
+    monkeypatch.setattr(
+        api.tool_registry,
+        "execute_tool",
+        lambda *args, **kwargs: ToolResult.success(
+            {
+                "provider": "test",
+                "items": [
+                    {
+                        "url": "https://www.tiktok.com/@demo/video/no-heat",
+                        "caption": "portable bottle warmer product demonstration",
+                    }
+                ],
+            }
+        ),
+    )
+
+    result = api._run_collection_job_once("heat-worker")
+
+    assert result is not None
+    completed = queue.get_collection_job(job["id"], db_path=db_path)
+    assert completed is not None
+    assert completed["status"] == "failed"
+    items = queue.list_collection_items(job["id"], db_path=db_path)
+    assert len(items) == 1
+    assert items[0]["status"] == "filtered"
+    assert items[0]["error_message"] == "缺少真实播放量，无法证明素材热度"
+
+
 def test_background_worker_writes_job_progress(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "agentflow.db"
     monkeypatch.setenv("VAF_DB_PATH", str(db_path))
