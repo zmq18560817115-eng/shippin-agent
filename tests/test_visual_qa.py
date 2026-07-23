@@ -38,3 +38,12 @@ def test_extract_review_frames_returns_empty_without_ffmpeg(monkeypatch, tmp_pat
     video.write_bytes(b"not-a-video")
     monkeypatch.setattr(visual_qa.shutil, "which", lambda name: None)
     assert visual_qa.extract_review_frames(video, tmp_path / "frames") == []
+
+
+def test_visual_qa_uses_configured_tesseract_outside_path(monkeypatch, tmp_path: Path) -> None:
+    executable = tmp_path / "tesseract.exe"
+    executable.write_bytes(b"binary")
+    monkeypatch.setenv("VAF_TESSERACT_CMD", executable.as_posix())
+    monkeypatch.setattr(visual_qa.shutil, "which", lambda name: None)
+
+    assert visual_qa.resolve_tesseract() == str(executable)

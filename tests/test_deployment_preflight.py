@@ -38,3 +38,17 @@ def test_security_preflight_requires_long_secret_when_auth_enabled(monkeypatch) 
 
     assert checks["auth_enabled"]["ok"] is True
     assert checks["session_secret"]["ok"] is False
+
+
+def test_command_version_reports_blocked_executable_without_crashing(monkeypatch) -> None:
+    monkeypatch.setattr(deployment_preflight.shutil, "which", lambda command: "blocked-tool.exe")
+    monkeypatch.setattr(
+        deployment_preflight.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("blocked by application control")),
+    )
+
+    result = deployment_preflight.command_version("yt-dlp", ["--version"])
+
+    assert result["ok"] is False
+    assert "blocked by application control" in str(result["detail"])

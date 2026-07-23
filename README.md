@@ -169,6 +169,8 @@ TikTokApi 浏览器采集运行在隔离子进程中，超过 `TIKTOK_WORKER_TIM
 
 不使用云端 ASR 时，可运行 `pip install -r requirements-local-asr.txt`，并设置 `VAF_LOCAL_ASR_ENABLED=true`。默认使用 Faster-Whisper `base/int8/CPU`，首次运行会下载模型到 `VAF_LOCAL_ASR_CACHE_DIR`，后续可离线转写。模型缓存和 `secrets/` 均已排除 Git。
 
+视频抽帧温标检查使用 Tesseract OCR。若部署机已安装但程序不在系统 `PATH`，请在 `.env.local` 中设置 `VAF_TESSERACT_CMD` 为 `tesseract` 可执行文件的绝对路径；Windows 默认安装目录也会被自动识别。OCR 只提供自动证据，产品外观、98°F、使用方向和人物连续性仍须通过人工终审。
+
 ## 验收与开发
 
 ### 成本护栏

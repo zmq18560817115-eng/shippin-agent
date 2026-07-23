@@ -16,13 +16,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.base_tool import ToolContext
+from tools.video.visual_qa import resolve_tesseract
 
 
 def command_version(command: str, args: list[str]) -> dict[str, object]:
     executable = shutil.which(command)
     if not executable:
         return {"ok": False, "detail": "not found"}
-    result = subprocess.run([executable, *args], capture_output=True, text=True, timeout=20)
+    try:
+        result = subprocess.run([executable, *args], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "detail": f"unable to execute: {exc}", "path": executable}
     line = (result.stdout or result.stderr).splitlines()
     return {"ok": result.returncode == 0, "detail": line[0] if line else executable}
 
@@ -40,7 +44,10 @@ def application_ffmpeg() -> dict[str, object]:
             executable = None
     if not executable:
         return {"ok": False, "detail": "not found in PATH or imageio-ffmpeg"}
-    result = subprocess.run([executable, "-version"], capture_output=True, text=True, timeout=20)
+    try:
+        result = subprocess.run([executable, "-version"], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "detail": f"unable to execute {source}: {exc}", "path": executable}
     first_line = (result.stdout or result.stderr).splitlines()
     return {
         "ok": result.returncode == 0,
@@ -158,8 +165,8 @@ def main() -> int:
             "detail": "local faster-whisper ready" if local_asr_ready else ("Volcengine ASR configured" if cloud_asr_ready else "subtitle-free videos cannot complete analysis until cloud or local ASR is configured"),
         },
         "visual_ocr": {
-            "ok": bool(shutil.which("tesseract")),
-            "detail": "Tesseract OCR ready" if shutil.which("tesseract") else "optional but recommended: install Tesseract for automated 98°F/98°C checks; human review remains mandatory",
+            "ok": bool(resolve_tesseract()),
+            "detail": f"Tesseract OCR ready: {resolve_tesseract()}" if resolve_tesseract() else "optional but recommended: install Tesseract or set VAF_TESSERACT_CMD for automated 98°F/98°C checks; human review remains mandatory",
         },
         "budget_enforced": {"ok": budget_mode == "enforce", "detail": f"budget_mode={budget_mode}"},
     }

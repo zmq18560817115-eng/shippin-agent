@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -11,9 +12,26 @@ VALID_FAHRENHEIT = re.compile(r"(?<!\d)98\s*(?:°\s*)?F\b", re.IGNORECASE)
 FORBIDDEN_CELSIUS = re.compile(r"(?<!\d)98\s*(?:°\s*)?(?:C|℃)\b", re.IGNORECASE)
 
 
+def resolve_tesseract() -> str | None:
+    configured = os.environ.get("VAF_TESSERACT_CMD", "").strip().strip('"')
+    if configured and Path(configured).is_file():
+        return str(Path(configured))
+    discovered = shutil.which("tesseract")
+    if discovered:
+        return discovered
+    candidates = [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return str(Path(candidate))
+    return None
+
+
 def inspect_review_frames(frame_paths: list[str], *, product_id: str = "") -> dict[str, Any]:
     """Run deterministic OCR checks without pretending to replace human review."""
-    executable = shutil.which("tesseract")
+    executable = resolve_tesseract()
     warming_product = any(token in product_id.casefold() for token in ("恒温杯", "温奶", "bottle warmer", "warming cup"))
     frames: list[dict[str, Any]] = []
     for path_text in frame_paths:
