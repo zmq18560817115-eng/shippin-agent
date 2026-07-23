@@ -107,7 +107,7 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert "loadingSkeleton" in html
     assert "navScrollHint" in html
     assert 'scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })' in script
-    assert "20260723-14" in html
+    assert "20260723-16" in html
     assert 'id="projectOverview"' in html
     assert 'id="projectStageRail"' in script
     assert 'id="projectOverviewContinue"' in script
@@ -231,6 +231,22 @@ def test_material_cards_keep_a_usable_desktop_width() -> None:
     styles = Path("web/styles.css").read_text(encoding="utf-8")
 
     assert "minmax(min(100%, 340px), 1fr)" in styles
+
+
+def test_confirmed_storyboard_has_one_authoritative_next_action() -> None:
+    script = Path("web/app.js").read_text(encoding="utf-8")
+
+    assert "renderShotRow(shot, { locked: gateDone })" in script
+    assert '关键帧已经确认。分镜已锁定' in script
+    assert 'gateDone ? "" : `<button type="button" id="saveShots"' in script
+    assert "重新生成分镜并重新审核" in script
+
+
+def test_independent_agent_workbench_has_one_visible_heading() -> None:
+    html = Path("web/index.html").read_text(encoding="utf-8")
+
+    assert html.count("<strong>独立 Agent 工作台</strong>") == 1
+    assert 'id="independentAgentState" class="agentStateLine"' in html
 
 
 def test_admin_failures_have_inline_recovery_actions() -> None:

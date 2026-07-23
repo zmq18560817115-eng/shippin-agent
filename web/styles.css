@@ -1548,6 +1548,19 @@ button.quietButton {
   margin: 12px 0;
 }
 
+.agentStateLine {
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workflowNav .navLabel,
+.viewIntro > div > span,
+.advancedIntake > summary small,
+.eyebrow {
+  font-size: 12px;
+}
+
 .agentContract {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.4fr);
@@ -2993,6 +3006,13 @@ pre {
 .scriptTable tr.scriptLocked > td { background: #f5f7fa; }
 .scriptTable textarea:disabled,
 .scriptTable input:disabled { color: var(--text); background: #eef1f5; opacity: 1; }
+
+.storyboardTable textarea:disabled,
+.storyboardTable input:disabled {
+  cursor: default;
+  border-color: transparent;
+  background: #f7f8fa;
+}
 
 .scriptSectionTools {
   vertical-align: top;

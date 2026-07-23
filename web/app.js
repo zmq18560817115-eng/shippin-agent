@@ -1215,10 +1215,6 @@ function renderProductLibrary() {
   host.innerHTML = state.productLibrary.map(renderProductItem).join("");
 }
 
-function severityLabel(severity) {
-  return { BLOCKED: "⛔ 阻断", WARNING: "⚠ 提醒", INFO: "提示" }[String(severity || "").toUpperCase()] || String(severity || "提示");
-}
-
 function renderProductItem(product) {
   const issues = product.issues || [];
   const counts = formatCounts(product.counts || {});
@@ -1246,7 +1242,7 @@ function renderProductItem(product) {
 }
 
 function severityLabel(severity) {
-  return ({ BLOCKED: "阻断", WARNING: "提醒", INFO: "信息" })[severity] || "提示";
+  return ({ BLOCKED: "⛔ 阻断", WARNING: "⚠ 提醒", INFO: "提示" })[String(severity || "").toUpperCase()] || "提示";
 }
 
 function formatCounts(counts) {
@@ -2521,17 +2517,18 @@ function renderStoryboardNode() {
     <div class="tableWrap">
       <table class="scriptTable storyboardTable">
         <thead><tr><th>#</th><th>画面</th><th>生成提示词</th><th>镜头时长（3-10 秒）</th></tr></thead>
-        <tbody>${state.shotPlan.shots.map(renderShotRow).join("")}</tbody>
+        <tbody>${state.shotPlan.shots.map((shot) => renderShotRow(shot, { locked: gateDone })).join("")}</tbody>
       </table>
     </div>
+    ${gateDone ? '<div class="gateCompleteNote">关键帧已经确认。分镜已锁定，避免已审核画面与制作提示词失配。</div>' : ""}
     <div class="actionBar storyboardActions">
-      <button type="button" id="saveShots" class="${gateDone || gateActive ? "" : "primary"}">${gateDone || gateActive ? "保存分镜修改" : "保存并生成关键帧"}</button>
       ${gateDone ? '<button type="button" id="goToProduction" class="primary">前往镜头制作</button>' : ""}
-      <button type="button" id="regenerateStoryboard">根据当前脚本重新生成分镜</button>
+      ${gateDone ? "" : `<button type="button" id="saveShots" class="${gateActive ? "" : "primary"}">${gateActive ? "保存分镜修改" : "保存并生成关键帧"}</button>`}
+      <button type="button" id="regenerateStoryboard">${gateDone ? "重新生成分镜并重新审核" : "根据当前脚本重新生成分镜"}</button>
       <a class="buttonLink" href="/api/v2/artifacts/${encodeURIComponent(state.selectedId)}/shot_plan/download">下载分镜 JSON</a>
     </div>
   `;
-  $("#saveShots").addEventListener("click", () => saveShotPlan().catch((error) => toast(error.message, "error")));
+  $("#saveShots")?.addEventListener("click", () => saveShotPlan().catch((error) => toast(error.message, "error")));
   $("#goToProduction")?.addEventListener("click", () => showView("production"));
   $("#regenerateStoryboard").addEventListener("click", () => runManualStage("storyboard"));
   host.querySelectorAll("[data-focus-storyboard-shot]").forEach((button) => {
@@ -2539,14 +2536,15 @@ function renderStoryboardNode() {
   });
 }
 
-function renderShotRow(shot) {
+function renderShotRow(shot, { locked = false } = {}) {
   const duration = shot.camera_motion?.duration_sec || 6;
+  const disabled = locked ? "disabled" : "";
   return `
     <tr data-storyboard-shot="${Number(shot.number)}">
       <td>${Number(shot.number)}</td>
-      <td><textarea class="copyField" data-shot="${shot.number}" data-shot-field="visual_zh">${escapeHtml(shot.visual_zh || shot.visual || "")}</textarea></td>
-      <td><textarea class="promptField" data-shot="${shot.number}" data-shot-field="seedance_prompt_zh">${escapeHtml(shot.seedance_prompt_zh || shot.seedance_prompt || shot.visual_prompt || "")}</textarea></td>
-      <td><input type="number" min="3" max="10" data-shot="${shot.number}" data-shot-field="duration" value="${Number(duration)}" /></td>
+      <td><textarea class="copyField" data-shot="${shot.number}" data-shot-field="visual_zh" ${disabled}>${escapeHtml(shot.visual_zh || shot.visual || "")}</textarea></td>
+      <td><textarea class="promptField" data-shot="${shot.number}" data-shot-field="seedance_prompt_zh" ${disabled}>${escapeHtml(shot.seedance_prompt_zh || shot.seedance_prompt || shot.visual_prompt || "")}</textarea></td>
+      <td><input type="number" min="3" max="10" data-shot="${shot.number}" data-shot-field="duration" value="${Number(duration)}" ${disabled} /></td>
     </tr>
   `;
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260723-14" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260723-16" />
   </head>
   <body>
     <header class="topbar">
@@ -263,10 +263,7 @@
       </div>
       <details class="advancedIntake agentDetails" data-asset-panel="analysis"><summary><span><strong>独立 Agent 工作台</strong><small>不创建生产项目，直接运行并下载单项产物</small></span><span>展开</span></summary>
       <div class="nodeTools" id="independentAgentWorkbench">
-        <div class="nodeToolHead">
-          <div><strong>独立 Agent 工作台</strong><span>采集、研究、策略、脚本、拆解、分镜和单镜制作均可单独运行</span></div>
-          <span id="independentAgentState"></span>
-        </div>
+        <div id="independentAgentState" class="agentStateLine"></div>
         <div id="independentAgentContract" class="agentContract" hidden></div>
         <div class="agentWorkbenchGrid">
           <label>功能
@@ -479,6 +476,6 @@
 
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260723-14"></script>
+    <script src="/static/app.js?v=20260723-16"></script>
   </body>
 </html>
