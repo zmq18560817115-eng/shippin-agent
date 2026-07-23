@@ -131,8 +131,11 @@ def _generic_script_copy(
             "scene_zh": f"{profile['place']}，{profile['light']}；同一人物、服装和主要道具保持连续，围绕用户输入的真实情境展开。",
             "action_zh": action,
             "story_beat_zh": (
-                "建立未完成动作" if index == 1 else "把阻碍具体化" if index == 2 else
-                "让产品自然进入解决过程" if index == 3 else "用可见结果完成证明" if index == 4 else "回到人物目标并收束"
+                "人物开始一个尚未完成的动作，为下一段问题出现留下悬念" if index == 1 else
+                "现实阻碍打断人物原本节奏，让产品介入具备明确原因" if index == 2 else
+                "产品通过一个可见动作回应困扰，推动人物继续完成目标" if index == 3 else
+                "使用前后的可见变化形成证据，消除观众对效果的疑问" if index == 4 else
+                "人物顺利完成原定目标，以自然行动收束并给出下一步"
             ),
             "subtitle_zh": voiceover,
             "selling_points": [],

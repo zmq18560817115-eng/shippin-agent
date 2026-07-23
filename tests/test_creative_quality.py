@@ -52,6 +52,27 @@ def test_storyboard_assessment_rejects_generated_frame_text_requests() -> None:
     assert "生成画面不得要求字幕、配文或其他可读文字" in report["issues"]
 
 
+def test_script_assessment_rejects_template_slogans() -> None:
+    script = mock_script_copy("quality-template-copy")
+    script["sections"][0]["voiceover_zh"] = "一键搞定夜间喂养，开启美好品质生活。"
+
+    report = assess_script(script)
+
+    assert report["status"] == "NEEDS_REWRITE"
+    assert "删除高级感、必备神器等模板化空话，改写为可见动作、具体变化或用户结果" in report["issues"]
+
+
+def test_storyboard_assessment_rejects_vague_visual_direction() -> None:
+    script = mock_script_copy("quality-vague-board")
+    plan = mock_shot_plan("quality-vague-board", script)
+    plan["shots"][0]["visual_zh"] += "，营造高级感和氛围感。"
+
+    report = assess_storyboard(plan, script)
+
+    assert report["status"] == "NEEDS_REWRITE"
+    assert "分镜不得用高级感、氛围感等空词代替主体位置、环境、动作和镜头设计" in report["issues"]
+
+
 def test_engine_queues_only_one_targeted_creative_rewrite(tmp_path: Path) -> None:
     db_path = tmp_path / "agentflow.db"
     run_root = tmp_path / "runs" / "quality-retry"

@@ -76,6 +76,10 @@ def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:
     assert 'class="creativeOptions"' in html
     assert "查看能力与质量标准" in script
     assert "function renderCreativeQuality" in script
+    assert 'payload.status === "succeeded"' in script
+    assert "function agentHandoffText" in script
+    assert script.index('if (name === "research_brief")') < script.index("function updateIndependentAgentUI()")
+    assert "查看 ${issues.length} 项修改建议" in script
 
 
 def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:

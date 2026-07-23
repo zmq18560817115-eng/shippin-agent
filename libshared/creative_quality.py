@@ -6,6 +6,7 @@ from typing import Any
 
 EXPECTED_ROLES = ["钩子", "痛点", "方案", "证明", "行动号召"]
 EXPECTED_TIMINGS = ["0-6s", "6-12s", "12-18s", "18-24s", "24-30s"]
+VAGUE_CREATIVE_PHRASES = ("高级感", "氛围感", "品质生活", "轻松解决", "一键搞定", "必备神器", "开启美好")
 
 
 def assess_script(script: dict[str, Any]) -> dict[str, Any]:
@@ -20,6 +21,11 @@ def assess_script(script: dict[str, Any]) -> dict[str, Any]:
         _check("scene_specificity", _all_min_length(sections, "scene_zh", 18), "每段场景必须包含足够具体的环境、光线、道具或人物状态"),
         _check("spoken_naturalness", _all_bounded_length(sections, "voiceover_zh", 8, 70), "旁白必须简洁、可朗读，避免空泛或过长句子"),
         _check("causal_progression", _all_min_length(sections, "story_beat_zh", 14), "每段必须说明剧情变化及其承接作用"),
+        _check(
+            "anti_template_copy",
+            not _contains_any(" ".join(str(item.get(key) or "") for item in sections for key in ("voiceover_zh", "story_beat_zh")), VAGUE_CREATIVE_PHRASES),
+            "删除高级感、必备神器等模板化空话，改写为可见动作、具体变化或用户结果",
+        ),
     ]
     if "恒温杯" in str(script.get("product_id") or "") and len(sections) >= 4:
         solution = str(sections[2].get("action_zh") or "")
@@ -28,7 +34,7 @@ def assess_script(script: dict[str, Any]) -> dict[str, Any]:
             [
                 _check("fill_direction", "倒入恒温杯" in solution, "方案镜头必须明确液体倒入恒温杯"),
                 _check("pour_direction", "圆形出液口" in proof and "奶瓶" in proof, "证明镜头必须明确从圆形出液口倒入独立奶瓶"),
-                _check("temperature", "98°C" not in str(script) and "98℃" not in str(script), "温标只能使用 98°F 华氏度"),
+                _check("temperature", not _contains_forbidden_celsius(str(script)), "温标只能使用 98°F 华氏度"),
             ]
         )
     return _report("script", checks)
@@ -56,6 +62,11 @@ def assess_storyboard(plan: dict[str, Any], script: dict[str, Any] | None = None
             bool(prompts) and all(all(token in prompt.casefold() for token in ("continuity lock", "product identity lock", "action continuity", "camera contract", "negative constraints")) for prompt in prompts),
             "每镜提示词必须统一包含场景连续性、产品身份、动作承接、镜头语言与负面约束",
         ),
+        _check(
+            "anti_vague_visuals",
+            not _contains_any(" ".join(str(shot.get(key) or "") for shot in shots for key in ("visual_zh", "seedance_prompt_zh")), VAGUE_CREATIVE_PHRASES),
+            "分镜不得用高级感、氛围感等空词代替主体位置、环境、动作和镜头设计",
+        ),
     ]
     product_id = str((script or {}).get("product_id") or "")
     if "恒温杯" in product_id and len(shots) >= 4:
@@ -63,7 +74,7 @@ def assess_storyboard(plan: dict[str, Any], script: dict[str, Any] | None = None
         checks.extend(
             [
                 _check("pour_direction", "round spout" in proof.casefold() or "圆形出液口" in proof, "第四镜必须展示从圆形出液口倒入独立奶瓶"),
-                _check("temperature", "98°C" not in str(plan) and "98℃" not in str(plan), "禁止出现 98°C，只允许 98°F"),
+                _check("temperature", not _contains_forbidden_celsius(str(plan)), "禁止出现 98°C，只允许 98°F"),
             ]
         )
     return _report("storyboard", checks)
@@ -113,3 +124,18 @@ def _chinese_ratio(value: str) -> float:
     letters = re.findall(r"[A-Za-z\u3400-\u9fff]", value)
     chinese = re.findall(r"[\u3400-\u9fff]", value)
     return len(chinese) / len(letters) if letters else 0.0
+
+
+def _contains_any(value: str, phrases: tuple[str, ...]) -> bool:
+    normalized = value.casefold()
+    return any(phrase.casefold() in normalized for phrase in phrases)
+
+
+def _contains_forbidden_celsius(value: str) -> bool:
+    normalized = value.casefold()
+    for match in re.finditer(r"98\s*(?:°\s*c|℃)", normalized):
+        context = normalized[max(0, match.start() - 48):match.start()]
+        if any(token in context for token in ("禁止", "不得", "不能", "避免", "never", "do not", "don't", "no ", "without")):
+            continue
+        return True
+    return False

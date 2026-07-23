@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from orchestrator import api, engine, queue
 from orchestrator.api import app
+from tools.llm.mock_artifacts import mock_script_copy
 
 
 def test_agent_map_and_independent_research_strategy_breakdown(tmp_path: Path, monkeypatch) -> None:
@@ -499,6 +500,50 @@ def test_promoted_script_preserves_standalone_product_identity(tmp_path: Path, m
     assert standalone.json()["artifact"]["product_id"] == "折叠雨伞"
     assert promoted.status_code == 200, promoted.text
     assert promoted.json()["project"]["product_id"] == "折叠雨伞"
+
+
+def test_failed_standalone_quality_stops_handoff_and_promotion(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "quality-stop.db"
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    script = mock_script_copy("quality-stop")
+    for section in script["sections"]:
+        section["story_beat_zh"] = "重复剧情推进"
+    script["quality_assessment"] = api.creative_quality.assess_script(script)
+
+    response = api._agent_response_payload(
+        api.AgentRunRequest(action="script", source_text="生成脚本", mock=True),
+        action="script",
+        project_id="scratch-quality-stop",
+        artifact_name="script_copy",
+        artifact=script,
+        meta={},
+    )
+    assert response["status"] == "needs_review"
+    assert response["next_actions"] == [{"id": "download", "label": "下载本节点产物"}]
+
+    queue.init_db(db_path)
+    queue.ensure_project(
+        "scratch-quality-stop",
+        product_id="便携恒温杯",
+        payload={"standalone": True, "run_root": (runs_root / "scratch-quality-stop").as_posix()},
+        db_path=db_path,
+    )
+    api.artifacts.save_artifact(
+        "scratch-quality-stop",
+        "script_copy",
+        script,
+        run_root=runs_root / "scratch-quality-stop",
+    )
+    with TestClient(app) as client:
+        promoted = client.post(
+            "/api/v2/agents/promote",
+            json={"source_project_id": "scratch-quality-stop", "artifact_name": "script_copy", "mock": True},
+        )
+
+    assert promoted.status_code == 409
+    assert "质量项" in promoted.json()["detail"]
 
 
 def test_independent_content_agents_preserve_distinct_user_intent(tmp_path: Path, monkeypatch) -> None:

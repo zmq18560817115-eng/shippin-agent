@@ -7,6 +7,31 @@ from orchestrator.api import app
 from tools.llm.doubao_shotplan import ensure_shot_locks
 
 
+def test_script_gate_blocks_creatively_repeated_script(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "script-quality.db"
+    runs_root = tmp_path / "runs"
+    run_root = runs_root / "script-quality"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    queue.init_db(db_path)
+    engine.start_pipeline("script-quality", product_id="便携恒温杯", db_path=db_path, run_root=run_root, mock=True)
+    engine.run_until_blocked("script-quality", db_path=db_path, run_root=run_root, mock=True)
+
+    with TestClient(app) as client:
+        script = client.get("/api/v2/artifacts/script-quality/script_copy").json()
+        for section in script["sections"]:
+            section["story_beat_zh"] = "重复剧情推进"
+        assert client.put("/api/v2/artifacts/script-quality/script_copy", json=script).status_code == 200
+        response = client.post(
+            "/api/v2/gates/approve",
+            json={"project_id": "script-quality", "gate": "script_gate", "approver": "test", "mock": True},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["message"] == "脚本创意质量未通过"
+    assert "五段剧情推进不能重复" in response.json()["detail"]["issues"]
+
+
 def test_hero_gate_repairs_an_older_incomplete_storyboard_prompt(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "agentflow.db"
     runs_root = tmp_path / "runs"

@@ -157,6 +157,9 @@ function formatApiDetail(detail) {
   if (Array.isArray(detail)) {
     return detail.map((item) => item?.message || item?.msg || JSON.stringify(item)).join("；");
   }
+  if (Array.isArray(detail?.issues)) {
+    return `${detail.message || "质量检查未通过"}（${detail.score ?? 0} 分）：${detail.issues.join("；")}`;
+  }
   return detail?.message || JSON.stringify(detail);
 }
 
@@ -175,7 +178,8 @@ function renderAgentResult(host, payload) {
   const download = payload.download_url
     ? `<a class="buttonLink" href="${escapeAttr(payload.download_url)}">下载本节点 JSON</a>`
     : "";
-  const promotable = payload.project_id && payload.project_id.startsWith("scratch-")
+  const promotable = payload.status === "succeeded"
+    && payload.project_id && payload.project_id.startsWith("scratch-")
     && ["analysis_report", "script_copy", "shot_plan"].includes(payload.artifact_name);
   const artifactProductId = String(payload.artifact?.product_id || "").trim();
   const promote = promotable
@@ -189,6 +193,7 @@ function renderAgentResult(host, payload) {
   const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
   const nextAgent = (payload.next_actions || []).find((item) => item.id === "run_next_agent");
   const requirement = String(payload.input_summary?.requirement || "").trim();
+  const retryCount = Number(payload.meta?.quality_retry_count || 0);
   const executionContext = contract.identity ? `
     <div class="agentExecutionContext">
       <strong>${escapeHtml(contract.identity)}</strong>
@@ -200,6 +205,7 @@ function renderAgentResult(host, payload) {
     <div class="agentRunEvidence">
       <span>${escapeHtml(payload.input_summary?.run_mode || "未知模式")}</span>
       <span>模型/工具：${escapeHtml(payload.model || "未记录")}</span>
+      ${retryCount ? `<span>已自动定向重写 ${retryCount} 次</span>` : ""}
       <span class="${failedChecks.length ? "warning" : "passed"}">${failedChecks.length ? `${failedChecks.length} 项待处理` : `${qualityChecks.length} 项质量检查通过`}</span>
     </div>
     ${requirement ? `<details class="agentInputEvidence"><summary>查看本次实际输入</summary><p>${escapeHtml(requirement)}</p></details>` : ""}
@@ -216,11 +222,40 @@ function renderAgentResult(host, payload) {
     if (!selector || ![...selector.options].some((option) => option.value === action)) return;
     selector.value = action;
     updateIndependentAgentUI();
-    const source = host.querySelector(".agentFriendlyResult")?.innerText?.trim() || JSON.stringify(artifact, null, 2);
-    const textarea = $("#independentAgentFields textarea");
+    const source = agentHandoffText(payload, action);
+    const preferredField = { strategy: "source_text", script: "prompt", storyboard: "prompt", production: "prompt", review: "source_text", feedback: "source_text" }[action];
+    const textarea = preferredField
+      ? $(`#independentAgentFields [data-agent-field="${preferredField}"]`)
+      : $("#independentAgentFields textarea");
     if (textarea) textarea.value = source.slice(0, 6000);
     $("#independentAgentWorkbench")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+}
+
+function agentHandoffText(payload, nextAction) {
+  const artifact = payload.artifact || {};
+  if (payload.artifact_name === "strategy_brief") {
+    return [
+      `内容方向：${artifact.content_direction || ""}`,
+      `目标受众：${artifact.target_audience || ""}`,
+      `钩子：${(artifact.hook_options || []).join("；")}`,
+      `卖点优先级：${(artifact.selling_point_priority || []).join("；")}`,
+      `行动号召：${(artifact.cta_options || []).join("；")}`,
+    ].join("\n");
+  }
+  if (payload.artifact_name === "script_copy") {
+    return (artifact.sections || []).map((section) =>
+      `${section.timing || ""} ${section.role || ""}\n场景：${section.scene_zh || ""}\n动作：${section.action_zh || ""}\n剧情：${section.story_beat_zh || ""}\n旁白：${section.voiceover_zh || ""}`
+    ).join("\n\n");
+  }
+  if (payload.artifact_name === "shot_plan") {
+    const first = (artifact.shots || [])[0] || {};
+    if (nextAction === "production") return first.seedance_prompt_zh || first.seedance_prompt || first.visual_zh || first.visual || "";
+  }
+  if (payload.artifact_name === "analysis_report") {
+    return `钩子：${artifact.hook_3s || ""}\n结构：${(artifact.structure || []).join(" → ")}\n受众与节奏：${artifact.audience_insight || artifact.voiceover_text || ""}`;
+  }
+  return JSON.stringify(artifact, null, 2);
 }
 
 function creativeRequestFields() {
@@ -284,6 +319,36 @@ function renderFriendlyArtifact(name, artifact, payload = {}) {
   if (name === "tiktok_discovery" || name === "tiktok_capture") {
     const items = Array.isArray(artifact.items) ? artifact.items : artifact.results || [];
     return `<div class="agentResultCards">${items.slice(0, 10).map((item) => `<article class="agentResultCard"><strong>${escapeHtml(item.title || item.video_title || item.url || "TikTok 素材")}</strong><p>${escapeHtml(item.caption || item.description || "")}</p>${item.url ? `<a href="${escapeAttr(item.url)}" target="_blank" rel="noopener">打开来源</a>` : ""}</article>`).join("") || "<p>暂无可展示素材。</p>"}</div>`;
+  }
+  if (name === "research_brief") {
+    return renderNamedLists(artifact, { audience_insights: "受众洞察", viral_patterns: "传播结构", content_risks: "内容风险", pacing_notes: "节奏建议" });
+  }
+  if (name === "strategy_brief") {
+    return renderNamedLists(artifact, { content_direction: "内容方向", hook_options: "钩子方案", cta_options: "行动号召", selling_point_priority: "卖点优先级", target_audience: "目标受众" });
+  }
+  if (name === "script_breakdown") {
+    const beats = Array.isArray(artifact.beats) ? artifact.beats : [];
+    return `<div class="agentResultCards">${beats.map((beat, index) => `<article class="agentResultCard"><strong>${escapeHtml(beat.role || `段落 ${index + 1}`)}</strong><p>${escapeHtml(beat.intent_zh || beat.intent || beat.summary || "")}</p><small>${escapeHtml(beat.visual_zh || beat.visual || beat.action_zh || "")}</small></article>`).join("") || "<p>暂无拆解结果。</p>"}</div>`;
+  }
+  if (name === "asset_manifest") {
+    const frames = Array.isArray(artifact.hero_frames) ? artifact.hero_frames : [];
+    const identity = frames.find((frame) => frame.preview_url) || frames[0];
+    const warnings = Array.isArray(artifact.warnings) ? artifact.warnings : [];
+    return `<div class="standaloneAssetResult">
+      <div class="assetIdentityPreview">${identity?.preview_url ? `<img src="${escapeAttr(identity.preview_url)}" alt="${escapeAttr(artifact.product_id || "产品")}身份参考" loading="lazy" />` : '<span>暂无产品身份图</span>'}</div>
+      <div class="assetReviewSummary"><strong>${escapeHtml(artifact.product_id || "产品")} · 产品身份锚点</strong>
+        <p>${escapeHtml(identity?.reference_reason || "用于核对产品外观，不代表场景生成图。")}</p>
+        ${warnings.map((item) => `<small>${escapeHtml(item)}</small>`).join("")}
+      </div>
+      <div class="agentResultCards">${frames.map((frame) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(frame.number || "-")} 场景需求</strong><p>${escapeHtml(frame.scene_brief || "请在分镜节点补充场景与动作")}</p><small>${frame.scene_preview_available ? "场景预览已生成" : "待场景生成，当前仅锁定产品身份"}</small></article>`).join("") || "<p>暂无素材匹配结果。</p>"}</div>
+    </div>`;
+  }
+  if (name === "shot_report") {
+    const shots = Array.isArray(artifact.shots) ? artifact.shots : [];
+    const media = payload.media_url
+      ? `<div class="standaloneVideoResult"><video controls preload="metadata" playsinline src="${escapeAttr(payload.media_url)}"></video><a class="buttonLink" href="${escapeAttr(payload.media_download_url || payload.media_url)}" download>下载 MP4</a></div>`
+      : '<p class="mediaUnavailable">视频文件尚未就绪，请查看运行结果后重试。</p>';
+    return `${media}<div class="agentResultCards">${shots.map((shot) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(shot.number || "-")}</strong><p>${escapeHtml(takeStatusLabel(shot.status))}</p><small>${escapeHtml(shot.duration_sec || 0)} 秒 · 720×1280 交付目标</small></article>`).join("") || "<p>暂无镜头结果。</p>"}</div>`;
   }
   if (name === "feedback_record") return `<div class="agentResultCard"><p>${escapeHtml(artifact.text || "")}</p></div>`;
   return `<div class="agentResultCard"><p>产物已生成，可下载 JSON 或用于创建生产项目。</p></div>`;
@@ -562,8 +627,9 @@ function updateIndependentAgentUI() {
   const contractHost = $("#independentAgentContract");
   if (contract.identity) {
     contractHost.hidden = false;
-    contractHost.innerHTML = `<div class="agentIdentity"><span>当前 Agent</span><strong>${escapeHtml(contract.identity)}</strong><p>${escapeHtml(contract.mission || "")}</p></div>
+    contractHost.innerHTML = `<div class="agentIdentity"><span>当前 Agent</span><strong>${escapeHtml(contract.identity)}</strong></div>
       <details class="agentContractDetails"><summary>查看能力与质量标准</summary>
+        <p>${escapeHtml(contract.mission || "")}</p>
         <div><span>核心专长</span><ul>${(contract.expertise || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
         <div><span>工作方法</span><ul>${(contract.method || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
         <div><span>交付自检</span><ul>${(contract.quality_gates || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
@@ -571,36 +637,6 @@ function updateIndependentAgentUI() {
   } else {
     contractHost.hidden = true;
     contractHost.innerHTML = "";
-  }
-  if (name === "research_brief") {
-    return renderNamedLists(artifact, { audience_insights: "受众洞察", viral_patterns: "传播结构", content_risks: "内容风险", pacing_notes: "节奏建议" });
-  }
-  if (name === "strategy_brief") {
-    return renderNamedLists(artifact, { content_direction: "内容方向", hook_options: "钩子方案", cta_options: "行动号召", selling_point_priority: "卖点优先级", target_audience: "目标受众" });
-  }
-  if (name === "script_breakdown") {
-    const beats = Array.isArray(artifact.beats) ? artifact.beats : [];
-    return `<div class="agentResultCards">${beats.map((beat, index) => `<article class="agentResultCard"><strong>${escapeHtml(beat.role || `段落 ${index + 1}`)}</strong><p>${escapeHtml(beat.intent_zh || beat.intent || beat.summary || "")}</p><small>${escapeHtml(beat.visual_zh || beat.visual || beat.action_zh || "")}</small></article>`).join("") || "<p>暂无拆解结果。</p>"}</div>`;
-  }
-  if (name === "asset_manifest") {
-    const frames = Array.isArray(artifact.hero_frames) ? artifact.hero_frames : [];
-    const identity = frames.find((frame) => frame.preview_url) || frames[0];
-    const warnings = Array.isArray(artifact.warnings) ? artifact.warnings : [];
-    return `<div class="standaloneAssetResult">
-      <div class="assetIdentityPreview">${identity?.preview_url ? `<img src="${escapeAttr(identity.preview_url)}" alt="${escapeAttr(artifact.product_id || "产品")}身份参考" loading="lazy" />` : '<span>暂无产品身份图</span>'}</div>
-      <div class="assetReviewSummary"><strong>${escapeHtml(artifact.product_id || "产品")} · 产品身份锚点</strong>
-        <p>${escapeHtml(identity?.reference_reason || "用于核对产品外观，不代表场景生成图。")}</p>
-        ${warnings.map((item) => `<small>${escapeHtml(item)}</small>`).join("")}
-      </div>
-      <div class="agentResultCards">${frames.map((frame) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(frame.number || "-")} 场景需求</strong><p>${escapeHtml(frame.scene_brief || "请在分镜节点补充场景与动作")}</p><small>${frame.scene_preview_available ? "场景预览已生成" : "待场景生成，当前仅锁定产品身份"}</small></article>`).join("") || "<p>暂无素材匹配结果。</p>"}</div>
-    </div>`;
-  }
-  if (name === "shot_report") {
-    const shots = Array.isArray(artifact.shots) ? artifact.shots : [];
-    const media = payload.media_url
-      ? `<div class="standaloneVideoResult"><video controls preload="metadata" playsinline src="${escapeAttr(payload.media_url)}"></video><a class="buttonLink" href="${escapeAttr(payload.media_download_url || payload.media_url)}" download>下载 MP4</a></div>`
-      : '<p class="mediaUnavailable">视频文件尚未就绪，请查看运行结果后重试。</p>';
-    return `${media}<div class="agentResultCards">${shots.map((shot) => `<article class="agentResultCard"><strong>镜头 ${escapeHtml(shot.number || "-")}</strong><p>${escapeHtml(takeStatusLabel(shot.status))}</p><small>${escapeHtml(shot.duration_sec || 0)} 秒 · 720×1280 交付目标</small></article>`).join("") || "<p>暂无镜头结果。</p>"}</div>`;
   }
 }
 
@@ -2215,7 +2251,9 @@ function renderCreativeQuality(assessment) {
   const issues = assessment.issues || [];
   return `<div class="creativeQuality ${passed ? "pass" : "needsRewrite"}">
     <div><span>创意质量自检</span><strong>${escapeHtml(String(assessment.score ?? 0))} 分 · ${passed ? "通过" : "需要修改"}</strong></div>
-    <p>${issues.length ? escapeHtml(issues.join("；")) : "结构、连续性、产品事实与可执行性检查均已通过。"}</p>
+    ${issues.length
+      ? `<details><summary>查看 ${issues.length} 项修改建议</summary><ul>${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul></details>`
+      : ""}
   </div>`;
 }
 
@@ -2347,7 +2385,8 @@ async function saveScript() {
   });
   state.scriptCopy = saved.artifact;
   state.scriptBaseline = structuredClone(saved.artifact);
-  toast(`已保存，stale 镜头：${saved.stale_sections.join(",") || "无"}`);
+  const invalidated = saved.invalidated_artifacts || [];
+  toast(invalidated.length ? `脚本已保存，旧分镜及后续 ${invalidated.length} 项产物已归档，需重新确认。` : "脚本已保存，没有下游内容需要重做。");
   await refreshProjects({ silent: true });
   return saved;
 }
@@ -2674,7 +2713,8 @@ async function saveShotPlan() {
     body: JSON.stringify(draft),
   });
   state.shotPlan = saved.artifact;
-  toast(`分镜已保存，变更镜头：${saved.stale_sections.join(",") || "无"}`);
+  const invalidated = saved.invalidated_artifacts || [];
+  toast(invalidated.length ? `分镜已保存，旧 Take 与成片 ${invalidated.length} 项产物已归档，需重新制作。` : "分镜已保存，没有已生成镜头需要重做。");
   return saved;
 }
 

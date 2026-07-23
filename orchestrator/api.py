@@ -1384,6 +1384,32 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     elif artifact_name == "shot_plan":
         script_copy = payload.get("script_copy") if isinstance(payload.get("script_copy"), dict) else None
         artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
+    quality_retry_count = 0
+    assessment = artifact.get("quality_assessment") if isinstance(artifact, dict) else None
+    if (
+        not request.mock
+        and artifact_name in {"script_copy", "shot_plan"}
+        and isinstance(assessment, dict)
+        and assessment.get("status") != "PASS"
+    ):
+        retry_payload = dict(payload)
+        retry_payload["rewrite_reason"] = str(
+            assessment.get("rewrite_instruction") or "创意质量未达标，请定向重写"
+        )
+        retried = tool_registry.execute_tool(
+            tool_name,
+            retry_payload,
+            context={"mock": False, "run_root": root},
+        )
+        if retried.ok:
+            result = retried
+            artifact = retried.data[artifact_name]
+            if artifact_name == "script_copy":
+                artifact["quality_assessment"] = creative_quality.assess_script(artifact)
+            else:
+                script_copy = retry_payload.get("script_copy") if isinstance(retry_payload.get("script_copy"), dict) else None
+                artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
+            quality_retry_count = 1
     artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
     invalidation = (
         _invalidate_downstream(project_id, artifact_name)
@@ -1430,7 +1456,13 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         artifact_name=artifact_name,
         artifact=artifact,
         download_url=f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
-        meta=_agent_execution_meta(action, creative_brief, **result.meta, **execution_meta),
+        meta=_agent_execution_meta(
+            action,
+            creative_brief,
+            **result.meta,
+            **execution_meta,
+            quality_retry_count=quality_retry_count,
+        ),
         invalidation=invalidation,
     )
     if artifact_name == "shot_report":
@@ -1522,9 +1554,10 @@ def _agent_response_payload(
     warnings = list(artifact.get("warnings") or []) if isinstance(artifact.get("warnings"), list) else []
     if any(item.get("status") in {"failed", "blocked", "needs_review"} for item in checks):
         warnings.append("产物存在待处理质量项，请先复核再进入下一节点。")
+    needs_review = any(item.get("status") in {"failed", "blocked", "needs_review"} for item in checks)
     response = {
         "ok": True,
-        "status": "succeeded",
+        "status": "needs_review" if needs_review else "succeeded",
         "project_id": project_id,
         "action": action,
         "artifact_type": artifact_name,
@@ -1534,7 +1567,11 @@ def _agent_response_payload(
         "model": model,
         "quality_checks": checks,
         "warnings": list(dict.fromkeys(str(item) for item in warnings if str(item).strip())),
-        "next_actions": _agent_next_actions(action, project_id, artifact_name),
+        "next_actions": (
+            [{"id": "download", "label": "下载本节点产物"}]
+            if needs_review
+            else _agent_next_actions(action, project_id, artifact_name)
+        ),
         "meta": meta,
     }
     response.update(extra)
@@ -3166,6 +3203,11 @@ def promote_standalone_artifact(request: StandalonePromoteRequest) -> dict[str, 
 
     source_root = _run_root(source_project_id)
     artifact = _load_artifact_from_root(source_root, artifact_name)
+    assessment = artifact.get("quality_assessment") if isinstance(artifact, dict) else None
+    if artifact_name in {"script_copy", "shot_plan"} and (
+        not isinstance(assessment, dict) or assessment.get("status") != "PASS"
+    ):
+        raise HTTPException(status_code=409, detail="该独立产物仍有未通过的质量项，请修改或重新生成后再创建生产项目")
     project_id = _validate_project_id(request.project_id or _new_project_id())
     product_id = request.product_id or str(artifact.get("product_id") or source_row["product_id"] or "便携恒温杯")
     root = _runs_root() / project_id
@@ -3233,8 +3275,31 @@ def approve_gate(request: GateApproveRequest) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="缺少 gate 字段，请填写当前待放行闸门名称")
     if gate not in GATE_STAGES:
         raise HTTPException(status_code=422, detail=f"未知闸门：{gate}")
+    if gate == "script_gate":
+        script = _load_artifact(project_id, "script_copy")
+        assessment = creative_quality.assess_script(script)
+        if assessment.get("status") != "PASS":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "脚本创意质量未通过",
+                    "score": assessment.get("score"),
+                    "issues": assessment.get("issues") or [],
+                },
+            )
     if gate == "hero_gate":
         upgraded_shot_plan = _upgrade_storyboard_safety_locks(project_id)
+        script = _load_artifact(project_id, "script_copy")
+        assessment = creative_quality.assess_storyboard(upgraded_shot_plan, script)
+        if assessment.get("status") != "PASS":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "分镜创意质量未通过",
+                    "score": assessment.get("score"),
+                    "issues": assessment.get("issues") or [],
+                },
+            )
         # Validate the exact payload upgraded in this request. Re-reading the
         # file here can observe stale data on a shared/persistent volume.
         preflight_errors = _storyboard_preflight_errors(project_id, shot_plan=upgraded_shot_plan)
