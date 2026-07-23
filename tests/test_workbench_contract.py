@@ -111,7 +111,7 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert "loadingSkeleton" in html
     assert "navScrollHint" in html
     assert 'scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })' in script
-    assert "20260723-17" in html
+    assert "20260723-18" in html
     assert 'id="projectOverview"' in html
     assert 'id="projectStageRail"' in script
     assert 'id="projectOverviewContinue"' in script
@@ -296,3 +296,12 @@ def test_admin_exposes_cookie_upload_next_to_collection_probe() -> None:
     assert 'data-lucide="radar"' in backend_panel
     assert 'api("/api/v2/admin/runtime/cookies"' in script
     assert "20260723-2" in html
+
+
+def test_material_collection_is_always_real_and_mock_references_are_excluded() -> None:
+    script = Path("web/app.js").read_text(encoding="utf-8")
+
+    assert 'requested_count: Number($("#crawlLimit").value || 6),' in script
+    assert 'requested_count: Number($("#crawlLimit").value || 6),\n        product_id: $("#productSelect").value,\n        mock: false,' in script
+    assert 'sourceMode === "mock" ? isMock : !isMock' in script
+    assert 'item.material_meta?.source_mode !== "mock"' in script

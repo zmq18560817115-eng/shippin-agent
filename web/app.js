@@ -1282,7 +1282,7 @@ function renderReferenceMaterialSelect() {
   if (!select) return;
   const selected = select.value;
   const references = state.materials
-    .filter((item) => item.material_meta?.production_readiness?.ready)
+    .filter((item) => item.material_meta?.source_mode !== "mock" && item.material_meta?.production_readiness?.ready)
     .sort((left, right) => {
       const leftMeta = left.material_meta || {};
       const rightMeta = right.material_meta || {};
@@ -1375,7 +1375,7 @@ async function collectLinks(event) {
           url: urls[0],
           product_id: $("#productSelect").value,
           transcript_text: $("#researchSourceText").value.trim() || null,
-          mock: $("#runtimeMode").value !== "real",
+          mock: false,
         }),
       });
       state.selectedId = result.project_id;
@@ -1430,7 +1430,7 @@ async function crawlTikTok(event) {
         target,
         requested_count: Number($("#crawlLimit").value || 6),
         product_id: $("#productSelect").value,
-        mock: $("#runtimeMode").value !== "real",
+        mock: false,
       }),
     });
     state.selectedCollectionJobId = payload.job.id;
@@ -1561,7 +1561,7 @@ function autoCollectorPayload(enabled) {
     limit: Number($("#crawlLimit").value || 3),
     interval_minutes: Number($("#autoCrawlInterval").value || 60),
     product_id: $("#productSelect").value,
-    mock: $("#runtimeMode").value !== "real",
+    mock: false,
   };
 }
 
@@ -1713,16 +1713,20 @@ function renderMaterialLibrary() {
   host.innerHTML = `<div class="materialFilters">
       <input id="materialSearch" type="search" placeholder="搜索标题、作者或关键词" aria-label="搜索素材" />
       <select id="materialReadiness" aria-label="筛选素材状态"><option value="all">全部素材</option><option value="production">生产可用</option><option value="processing">待处理</option><option value="quarantine">隔离区</option></select>
+      <select id="materialSourceMode" aria-label="筛选素材来源"><option value="real" selected>真实素材</option><option value="all">全部来源</option><option value="mock">演练数据</option></select>
       <span id="materialCount"></span>
     </div><div class="materialBatchBar"><label><input id="selectVisibleMaterials" type="checkbox" />选择当前结果</label><span id="selectedMaterialCount">已选 0 条</span><div class="materialBatchActions"><button type="button" id="batchAnalyzeMaterials" disabled>重新分析</button><button type="button" id="batchQuarantineMaterials" disabled>移入隔离区</button><button type="button" id="batchRestoreMaterials" disabled>解除隔离</button><button type="button" id="batchDeleteMaterials" class="danger" disabled>删除</button></div></div><div class="materialList" id="materialListInner"></div>`;
   const draw = () => {
     const query = $("#materialSearch").value.trim().toLowerCase();
     const readiness = $("#materialReadiness").value;
+    const sourceMode = $("#materialSourceMode").value;
     const filtered = state.materials.filter((item) => {
       const meta = item.material_meta || {};
       const searchable = [meta.video_title, meta.caption, meta.author_name, meta.source_keyword].join(" ").toLowerCase();
       const lane = meta.production_readiness?.lane || "processing";
-      return (!query || searchable.includes(query)) && (readiness === "all" || readiness === lane);
+      const isMock = meta.source_mode === "mock";
+      const sourceMatches = sourceMode === "all" || (sourceMode === "mock" ? isMock : !isMock);
+      return sourceMatches && (!query || searchable.includes(query)) && (readiness === "all" || readiness === lane);
     });
     $("#materialCount").textContent = `${filtered.length} / ${state.materials.length} 条`;
     $("#materialListInner").innerHTML = filtered.map(renderMaterialItem).join("") || '<div class="emptyState">没有符合条件的素材</div>';
@@ -1740,6 +1744,7 @@ function renderMaterialLibrary() {
   };
   $("#materialSearch").addEventListener("input", draw);
   $("#materialReadiness").addEventListener("change", draw);
+  $("#materialSourceMode").addEventListener("change", draw);
   draw();
 }
 
@@ -1763,6 +1768,7 @@ function bindMaterialActions(host) {
 
 function renderMaterialItem(item) {
   const meta = item.material_meta || {};
+  const sourceModeBadge = meta.source_mode === "mock" ? '<span class="statusBadge warning">演练数据</span>' : "";
   const title = meta.video_title || meta.caption || meta.source_url || "未命名 TikTok 素材";
   const caption = meta.caption || "未取得视频简介";
   const analysis = materialAnalysisSummary(meta);
@@ -1788,7 +1794,7 @@ function renderMaterialItem(item) {
       <label class="materialSelect" title="选择素材"><input type="checkbox" data-select-material="${escapeAttr(item.material_id)}" ${state.selectedMaterials.has(item.material_id) ? "checked" : ""} /><span class="srOnly">选择 ${escapeHtml(title)}</span></label>
       ${cover}
       <div class="materialBody">
-        <strong>${escapeHtml(title)}</strong>
+        <strong>${escapeHtml(title)} ${sourceModeBadge}</strong>
         <span>${escapeHtml(meta.author_name || "未知创作者")} · ${escapeHtml(meta.source_keyword || "manual_tiktok")} · ${escapeHtml(materialStatusLabel(meta.processing_status || item.status))}</span>
         <span class="materialReadiness ${escapeAttr(lane)}">${escapeHtml(laneLabel)}${Number.isFinite(Number(readiness.relevance_score)) ? ` · 相关度 ${Math.round(Number(readiness.relevance_score) * 100)}%` : ""}</span>
         <div class="materialPipeline" aria-label="素材处理进度">
