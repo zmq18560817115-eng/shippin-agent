@@ -107,7 +107,7 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert "loadingSkeleton" in html
     assert "navScrollHint" in html
     assert 'scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })' in script
-    assert "20260723-13" in html
+    assert "20260723-14" in html
     assert 'id="projectOverview"' in html
     assert 'id="projectStageRail"' in script
     assert 'id="projectOverviewContinue"' in script
@@ -218,11 +218,19 @@ def test_delivery_center_has_four_operational_views() -> None:
         assert f'data-delivery-filter="{delivery_filter}"' in html
 
     assert "function deliveryBuckets" in script
+    assert 'deliveryFilter: "pending"' in script
+    assert "Boolean(left.mock) !== Boolean(right.mock)" in script
     assert "function loadDeliveryDownloads" in script
     assert "function renderDownloadHistory" in script
     assert 'api("/api/v2/delivery/downloads?limit=100")' in script
     assert 'state.currentView === "review"' in script
     assert '["review", "delivery"].includes(state.currentView)' in script
+
+
+def test_material_cards_keep_a_usable_desktop_width() -> None:
+    styles = Path("web/styles.css").read_text(encoding="utf-8")
+
+    assert "minmax(min(100%, 340px), 1fr)" in styles
 
 
 def test_admin_failures_have_inline_recovery_actions() -> None:

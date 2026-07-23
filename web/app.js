@@ -20,7 +20,7 @@ const state = {
   operation: null,
   currentView: "home",
   assetArea: "products",
-  deliveryFilter: "archived",
+  deliveryFilter: "pending",
   deliveryDownloads: [],
   taskFilter: "running",
   quickToolAction: "analysis",
@@ -3063,6 +3063,12 @@ function deliveryBuckets() {
     else if (stage === "archive") buckets.passed.push(project);
     else if (["compose", "final_qa"].includes(stage)) buckets.pending.push(project);
   });
+  Object.values(buckets).forEach((items) => items.sort((left, right) => {
+    if (left.project_id === state.selectedId) return -1;
+    if (right.project_id === state.selectedId) return 1;
+    if (Boolean(left.mock) !== Boolean(right.mock)) return left.mock ? 1 : -1;
+    return String(right.updated_at || "").localeCompare(String(left.updated_at || ""));
+  }));
   return buckets;
 }
 

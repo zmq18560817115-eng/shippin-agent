@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from orchestrator import cost_tracker, queue
 from orchestrator.api import app
 from tools.base_tool import ToolResult
 
 
-def test_runtime_status_never_exposes_secret_values(monkeypatch) -> None:
+def test_runtime_status_never_exposes_secret_values(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "empty-runtime.sqlite3"
+    monkeypatch.setattr("orchestrator.api._db_path", lambda: db_path)
+    queue.init_db(db_path=db_path)
     monkeypatch.setenv("DOUBAO_API_KEY", "private-doubao-value")
     monkeypatch.delenv("SEEDANCE_API_KEY", raising=False)
     monkeypatch.delenv("VAF_LOCAL_ASR_ENABLED", raising=False)
@@ -87,3 +91,37 @@ def test_admin_rejects_non_netscape_cookie_upload() -> None:
 
     assert response.status_code == 422
     assert "Netscape" in response.json()["detail"]
+
+
+def test_runtime_uses_successful_real_model_calls_as_readiness_evidence(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "runtime.sqlite3"
+    monkeypatch.setattr("orchestrator.api._db_path", lambda: db_path)
+    monkeypatch.setenv("DOUBAO_API_KEY", "configured-text-key")
+    monkeypatch.setenv("SEEDANCE_API_KEY", "configured-video-key")
+    queue.init_db(db_path=db_path)
+    cost_tracker.reconcile(
+        project_id="real-evidence",
+        agent="script",
+        tool="doubao_script",
+        cost_cny=0.01,
+        model="doubao-text",
+        meta={"mock": False},
+        db_path=db_path,
+    )
+    cost_tracker.reconcile(
+        project_id="real-evidence",
+        agent="media",
+        tool="seedance_shot",
+        cost_cny=1.0,
+        model="seedance-video",
+        meta={"mock": False},
+        db_path=db_path,
+    )
+
+    with TestClient(app) as client:
+        payload = client.get("/api/v2/runtime").json()
+
+    assert payload["providers"]["doubao"]["state"] == "ready"
+    assert payload["providers"]["seedance"]["state"] == "ready"
+    assert "真实调用已验证" in payload["providers"]["doubao"]["detail"]
+    assert "configured-text-key" not in str(payload)

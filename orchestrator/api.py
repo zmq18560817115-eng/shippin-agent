@@ -509,6 +509,10 @@ def runtime_status() -> dict[str, Any]:
             ffmpeg_executable = None
     context = ToolContext.from_mapping()
     probes = _load_runtime_probes()
+    doubao_evidence = _latest_real_tool_evidence(
+        {"doubao_analyze", "doubao_script", "doubao_shotplan", "doubao_review"}
+    )
+    seedance_evidence = _latest_real_tool_evidence({"seedance_shot"})
     tiktok_probe = probes.get("tiktok_api") or {}
     browser_probe = probes.get("browser_search") or {}
     tiktok_operational = tiktok_probe.get("state") == "ready"
@@ -526,10 +530,14 @@ def runtime_status() -> dict[str, Any]:
         "providers": {
             "doubao": _runtime_provider(
                 doubao_configured,
+                operational=bool(doubao_evidence),
+                detail=_real_tool_evidence_detail(doubao_evidence),
                 configured_detail="密钥已配置，需通过真实文本探针确认模型与网络",
             ),
             "seedance": _runtime_provider(
                 seedance_configured,
+                operational=bool(seedance_evidence),
+                detail=_real_tool_evidence_detail(seedance_evidence),
                 configured_detail="密钥已配置，需通过真实单镜探针确认模型参数兼容",
             ),
             "tiktok_oembed": _runtime_provider(True, operational=True, detail="公开元数据接口可用"),
@@ -902,6 +910,47 @@ def _runtime_provider(
         "state": "ready" if configured and operational else ("configured_unverified" if configured else "not_configured"),
         "detail": detail or (configured_detail if configured else "尚未配置"),
     }
+
+
+def _latest_real_tool_evidence(tools: set[str]) -> dict[str, Any] | None:
+    if not tools:
+        return None
+    try:
+        with queue.get_conn(_db_path()) as conn:
+            placeholders = ",".join("?" for _ in tools)
+            rows = conn.execute(
+                f"""
+                SELECT project_id, tool, meta_json, created_at
+                FROM cost_entries
+                WHERE tool IN ({placeholders})
+                ORDER BY id DESC
+                LIMIT 100
+                """,
+                sorted(tools),
+            ).fetchall()
+    except Exception:
+        return None
+    for row in rows:
+        try:
+            meta = cost_tracker.loads_meta(row["meta_json"])
+        except (TypeError, ValueError):
+            continue
+        if meta.get("mock") is not False:
+            continue
+        return {
+            "project_id": str(row["project_id"]),
+            "tool": str(row["tool"]),
+            "model": str(meta.get("model") or ""),
+            "checked_at": str(row["created_at"]),
+        }
+    return None
+
+
+def _real_tool_evidence_detail(evidence: dict[str, Any] | None) -> str:
+    if not evidence:
+        return ""
+    model = evidence.get("model") or evidence.get("tool") or "真实模型"
+    return f"真实调用已验证：{model} · {evidence.get('checked_at', '')}"
 
 
 def _build_version() -> str:
