@@ -281,6 +281,9 @@ dialog::backdrop { background: rgba(17, 26, 47, .62); }
 .panelHead > div svg { width: 17px; height: 17px; color: var(--purple); }
 .panelHead h3 { font-size: 15px; }
 .panelHead span { font-size: 12px; }
+.panelHead .runtimeActions { justify-content: flex-end; flex-wrap: wrap; }
+.runtimeActions .tableAction { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.runtimeActions .tableAction svg { width: 16px; height: 16px; }
 
 .stateBars { gap: 15px; }
 .stateBars div { padding-bottom: 9px; }

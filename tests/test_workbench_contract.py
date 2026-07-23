@@ -278,3 +278,17 @@ def test_visual_system_keeps_accessible_text_and_focus_targets() -> None:
     assert "button:focus-visible" in portal_styles
     assert ".tableAction { min-height: 36px" in portal_styles
     assert "button, select, input { min-height: 44px; }" in portal_styles
+
+
+def test_admin_exposes_cookie_upload_next_to_collection_probe() -> None:
+    html = Path("web/admin.html").read_text(encoding="utf-8")
+    script = Path("web/admin.js").read_text(encoding="utf-8")
+
+    backend_panel = html.split('id="backendPanel"', 1)[1].split('id="deploymentPanel"', 1)[0]
+    assert 'id="cookiesFile"' in backend_panel
+    assert 'id="uploadCookies"' in backend_panel
+    assert 'id="probeTikTok"' in backend_panel
+    assert 'data-lucide="upload"' in backend_panel
+    assert 'data-lucide="radar"' in backend_panel
+    assert 'api("/api/v2/admin/runtime/cookies"' in script
+    assert "20260723-2" in html

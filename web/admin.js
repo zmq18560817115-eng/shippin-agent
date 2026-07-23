@@ -269,7 +269,8 @@ cookiesFile?.addEventListener("change", async () => {
   if (!file) return;
   const button = document.querySelector("#uploadCookies");
   button.disabled = true;
-  button.textContent = "正在更新…";
+  button.innerHTML = '<i data-lucide="loader-circle"></i>正在更新…';
+  window.lucide?.createIcons();
   try {
     const cookiesText = await file.text();
     await api("/api/v2/admin/runtime/cookies", {
@@ -283,7 +284,8 @@ cookiesFile?.addEventListener("change", async () => {
   } finally {
     cookiesFile.value = "";
     button.disabled = false;
-    button.textContent = "更新 TikTok Cookies";
+    button.innerHTML = '<i data-lucide="upload"></i>更新 Cookies';
+    window.lucide?.createIcons();
   }
 });
 const userDialog = document.querySelector("#userDialog");
