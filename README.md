@@ -183,6 +183,8 @@ TikTokApi 浏览器采集运行在隔离子进程中，超过 `TIKTOK_WORKER_TIM
 
 采集中心创建的任务写入 SQLite `collection_jobs`，由 API 后台 Worker 持续领取；关闭浏览器不会中断任务。Worker 使用数据库租约和心跳避免重复执行，进程异常后过期租约会自动回收，临时故障按退避策略重试。默认 `VAF_COLLECTION_WORKER_ENABLED=true`；只有部署独立采集 Worker 时才应在 API 进程中显式关闭。
 
+终态任务会自动清理，避免后台任务卡片持续堆积。默认已完成任务保留 7 天，失败、部分完成和取消任务保留 14 天，每小时清理一次；可通过 `VAF_COLLECTION_SUCCEEDED_RETENTION_DAYS`、`VAF_COLLECTION_FAILED_RETENTION_DAYS` 和 `VAF_COLLECTION_CLEANUP_INTERVAL_SECONDS` 调整。清理仅删除队列任务及其临时候选记录，不删除已经写入素材库的视频、封面、转写、拆解成果。
+
 真实模型验收必须保留项目运行报告、五个镜头产物、最终 720×1280 成片和人工抽帧检查结果。一次真实回归只能证明当次模型与配置可用，不能替代持续的失败率、耗时和实际账单监控。
 
 ```powershell

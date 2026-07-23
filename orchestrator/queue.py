@@ -196,6 +196,34 @@ def list_collection_jobs(
     return [_collection_job_dict(row) for row in rows]
 
 
+def purge_expired_collection_jobs(
+    *,
+    succeeded_before: str,
+    terminal_before: str,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, int]:
+    """Delete expired terminal queue records while leaving material-library files untouched."""
+    init_db(db_path)
+    with get_conn(db_path) as conn:
+        succeeded = conn.execute(
+            """
+            DELETE FROM collection_jobs
+            WHERE status = 'succeeded'
+              AND COALESCE(finished_at, updated_at) < ?
+            """,
+            (succeeded_before,),
+        ).rowcount
+        terminal = conn.execute(
+            """
+            DELETE FROM collection_jobs
+            WHERE status IN ('partial','failed','cancelled')
+              AND COALESCE(finished_at, updated_at) < ?
+            """,
+            (terminal_before,),
+        ).rowcount
+    return {"succeeded": int(succeeded), "terminal": int(terminal), "total": int(succeeded + terminal)}
+
+
 def cancel_collection_job(
     job_id: int,
     *,

@@ -38,6 +38,47 @@ def test_collection_job_persists_progress_contract(tmp_path: Path) -> None:
     assert cancelled["finished_at"]
 
 
+def test_collection_job_cleanup_only_purges_expired_terminal_records(tmp_path: Path) -> None:
+    db_path = tmp_path / "collection-cleanup.db"
+    jobs = [
+        queue.create_collection_job(
+            target_type="keyword",
+            provider="auto",
+            target=f"cleanup-{index}",
+            requested_count=1,
+            product_id="便携恒温杯",
+            mock=True,
+            db_path=db_path,
+        )
+        for index in range(4)
+    ]
+    with queue.get_conn(db_path) as conn:
+        conn.execute(
+            "UPDATE collection_jobs SET status = 'succeeded', finished_at = '2026-01-01T00:00:00.000Z' WHERE id = ?",
+            (jobs[0]["id"],),
+        )
+        conn.execute(
+            "UPDATE collection_jobs SET status = 'failed', finished_at = '2026-01-01T00:00:00.000Z' WHERE id = ?",
+            (jobs[1]["id"],),
+        )
+        conn.execute(
+            "UPDATE collection_jobs SET status = 'succeeded', finished_at = '2099-01-01T00:00:00.000Z' WHERE id = ?",
+            (jobs[2]["id"],),
+        )
+
+    result = queue.purge_expired_collection_jobs(
+        succeeded_before="2026-02-01T00:00:00.000Z",
+        terminal_before="2026-02-01T00:00:00.000Z",
+        db_path=db_path,
+    )
+
+    assert result == {"succeeded": 1, "terminal": 1, "total": 2}
+    assert queue.get_collection_job(jobs[0]["id"], db_path=db_path) is None
+    assert queue.get_collection_job(jobs[1]["id"], db_path=db_path) is None
+    assert queue.get_collection_job(jobs[2]["id"], db_path=db_path)["status"] == "succeeded"
+    assert queue.get_collection_job(jobs[3]["id"], db_path=db_path)["status"] == "queued"
+
+
 def test_collection_item_deduplicates_tiktok_video_id_across_url_variants(tmp_path: Path) -> None:
     db_path = tmp_path / "collection-video-id.db"
     job = queue.create_collection_job(

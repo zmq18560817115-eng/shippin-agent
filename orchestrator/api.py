@@ -339,10 +339,15 @@ async def lifespan(_: FastAPI):
     _recover_auto_collector_on_startup()
     scheduler = asyncio.create_task(_auto_collector_loop())
     collection_worker = asyncio.create_task(_collection_job_loop()) if _env_bool("VAF_COLLECTION_WORKER_ENABLED", True) else None
+    collection_cleanup = (
+        asyncio.create_task(_collection_cleanup_loop())
+        if _env_bool("VAF_COLLECTION_CLEANUP_ENABLED", True)
+        else None
+    )
     try:
         yield
     finally:
-        background_tasks = [scheduler, collection_worker]
+        background_tasks = [scheduler, collection_worker, collection_cleanup]
         for task in background_tasks:
             if task is not None:
                 task.cancel()
@@ -2187,6 +2192,16 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
+def _env_int(name: str, default: int) -> int:
+    value = str(os.environ.get(name) or "").strip()
+    if not value:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 def _ensure_auto_collector_settings() -> None:
     queue.init_db(db_path=_db_path())
     target = str(os.environ.get("VAF_AUTO_COLLECT_TARGET") or "").strip()
@@ -2645,6 +2660,28 @@ async def _collection_job_loop() -> None:
         except Exception:
             result = None
         await asyncio.sleep(1 if result is not None else 5)
+
+
+def _purge_expired_collection_jobs_once() -> dict[str, int]:
+    now = datetime.now(timezone.utc)
+    succeeded_days = max(1, _env_int("VAF_COLLECTION_SUCCEEDED_RETENTION_DAYS", 7))
+    terminal_days = max(1, _env_int("VAF_COLLECTION_FAILED_RETENTION_DAYS", 14))
+    return queue.purge_expired_collection_jobs(
+        succeeded_before=(now - timedelta(days=succeeded_days)).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        terminal_before=(now - timedelta(days=terminal_days)).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        db_path=_db_path(),
+    )
+
+
+async def _collection_cleanup_loop() -> None:
+    interval_seconds = max(300, _env_int("VAF_COLLECTION_CLEANUP_INTERVAL_SECONDS", 3600))
+    while True:
+        try:
+            await asyncio.to_thread(_purge_expired_collection_jobs_once)
+        except Exception:
+            # Cleanup must never interrupt collection or API availability.
+            pass
+        await asyncio.sleep(interval_seconds)
 
 
 def _auth_enabled() -> bool:
