@@ -3160,6 +3160,10 @@ pre {
   align-items: start;
 }
 
+.standaloneLauncher[data-standalone-action="script"] {
+  grid-template-columns: minmax(190px, 0.8fr) minmax(150px, 0.6fr) minmax(140px, 0.55fr) 110px minmax(260px, 1.35fr) auto;
+}
+
 .standaloneLauncher [data-standalone-product] {
   width: 100%;
   min-height: 44px;
@@ -4117,6 +4121,17 @@ pre {
   }
 }
 
+@media (min-width: 901px) and (max-width: 1200px) {
+  .standaloneLauncher[data-standalone-action="script"] {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .standaloneLauncher[data-standalone-action="script"] > div:first-child,
+  .standaloneLauncher[data-standalone-action="script"] textarea {
+    grid-column: 1 / -1;
+  }
+}
+
 .agentRunEvidence {
   display: flex;
   flex-wrap: wrap;
@@ -4172,4 +4187,49 @@ pre {
 .workflowNav .navFoot,
 .viewIntro > div > span {
   font-size: 12px;
+}
+.standaloneScriptEditor {
+  display: grid;
+  gap: 12px;
+}
+
+.scriptEditorMeta,
+.scriptEditorActions,
+.scriptEditRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.scriptEditorMeta span,
+.scriptEditorActions span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.scriptEditCard {
+  display: grid;
+  gap: 10px;
+}
+
+.scriptEditCard label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.scriptEditCard input,
+.scriptEditCard textarea {
+  width: 100%;
+}
+
+.scriptEditCard textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.scriptEditRow > label {
+  flex: 1;
 }

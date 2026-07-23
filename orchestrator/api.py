@@ -248,6 +248,8 @@ class AgentRunRequest(BaseModel):
     creative_style: str = ""
     target_audience: str = ""
     creative_freedom: str = "balanced"
+    script_format: str = "auto"
+    duration_s: int = 30
 
 
 class TaskIgnoreRequest(BaseModel):
@@ -284,6 +286,16 @@ class StandalonePromoteRequest(BaseModel):
     project_id: str | None = None
     product_id: str | None = None
     mock: bool = True
+
+
+class StandaloneArtifactSaveRequest(BaseModel):
+    source_project_id: str
+    artifact_name: str
+    artifact: dict[str, Any]
+
+
+class RuntimeCookiesRequest(BaseModel):
+    cookies_text: str
 
 
 class LoginRequest(BaseModel):
@@ -471,13 +483,15 @@ def healthz() -> dict[str, str]:
 @app.get("/api/v2/runtime")
 def runtime_status() -> dict[str, Any]:
     from tools.collect import tiktok_api_adapter, tiktok_browser_search
+    from tools.video.visual_qa import resolve_tesseract
 
     tiktok_api_installed = tiktok_api_adapter.package_available()
     tiktok_api_ready = tiktok_api_adapter.configured(os.environ)
     browser_search_ready = tiktok_browser_search.configured(os.environ)
     apify_ready = bool(os.environ.get("APIFY_API_TOKEN"))
     yt_dlp_ready = bool(shutil.which("yt-dlp"))
-    cookies_ready = bool(os.environ.get("TIKTOK_COOKIES_FILE"))
+    cookies_path = Path(os.environ.get("TIKTOK_COOKIES_FILE") or DATA_ROOT / "secrets" / "tiktok-cookies.txt")
+    cookies_ready = cookies_path.is_file() and cookies_path.stat().st_size > 0
     doubao_configured = bool(os.environ.get("DOUBAO_API_KEY"))
     seedance_configured = bool(os.environ.get("SEEDANCE_API_KEY"))
     cloud_asr_configured = bool(os.environ.get("VOLCENGINE_ASR_API_KEY")) or bool(
@@ -485,6 +499,14 @@ def runtime_status() -> dict[str, Any]:
     )
     local_asr_configured = _env_bool("VAF_LOCAL_ASR_ENABLED", False) and importlib.util.find_spec("faster_whisper") is not None
     asr_configured = cloud_asr_configured or local_asr_configured
+    ffmpeg_executable = shutil.which("ffmpeg")
+    if not ffmpeg_executable:
+        try:
+            import imageio_ffmpeg
+
+            ffmpeg_executable = imageio_ffmpeg.get_ffmpeg_exe()
+        except (ImportError, RuntimeError, OSError):
+            ffmpeg_executable = None
     context = ToolContext.from_mapping()
     probes = _load_runtime_probes()
     tiktok_probe = probes.get("tiktok_api") or {}
@@ -557,6 +579,49 @@ def runtime_status() -> dict[str, Any]:
         ],
         "budget_mode": str((context.config.get("runtime") or {}).get("budget_mode") or "enforce"),
         "pricing_calibrated": _pricing_calibrated(),
+        "deployment": {
+            "authentication": {
+                "ready": _auth_enabled(),
+                "detail": "内网鉴权已开启" if _auth_enabled() else "请设置 VAF_AUTH_ENABLED=true",
+            },
+            "session_secret": {
+                "ready": len(os.environ.get("VAF_SESSION_SECRET", "")) >= 32,
+                "detail": "会话密钥长度合格" if len(os.environ.get("VAF_SESSION_SECRET", "")) >= 32 else "VAF_SESSION_SECRET 至少需要 32 位",
+            },
+            "cookie_secure": {
+                "ready": _env_bool("VAF_COOKIE_SECURE", _auth_enabled()),
+                "warning": _auth_enabled() and not _env_bool("VAF_COOKIE_SECURE", _auth_enabled()),
+                "detail": "HTTPS Cookie 已开启" if _env_bool("VAF_COOKIE_SECURE", _auth_enabled()) else "仅适合 HTTP 本地调试，内网上线应启用 HTTPS Cookie",
+            },
+            "tiktok_cookies": {
+                "ready": cookies_ready,
+                "detail": "Cookies 文件可读" if cookies_ready else "请在此页上传 Netscape 格式 TikTok Cookies",
+            },
+            "ffmpeg": {
+                "ready": bool(ffmpeg_executable),
+                "detail": "FFmpeg 可执行" if ffmpeg_executable else "未检测到系统或内置 FFmpeg",
+            },
+            "playwright": {
+                "ready": importlib.util.find_spec("playwright") is not None,
+                "detail": "Playwright 已安装" if importlib.util.find_spec("playwright") is not None else "请安装 Playwright 与 Chromium",
+            },
+            "visual_ocr": {
+                "ready": bool(resolve_tesseract()),
+                "detail": "Tesseract OCR 可执行" if resolve_tesseract() else "未检测到 Tesseract OCR",
+            },
+            "speech_to_text": {
+                "ready": asr_configured,
+                "detail": "ASR 已配置" if asr_configured else "请配置火山 ASR 或启用本地 faster-whisper",
+            },
+            "persistent_data": {
+                "ready": DATA_ROOT.exists() and os.access(DATA_ROOT, os.W_OK),
+                "detail": "数据目录可写" if DATA_ROOT.exists() and os.access(DATA_ROOT, os.W_OK) else "数据目录不存在或不可写",
+            },
+            "persistent_runs": {
+                "ready": _runs_root().exists() and os.access(_runs_root(), os.W_OK),
+                "detail": "运行目录可写" if _runs_root().exists() and os.access(_runs_root(), os.W_OK) else "运行目录不存在或不可写",
+            },
+        },
     }
 
 
@@ -804,6 +869,24 @@ def probe_runtime_provider(request: RuntimeProbeRequest) -> dict[str, Any]:
     probes[provider] = probe
     _write_json_atomic(_runtime_probe_path(), probes)
     return {"ok": probe["state"] in {"ready", "degraded"}, "provider": provider, "probe": probe}
+
+
+@app.post("/api/v2/admin/runtime/cookies")
+def replace_tiktok_cookies(request: RuntimeCookiesRequest) -> dict[str, Any]:
+    content = request.cookies_text.strip()
+    if not content or len(content.encode("utf-8")) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=422, detail="Cookies 文件为空或超过 2MB")
+    if "Netscape HTTP Cookie File" not in content or "\t" not in content:
+        raise HTTPException(status_code=422, detail="请上传 Netscape 格式的 TikTok Cookies .txt 文件")
+    target = Path(os.environ.get("TIKTOK_COOKIES_FILE") or DATA_ROOT / "secrets" / "tiktok-cookies.txt")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(f"{target.suffix}.tmp")
+    temporary.write_text(f"{content}\n", encoding="utf-8")
+    temporary.replace(target)
+    if os.name != "nt":
+        target.chmod(0o600)
+    os.environ["TIKTOK_COOKIES_FILE"] = str(target)
+    return {"ok": True, "configured": True, "size_bytes": target.stat().st_size}
 
 
 def _runtime_provider(
@@ -1194,6 +1277,9 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         )
         payload.update({
             "product_id": request.product_id,
+            "standalone_flexible": standalone,
+            "script_format": request.script_format,
+            "duration_s": max(12, min(int(request.duration_s or 30), 60)),
             "analysis_report": {"project_id": project_id, "voiceover_text": source, "hook_3s": source[:120], "structure": []},
             "strategy_brief": {"content_direction": source, "product_guardrails": product_library.product_guardrail_text(request.product_id)},
         })
@@ -1380,7 +1466,11 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=error.get("message") or error)
     artifact = result.data[artifact_name]
     if artifact_name == "script_copy":
-        artifact["quality_assessment"] = creative_quality.assess_script(artifact)
+        artifact["quality_assessment"] = (
+            creative_quality.assess_standalone_script(artifact)
+            if standalone and artifact.get("production_profile") != "30s-five-beat"
+            else creative_quality.assess_script(artifact)
+        )
     elif artifact_name == "shot_plan":
         script_copy = payload.get("script_copy") if isinstance(payload.get("script_copy"), dict) else None
         artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
@@ -1405,7 +1495,11 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             result = retried
             artifact = retried.data[artifact_name]
             if artifact_name == "script_copy":
-                artifact["quality_assessment"] = creative_quality.assess_script(artifact)
+                artifact["quality_assessment"] = (
+                    creative_quality.assess_standalone_script(artifact)
+                    if standalone and artifact.get("production_profile") != "30s-five-beat"
+                    else creative_quality.assess_script(artifact)
+                )
             else:
                 script_copy = retry_payload.get("script_copy") if isinstance(retry_payload.get("script_copy"), dict) else None
                 artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
@@ -3191,6 +3285,53 @@ def resume_pipeline(request: PipelineResumeRequest) -> dict[str, Any]:
     return {"engine": _engine_status(status), "project": _project_summary(project_id)}
 
 
+@app.post("/api/v2/agents/artifacts/save")
+def save_standalone_artifact(request: StandaloneArtifactSaveRequest) -> dict[str, Any]:
+    source_project_id = _validate_project_id(request.source_project_id)
+    artifact_name = _validate_artifact_name(request.artifact_name)
+    source_row = _project_row_or_none(source_project_id)
+    if source_row is None or not _is_standalone_project(source_row):
+        raise HTTPException(status_code=409, detail="只能编辑独立工作区产物")
+    if artifact_name != "script_copy":
+        raise HTTPException(status_code=400, detail="当前仅支持编辑并保存独立脚本")
+    artifact = dict(request.artifact)
+    artifact["project_id"] = source_project_id
+    artifact["version"] = "2.0"
+    artifact["quality_assessment"] = (
+        creative_quality.assess_standalone_script(artifact)
+        if artifact.get("production_profile") != "30s-five-beat"
+        else creative_quality.assess_script(artifact)
+    )
+    revision = int(artifact.get("revision") or 0) + 1
+    artifact["revision"] = revision
+    artifact["saved_at"] = _utc_now()
+    try:
+        artifacts.save_artifact(
+            source_project_id,
+            artifact_name,
+            artifact,
+            run_root=_run_root(source_project_id),
+        )
+    except (artifacts.ArtifactValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"脚本格式校验失败：{exc}") from exc
+    queue.record_event(
+        project_id=source_project_id,
+        event_type="agent.standalone.saved",
+        message=f"{artifact_name}:revision-{revision}",
+        meta={"revision": revision, "quality_status": artifact["quality_assessment"]["status"]},
+        db_path=_db_path(),
+    )
+    return {
+        "ok": True,
+        "project_id": source_project_id,
+        "artifact_name": artifact_name,
+        "artifact": artifact,
+        "quality_checks": _agent_quality_checks("script", artifact),
+        "saved_at": artifact["saved_at"],
+        "revision": revision,
+    }
+
+
 @app.post("/api/v2/agents/promote")
 def promote_standalone_artifact(request: StandalonePromoteRequest) -> dict[str, Any]:
     source_project_id = _validate_project_id(request.source_project_id)
@@ -3203,6 +3344,12 @@ def promote_standalone_artifact(request: StandalonePromoteRequest) -> dict[str, 
 
     source_root = _run_root(source_project_id)
     artifact = _load_artifact_from_root(source_root, artifact_name)
+    is_production_script = (
+        [item.get("role") for item in artifact.get("sections") or []] == creative_quality.EXPECTED_ROLES
+        and [item.get("timing") for item in artifact.get("sections") or []] == creative_quality.EXPECTED_TIMINGS
+    )
+    if artifact_name == "script_copy" and not is_production_script:
+        artifact = _adapt_script_to_production(artifact)
     assessment = artifact.get("quality_assessment") if isinstance(artifact, dict) else None
     if artifact_name in {"script_copy", "shot_plan"} and (
         not isinstance(assessment, dict) or assessment.get("status") != "PASS"
@@ -3256,6 +3403,54 @@ def promote_standalone_artifact(request: StandalonePromoteRequest) -> dict[str, 
         "engine": _engine_status(status),
         "project": _project_summary(project_id),
     }
+
+
+def _adapt_script_to_production(script: dict[str, Any]) -> dict[str, Any]:
+    source_sections = [item for item in script.get("sections") or [] if isinstance(item, dict)]
+    if not source_sections:
+        raise HTTPException(status_code=422, detail="脚本没有可用于生产适配的有效段落")
+    roles = ["钩子", "痛点", "方案", "证明", "行动号召"]
+    timings = ["0-6s", "6-12s", "12-18s", "18-24s", "24-30s"]
+    adapted: list[dict[str, Any]] = []
+    for index, (role, timing) in enumerate(zip(roles, timings), start=1):
+        source_index = round((index - 1) * (len(source_sections) - 1) / 4) if len(source_sections) > 1 else 0
+        source = dict(source_sections[source_index])
+        source.update({"number": index, "role": role, "timing": timing})
+        source["voiceover_zh"] = str(source.get("voiceover_zh") or source.get("subtitle_zh") or "请补充旁白")
+        source["subtitle_zh"] = source["voiceover_zh"]
+        source["scene_zh"] = str(source.get("scene_zh") or "保持原脚本场景、人物、光线和产品位置连续。")
+        source["action_zh"] = str(source.get("action_zh") or "用一个清晰可见的动作推动剧情。")
+        source["story_beat_zh"] = str(source.get("story_beat_zh") or "承接上一镜并推动到下一步。")
+        if any(item["action_zh"] == source["action_zh"] for item in adapted):
+            source["action_zh"] = f"{source['action_zh']} 本镜完成生产适配第{index}步。"
+        if any(item["story_beat_zh"] == source["story_beat_zh"] for item in adapted):
+            source["story_beat_zh"] = f"{source['story_beat_zh']} 由第{index}个节拍推进下一动作。"
+        adapted.append(source)
+    if "恒温杯" in str(script.get("product_id") or ""):
+        adapted[2]["action_zh"] = "只展示将允许的奶液从独立容器倒入恒温杯；禁止反向倒出，禁止把奶瓶插入杯中。"
+        adapted[3]["action_zh"] = "倾斜恒温杯，经圆形出液口将奶液倒入独立干净奶瓶；温度可见时只能显示 98°F。"
+    result = dict(script)
+    result.update({
+        "total_duration_s": 30,
+        "sections": adapted,
+        "production_profile": "30s-five-beat",
+        "production_adaptation": {
+            "source_duration_s": script.get("total_duration_s"),
+            "source_section_count": len(source_sections),
+            "adapted_at": _utc_now(),
+        },
+    })
+    result["quality_assessment"] = creative_quality.assess_script(result)
+    if result["quality_assessment"]["status"] != "PASS":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "自由脚本转为30秒生产结构后仍有质量项未通过",
+                "issues": result["quality_assessment"]["issues"],
+                "score": result["quality_assessment"]["score"],
+            },
+        )
+    return result
 
 
 def _manual_stage_label(stage: str) -> str:

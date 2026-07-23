@@ -40,6 +40,24 @@ def assess_script(script: dict[str, Any]) -> dict[str, Any]:
     return _report("script", checks)
 
 
+def assess_standalone_script(script: dict[str, Any]) -> dict[str, Any]:
+    sections = script.get("sections") if isinstance(script.get("sections"), list) else []
+    duration = float(script.get("total_duration_s") or 0)
+    checks = [
+        _check("structure", 3 <= len(sections) <= 8, "独立脚本应包含 3-8 个有效段落"),
+        _check("timing", _continuous_timing(sections, duration), "段落时间必须连续并覆盖目标时长"),
+        _check("scene_action_story", _all_fields(sections, "voiceover_zh", "scene_zh", "action_zh", "story_beat_zh"), "每段都必须包含旁白、场景、动作和剧情推进"),
+        _check("narrative_diversity", _unique_ratio(sections, "story_beat_zh") >= 0.75, "各段剧情推进不能重复"),
+        _check("action_diversity", _unique_ratio(sections, "action_zh") >= 0.75, "各段应使用不同且可见的动作"),
+        _check("chinese_delivery", _chinese_ratio(" ".join(str(item.get("voiceover_zh") or "") for item in sections)) >= 0.35, "运营文案必须以简体中文交付"),
+        _check("scene_specificity", _all_min_length(sections, "scene_zh", 18), "场景必须包含具体环境、光线、道具或人物状态"),
+        _check("spoken_naturalness", _all_bounded_length(sections, "voiceover_zh", 4, 90), "旁白必须自然、可朗读，避免空泛或过长"),
+        _check("anti_template_copy", not _contains_any(str(script), VAGUE_CREATIVE_PHRASES), "删除模板化空话，改写为具体动作和用户变化"),
+        _check("temperature", not _contains_forbidden_celsius(str(sections)), "禁止使用摄氏温标冒充华氏温标"),
+    ]
+    return _report("standalone_script", checks)
+
+
 def assess_storyboard(plan: dict[str, Any], script: dict[str, Any] | None = None) -> dict[str, Any]:
     shots = plan.get("shots") if isinstance(plan.get("shots"), list) else []
     durations = [float((shot.get("camera_motion") or {}).get("duration_sec") or 0) for shot in shots]
@@ -112,6 +130,16 @@ def _all_bounded_length(items: list[dict[str, Any]], name: str, minimum: int, ma
         return False
     lengths = [len(str(item.get(name) or "").strip()) for item in items]
     return all(minimum <= length <= maximum for length in lengths)
+
+
+def _continuous_timing(items: list[dict[str, Any]], duration: float) -> bool:
+    expected = 0
+    for item in items:
+        match = re.fullmatch(r"(\d+)-(\d+)s", str(item.get("timing") or ""))
+        if not match or int(match.group(1)) != expected or int(match.group(2)) <= expected:
+            return False
+        expected = int(match.group(2))
+    return bool(items) and abs(expected - duration) <= 1
 
 
 def _unique_ratio(items: list[dict[str, Any]], name: str) -> float:

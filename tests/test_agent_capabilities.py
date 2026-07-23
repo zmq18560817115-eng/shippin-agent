@@ -812,3 +812,76 @@ def test_real_storyboard_normalizer_fallback_preserves_script_scenario() -> None
     assert "高铁" in shots[0]["visual"]
     assert "高铁" in shots[2]["visual"]
     assert "卧室" not in " ".join(shot["visual"] for shot in shots)
+
+
+def test_standalone_script_supports_flexible_duration_save_and_promote(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "flexible-script.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        generated = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "script",
+                "product_id": "折叠雨伞",
+                "prompt": "为城市通勤者创作一条45秒剧情短片，雨势突然变大后自然展示产品。",
+                "script_format": "story",
+                "duration_s": 45,
+                "mock": True,
+            },
+        )
+        assert generated.status_code == 200, generated.text
+        payload = generated.json()
+        artifact = payload["artifact"]
+        assert artifact["total_duration_s"] == 45
+        assert artifact["script_format"] == "story"
+        assert artifact["production_profile"] == "standalone-flexible"
+        artifact["sections"][0]["voiceover_zh"] = "雨来得比地铁还快，先把伞拿出来。"
+        saved = client.post(
+            "/api/v2/agents/artifacts/save",
+            json={
+                "source_project_id": payload["project_id"],
+                "artifact_name": "script_copy",
+                "artifact": artifact,
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["revision"] == 1
+        promoted = client.post(
+            "/api/v2/agents/promote",
+            json={
+                "source_project_id": payload["project_id"],
+                "artifact_name": "script_copy",
+                "product_id": "折叠雨伞",
+                "mock": True,
+            },
+        )
+
+    assert promoted.status_code == 200, promoted.text
+    project_id = promoted.json()["project_id"]
+    production_script = api._load_artifact(project_id, "script_copy")
+    assert [item["role"] for item in production_script["sections"]] == api.creative_quality.EXPECTED_ROLES
+    assert [item["timing"] for item in production_script["sections"]] == api.creative_quality.EXPECTED_TIMINGS
+    assert production_script["production_profile"] == "30s-five-beat"
+
+
+def test_research_list_normalizer_never_splits_plain_text_into_characters() -> None:
+    from tools.llm.agent_capabilities import _list
+
+    assert _list("新手照护者重视夜间准备效率。") == ["新手照护者重视夜间准备效率。"]
+    assert _list("第一条\n第二条") == ["第一条", "第二条"]
+
+
+def test_real_script_normalizer_keeps_all_flexible_sections() -> None:
+    from tools.llm.doubao_script import _flexible_fallback_sections, _normalize_sections
+    from tools.llm.mock_artifacts import mock_script_copy
+
+    fallback = _flexible_fallback_sections(
+        mock_script_copy("flex-normalize")["sections"],
+        duration_s=15,
+        script_format="story",
+    )
+    sections = _normalize_sections([], fallback_sections=fallback)
+
+    assert len(sections) == 6
+    assert sections[-1]["timing"].endswith("-15s")

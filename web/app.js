@@ -177,15 +177,16 @@ function toast(message, kind = "ok") {
 }
 
 function renderAgentResult(host, payload) {
+  host._agentPayload = payload;
   const download = payload.download_url
     ? `<a class="buttonLink" href="${escapeAttr(payload.download_url)}">下载本节点 JSON</a>`
     : "";
-  const promotable = payload.status === "succeeded"
-    && payload.project_id && payload.project_id.startsWith("scratch-")
+  const scratchArtifact = payload.project_id && payload.project_id.startsWith("scratch-")
     && ["analysis_report", "script_copy", "shot_plan"].includes(payload.artifact_name);
+  const promotable = payload.status === "succeeded" && scratchArtifact;
   const artifactProductId = String(payload.artifact?.product_id || "").trim();
-  const promote = promotable
-    ? `<button type="button" class="promoteStandalone" data-project-id="${escapeAttr(payload.project_id)}" data-artifact-name="${escapeAttr(payload.artifact_name)}" data-product-id="${escapeAttr(artifactProductId)}">用此产物创建生产项目</button>`
+  const promote = scratchArtifact
+    ? `<button type="button" class="promoteStandalone" data-project-id="${escapeAttr(payload.project_id)}" data-artifact-name="${escapeAttr(payload.artifact_name)}" data-product-id="${escapeAttr(artifactProductId)}" ${promotable ? "" : "disabled"}>用此产物创建生产项目</button>`
     : "";
   const artifact = payload.artifact || {};
   const contract = payload.meta?.agent_contract || {};
@@ -212,7 +213,7 @@ function renderAgentResult(host, payload) {
     </div>
     ${requirement ? `<details class="agentInputEvidence"><summary>查看本次实际输入</summary><p>${escapeHtml(requirement)}</p></details>` : ""}
     ${executionContext}
-    ${payload.project_id && payload.project_id.startsWith("scratch-") ? "<p>独立工作区产物已保存，不会出现在生产项目列表中。</p>" : ""}
+    ${payload.project_id && payload.project_id.startsWith("scratch-") ? `<p>独立工作区产物已保存，不会出现在生产项目列表中。${promotable ? "确认内容后可创建生产项目。" : "当前质量检查未通过，修改保存或重新生成后才可创建项目。"}</p>` : ""}
     ${warnings.length ? `<div class="agentWarnings">${warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
     <div class="agentFriendlyResult">${renderFriendlyArtifact(payload.artifact_name, artifact, payload)}</div>
     ${nextAgent ? `<div class="agentNextAction"><button type="button" data-run-next-agent="${escapeAttr(nextAgent.agent_action)}">${escapeHtml(nextAgent.label)}</button></div>` : ""}
@@ -297,6 +298,29 @@ function renderFriendlyArtifact(name, artifact, payload = {}) {
   }
   if (name === "script_copy") {
     const sections = Array.isArray(artifact.sections) ? artifact.sections : [];
+    if (payload.project_id?.startsWith("scratch-")) {
+      return `<div class="standaloneScriptEditor" data-script-editor>
+        <div class="scriptEditorMeta">
+          <strong>${escapeHtml(artifact.script_format || "自动结构")} · ${escapeHtml(artifact.total_duration_s || 30)} 秒</strong>
+          <span>修订 ${escapeHtml(artifact.revision || 0)} · 可直接修改后保存</span>
+        </div>
+        ${sections.map((section, index) => `
+          <article class="agentResultCard scriptEditCard" data-script-section="${index}">
+            <div class="scriptEditRow">
+              <label>段落角色<input data-script-field="role" value="${escapeAttr(section.role || "脚本段落")}"></label>
+              <label>时间<input data-script-field="timing" value="${escapeAttr(section.timing || "")}"></label>
+            </div>
+            <label>旁白<textarea data-script-field="voiceover_zh">${escapeHtml(section.voiceover_zh || section.subtitle_zh || "")}</textarea></label>
+            <label>场景<textarea data-script-field="scene_zh">${escapeHtml(section.scene_zh || "")}</textarea></label>
+            <label>动作<textarea data-script-field="action_zh">${escapeHtml(section.action_zh || "")}</textarea></label>
+            <label>剧情推进<textarea data-script-field="story_beat_zh">${escapeHtml(section.story_beat_zh || "")}</textarea></label>
+          </article>`).join("") || "<p>未生成脚本段落。</p>"}
+        <div class="scriptEditorActions">
+          <button type="button" class="saveStandaloneScript">保存脚本修订</button>
+          <span>创建生产项目时会自动适配为 30 秒五拍结构，原稿不会被覆盖。</span>
+        </div>
+      </div>`;
+    }
     return `<div class="agentResultCards">${sections.map((section) => `
       <article class="agentResultCard"><strong>${escapeHtml(section.role || "脚本段落")} · ${escapeHtml(section.timing || "")}</strong>
       <p>${escapeHtml(section.voiceover_zh || section.subtitle_zh || section.voiceover_en || "")}</p>
@@ -535,6 +559,8 @@ function bindEvents() {
   document.addEventListener("click", (event) => {
     const button = event.target.closest(".promoteStandalone");
     if (button) promoteStandaloneArtifact(button);
+    const saveButton = event.target.closest(".saveStandaloneScript");
+    if (saveButton) saveStandaloneScript(saveButton);
   });
   $("#continueProject").addEventListener("click", continueCurrentProject);
   $("#homeContinue").addEventListener("click", continueCurrentProject);
@@ -604,6 +630,8 @@ async function runStandaloneLauncher(button) {
         product_id: productId,
         prompt,
         source_text: prompt,
+        script_format: launcher.querySelector("[data-standalone-script-format]")?.value || "auto",
+        duration_s: Number(launcher.querySelector("[data-standalone-duration]")?.value || 30),
         provider: "auto",
         mock: $("#runtimeMode").value !== "real",
         ...creativeRequestFields(),
@@ -2911,6 +2939,56 @@ async function retryCollectionJob(button, jobId) {
   } catch (error) {
     toast(error.message, "error");
     button.disabled = false;
+  }
+}
+
+async function saveStandaloneScript(button) {
+  const host = button.closest(".nodeResult");
+  const payload = host?._agentPayload;
+  if (!payload?.project_id || payload.artifact_name !== "script_copy") {
+    toast("未找到可保存的独立脚本", "error");
+    return;
+  }
+  const artifact = structuredClone(payload.artifact || {});
+  artifact.sections = [...host.querySelectorAll("[data-script-section]")].map((card, index) => {
+    const field = (name) => card.querySelector(`[data-script-field="${name}"]`)?.value.trim() || "";
+    return {
+      ...(artifact.sections?.[index] || {}),
+      number: index + 1,
+      role: field("role"),
+      timing: field("timing"),
+      voiceover_zh: field("voiceover_zh"),
+      subtitle_zh: field("voiceover_zh"),
+      scene_zh: field("scene_zh"),
+      action_zh: field("action_zh"),
+      story_beat_zh: field("story_beat_zh"),
+    };
+  });
+  button.disabled = true;
+  beginOperation("正在保存脚本修订", 10);
+  try {
+    const saved = await api("/api/v2/agents/artifacts/save", {
+      method: "POST",
+      body: JSON.stringify({
+        source_project_id: payload.project_id,
+        artifact_name: "script_copy",
+        artifact,
+      }),
+    });
+    const nextPayload = {
+      ...payload,
+      ...saved,
+      status: saved.artifact?.quality_assessment?.status === "PASS" ? "succeeded" : "needs_review",
+      artifact: saved.artifact,
+    };
+    renderAgentResult(host, nextPayload);
+    const failed = (saved.quality_checks || []).filter((item) => item.status !== "passed");
+    toast(failed.length ? `脚本已保存，还有 ${failed.length} 项质量检查待修正` : `脚本修订 ${saved.revision} 已保存`);
+  } catch (error) {
+    toast(error.message, "error");
+    button.disabled = false;
+  } finally {
+    endOperation();
   }
 }
 

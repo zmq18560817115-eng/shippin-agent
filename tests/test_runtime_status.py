@@ -64,3 +64,26 @@ def test_tiktok_runtime_probe_persists_friendly_failure(tmp_path, monkeypatch) -
     assert response.json()["ok"] is False
     assert "外网" in response.json()["probe"]["detail"]
     assert runtime["providers"]["tiktok_api"]["state"] == "error"
+
+
+def test_admin_can_replace_netscape_tiktok_cookies_without_exposing_values(tmp_path, monkeypatch) -> None:
+    target = tmp_path / "secrets" / "tiktok-cookies.txt"
+    monkeypatch.setenv("TIKTOK_COOKIES_FILE", str(target))
+    content = "# Netscape HTTP Cookie File\n.tiktok.com\tTRUE\t/\tTRUE\t0\tmsToken\tsecret-value"
+
+    with TestClient(app) as client:
+        response = client.post("/api/v2/admin/runtime/cookies", json={"cookies_text": content})
+        runtime = client.get("/api/v2/runtime")
+
+    assert response.status_code == 200, response.text
+    assert target.read_text(encoding="utf-8").startswith("# Netscape HTTP Cookie File")
+    assert runtime.json()["deployment"]["tiktok_cookies"]["ready"] is True
+    assert "secret-value" not in runtime.text
+
+
+def test_admin_rejects_non_netscape_cookie_upload() -> None:
+    with TestClient(app) as client:
+        response = client.post("/api/v2/admin/runtime/cookies", json={"cookies_text": "msToken=secret"})
+
+    assert response.status_code == 422
+    assert "Netscape" in response.json()["detail"]

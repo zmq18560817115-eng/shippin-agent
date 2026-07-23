@@ -114,6 +114,22 @@ async function loadAdmin() {
     const tone = state === "ready" ? "ready" : state === "configured_unverified" || state === "degraded" ? "warning" : state === "optional_disabled" ? "optional" : "missing";
     return `<div class="backendState"><span>${escapeHtml(providerNames[provider.id] || provider.id)}<small>${escapeHtml(provider.detail || "")}</small></span><strong class="${tone}">${escapeHtml(stateLabels[state] || state)}</strong></div>`;
   }).join("");
+  const deploymentNames = {
+    authentication: "登录鉴权",
+    session_secret: "会话密钥",
+    cookie_secure: "HTTPS Cookie",
+    tiktok_cookies: "TikTok Cookies",
+    ffmpeg: "FFmpeg",
+    playwright: "Playwright",
+    visual_ocr: "画面 OCR",
+    speech_to_text: "语音转写",
+    persistent_data: "数据持久目录",
+    persistent_runs: "运行持久目录",
+  };
+  document.querySelector("#deploymentStates").innerHTML = Object.entries(payload.runtime.deployment || {}).map(([id, item]) => {
+    const tone = item.ready ? (item.warning ? "warning" : "ready") : "missing";
+    return `<div class="backendState"><span>${escapeHtml(deploymentNames[id] || id)}<small>${escapeHtml(item.detail || "")}</small></span><strong class="${tone}">${item.ready ? (item.warning ? "需确认" : "就绪") : "待处理"}</strong></div>`;
+  }).join("") || '<p class="emptyMessage">未获得部署检测结果</p>';
   const runtimeStamp = document.querySelector("#runtimeBuildVersion");
   if (runtimeStamp) runtimeStamp.textContent = `版本 ${payload.runtime.build_version || "unknown"}`;
   document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(formatTime(project.updated_at))}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';
@@ -244,6 +260,30 @@ document.querySelector("#probeTikTok")?.addEventListener("click", async (event) 
   } finally {
     button.disabled = false;
     button.textContent = "检测采集";
+  }
+});
+const cookiesFile = document.querySelector("#cookiesFile");
+document.querySelector("#uploadCookies")?.addEventListener("click", () => cookiesFile?.click());
+cookiesFile?.addEventListener("change", async () => {
+  const file = cookiesFile.files?.[0];
+  if (!file) return;
+  const button = document.querySelector("#uploadCookies");
+  button.disabled = true;
+  button.textContent = "正在更新…";
+  try {
+    const cookiesText = await file.text();
+    await api("/api/v2/admin/runtime/cookies", {
+      method: "POST",
+      body: JSON.stringify({ cookies_text: cookiesText }),
+    });
+    window.alert("TikTok Cookies 已安全替换，请继续点击“检测采集”验证会话。");
+    await loadAdmin();
+  } catch (error) {
+    window.alert(`Cookies 更新失败：${error.message}`);
+  } finally {
+    cookiesFile.value = "";
+    button.disabled = false;
+    button.textContent = "更新 TikTok Cookies";
   }
 });
 const userDialog = document.querySelector("#userDialog");

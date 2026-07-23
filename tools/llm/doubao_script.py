@@ -36,6 +36,15 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         provider="doubao",
         creative_request=creative_request,
     )
+    if payload.get("standalone_flexible"):
+        duration_s = max(12, min(int(payload.get("duration_s") or 30), 60))
+        script_format = str(payload.get("script_format") or "auto")
+        script_copy["sections"] = _flexible_fallback_sections(
+            script_copy["sections"], duration_s=duration_s, script_format=script_format
+        )
+        script_copy["total_duration_s"] = duration_s
+        script_copy["script_format"] = script_format
+        script_copy["production_profile"] = "standalone-flexible"
     artifacts.validate_artifact("script_copy", script_copy)
     return ToolResult.success(
         {"script_copy": script_copy},
@@ -50,6 +59,9 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     analysis_report = payload.get("analysis_report") or {}
     strategy_brief = payload.get("strategy_brief") or {}
     rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
+    standalone_flexible = bool(payload.get("standalone_flexible"))
+    duration_s = max(12, min(int(payload.get("duration_s") or 30), 60))
+    script_format = str(payload.get("script_format") or "auto")
     product_facts = product_library.product_guardrail_text(product_id)
     product_workflow = _product_workflow_instruction(product_id, product_facts)
     creative_request = " ".join(
@@ -76,8 +88,14 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "role": "user",
                 "content": (
                     f"为产品 {product_id} 创作 script_copy JSON。先在内部比较三个真实生活切口，只输出最有张力且最可拍的一版。"
-                    "必须使用钩子、痛点、方案、证明、行动号召五段，时间依次为 0-6s、6-12s、12-18s、18-24s、24-30s。"
-                    "每段返回 voiceover_zh、scene_zh、action_zh、story_beat_zh。scene_zh 必须包含具体环境、光线、道具位置和人物当下状态；"
+                    + (
+                        f"这是独立创作任务，目标时长 {duration_s} 秒，脚本类型为 {script_format}。"
+                        "根据叙事需要返回 3-8 段，段落数量和节奏不得机械套用五段模板；timing 必须从 0 秒连续覆盖目标时长。"
+                        "role 只能从钩子、痛点、方案、证明、行动号召中选择，但允许按创作需要重复或省略中间角色。"
+                        if standalone_flexible else
+                        "必须使用钩子、痛点、方案、证明、行动号召五段，时间依次为 0-6s、6-12s、12-18s、18-24s、24-30s。"
+                    )
+                    + "每段返回 voiceover_zh、scene_zh、action_zh、story_beat_zh。scene_zh 必须包含具体环境、光线、道具位置和人物当下状态；"
                     "action_zh 只写镜头中可以看见的一个主要动作；story_beat_zh 必须说明这一段相对上一段发生了什么变化、为何推动下一段。"
                     "五段必须是同一人物、同一时间和同一空间中的连续小故事。开头用异常、选择或未完成动作制造好奇，不使用空泛提问和广告口号；"
                     "痛点用人物行为表现，不直接宣讲；产品只能在冲突建立后自然出现；结尾给低压力行动号召。旁白应口语、克制、可朗读，删掉可套用到其他产品的句子。"
@@ -98,18 +116,25 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         provider="doubao-fallback",
         creative_request=creative_request,
     )["sections"]
+    if standalone_flexible:
+        fallback_sections = _flexible_fallback_sections(
+            fallback_sections, duration_s=duration_s, script_format=script_format
+        )
     sections = _normalize_sections(
         raw_sections,
         fallback_sections=fallback_sections,
         enforce_warming_flow=_is_warming_product(product_id, product_facts),
     )
-    structure_fallback_applied = not isinstance(raw_sections, list) or len(raw_sections) < 5
+    minimum_sections = 3 if standalone_flexible else 5
+    structure_fallback_applied = not isinstance(raw_sections, list) or len(raw_sections) < minimum_sections
     script_copy = {
         "version": "2.0",
         "project_id": project_id,
         "product_id": product_id,
         "source_link_id": analysis_report.get("source_link_id"),
-        "total_duration_s": 30,
+        "total_duration_s": duration_s if standalone_flexible else 30,
+        "script_format": script_format if standalone_flexible else "production",
+        "production_profile": "standalone-flexible" if standalone_flexible else "30s-five-beat",
         "generator": {
             "provider": "ark",
             "model": str(meta.get("model") or "doubao"),
@@ -126,6 +151,50 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         cost_cny=context.pricing_for("doubao_script"),
         meta={"tool": "doubao_script", "mock": False, **meta},
     )
+
+
+def _flexible_fallback_sections(
+    base_sections: list[dict[str, Any]],
+    *,
+    duration_s: int,
+    script_format: str,
+) -> list[dict[str, Any]]:
+    format_counts = {
+        "ugc": 4,
+        "review": 4,
+        "tutorial": 6,
+        "story": 6,
+        "problem_solution": 5,
+        "auto": 3 if duration_s <= 15 else 5 if duration_s <= 30 else 6 if duration_s <= 45 else 8,
+    }
+    count = max(3, min(format_counts.get(script_format, format_counts["auto"]), 8))
+    roles_by_count = {
+        3: ["钩子", "方案", "行动号召"],
+        4: ["钩子", "痛点", "方案", "行动号召"],
+        5: ["钩子", "痛点", "方案", "证明", "行动号召"],
+        6: ["钩子", "痛点", "痛点", "方案", "证明", "行动号召"],
+        7: ["钩子", "痛点", "痛点", "方案", "证明", "证明", "行动号召"],
+        8: ["钩子", "痛点", "痛点", "方案", "方案", "证明", "证明", "行动号召"],
+    }
+    source_by_role = {str(item.get("role")): item for item in base_sections}
+    roles = roles_by_count[count]
+    boundaries = [round(index * duration_s / count) for index in range(count + 1)]
+    result: list[dict[str, Any]] = []
+    role_occurrences: dict[str, int] = {}
+    for index, role in enumerate(roles, start=1):
+        source = dict(source_by_role.get(role) or base_sections[min(index - 1, len(base_sections) - 1)])
+        occurrence = role_occurrences.get(role, 0)
+        role_occurrences[role] = occurrence + 1
+        if occurrence:
+            source["story_beat_zh"] = f"{source.get('story_beat_zh', '')} 继续推进到新的可见变化。"
+            source["action_zh"] = f"{source.get('action_zh', '')} 镜头结束时形成新的动作结果。"
+        source.update({
+            "number": index,
+            "role": role,
+            "timing": f"{boundaries[index - 1]}-{boundaries[index]}s",
+        })
+        result.append(source)
+    return result
 
 
 def _product_workflow_instruction(product_id: str, product_facts: str) -> str:
@@ -154,7 +223,7 @@ def _normalize_sections(
     fallback_sections = fallback_sections or mock_script_copy("fallback")["sections"]
     raw = value if isinstance(value, list) else []
     sections: list[dict[str, Any]] = []
-    for index, fallback in enumerate(fallback_sections[:5], start=1):
+    for index, fallback in enumerate(fallback_sections[:8], start=1):
         role = str(fallback.get("role") or "")
         timing = str(fallback.get("timing") or "")
         voiceover = str(fallback.get("voiceover_zh") or "")

@@ -174,7 +174,24 @@ def _raw_text_beats(source_text: str) -> list[dict[str, Any]]:
 
 
 def _list(value: Any) -> list[str]:
-    return [str(item).strip() for item in value or [] if str(item).strip()]
+    if value is None:
+        return []
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return []
+        try:
+            parsed = json.loads(normalized)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            value = parsed
+        else:
+            parts = [part.strip(" -•\t") for part in re.split(r"[\r\n]+|(?<=[。；;])\s*", normalized) if part.strip(" -•\t")]
+            return parts or [normalized]
+    if not isinstance(value, (list, tuple, set)):
+        value = [value]
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
 def _object(value: Any) -> dict[str, Any]:

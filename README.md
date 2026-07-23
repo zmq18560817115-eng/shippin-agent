@@ -29,7 +29,7 @@ flowchart LR
 
 人工闸门依次为 `script_gate`、`hero_gate`、`take_gate` 和成片人工视觉验收。任何一项未完成，系统不会自动进入交付。
 
-脚本新产物统一使用 `voiceover_zh`；读取历史项目时仍兼容 `voiceover_en`。`strategy_brief.product_guardrails` 为可直接消费的嵌套 JSON 对象，不再把 JSON 二次转义成字符串。研究、策略、脚本和分镜面向操作员的内容均要求简体中文，30 秒节奏统一为五个 6 秒段。
+脚本新产物统一使用 `voiceover_zh`；读取历史项目时仍兼容 `voiceover_en`。`strategy_brief.product_guardrails` 为可直接消费的嵌套 JSON 对象，不再把 JSON 二次转义成字符串。研究、策略、脚本和分镜面向操作员的内容均要求简体中文。生产项目使用五个 6 秒段；独立脚本支持 15/30/45/60 秒和多种结构，可逐段编辑、保存修订，再无损保留原稿并适配为 30 秒生产项目。
 
 闸门放行接口 `POST /api/v2/gates/approve` 的标准字段为 `gate`（如 `script_gate`）；旧客户端的 `stage` 字段暂时保持兼容。缺少或传入未知闸门时，接口返回中文 422 提示。
 
@@ -150,6 +150,8 @@ VAF_TIKTOK_METADATA_TIMEOUT_S=15
 实时搜索成功后会保存最近一次真实结果。TikTok 临时返回空页时，系统可在 `TIKTOK_SEARCH_CACHE_MAX_AGE_SEC` 有效期内使用缓存继续任务，并将素材标记为 `cached_browser_search`，不会冒充实时发现。
 
 Cookies、`TIKTOK_MS_TOKEN` 和 API Key 不应进入仓库或镜像。TikTok 的可访问性会受地区、登录状态、Cookie 有效期和平台策略影响；系统会保留人工链接导入作为降级入口。
+
+管理员可在“管理中心 → 部署就绪度”上传 Netscape 格式 Cookies 文件。服务端只保存到配置的秘密目录，不向前端回传内容；上传后应立即运行“检测采集”。同一区域会显示鉴权、会话密钥、HTTPS Cookie、FFmpeg、Playwright、OCR、ASR 和持久目录的真实就绪状态。
 
 无字幕视频需要额外配置火山语音识别，不能复用豆包文本或 Seedance 密钥：
 

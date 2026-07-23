@@ -29,6 +29,19 @@ def resolve_tesseract() -> str | None:
     return None
 
 
+def resolve_ffmpeg() -> str | None:
+    discovered = shutil.which("ffmpeg")
+    if discovered:
+        return discovered
+    try:
+        import imageio_ffmpeg
+
+        executable = imageio_ffmpeg.get_ffmpeg_exe()
+    except (ImportError, RuntimeError, OSError):
+        return None
+    return executable if executable and Path(executable).is_file() else None
+
+
 def inspect_review_frames(frame_paths: list[str], *, product_id: str = "") -> dict[str, Any]:
     """Run deterministic OCR checks without pretending to replace human review."""
     executable = resolve_tesseract()
@@ -67,7 +80,7 @@ def inspect_review_frames(frame_paths: list[str], *, product_id: str = "") -> di
 
 def extract_review_frames(video_path: str | Path, output_dir: str | Path, *, limit: int = 3) -> list[Path]:
     """Extract a small, deterministic sample for per-Take visual review."""
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = resolve_ffmpeg()
     source = Path(video_path)
     target = Path(output_dir)
     if not ffmpeg or not source.is_file() or limit < 1:

@@ -107,7 +107,7 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert "loadingSkeleton" in html
     assert "navScrollHint" in html
     assert 'scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })' in script
-    assert "20260723-12" in html
+    assert "20260723-13" in html
     assert 'id="projectOverview"' in html
     assert 'id="projectStageRail"' in script
     assert 'id="projectOverviewContinue"' in script

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260723-12" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260723-13" />
   </head>
   <body>
     <header class="topbar">
@@ -395,6 +395,20 @@
         <div class="standaloneLauncher" data-standalone-action="script">
           <div><strong>独立脚本生成</strong><span>不依赖当前项目，直接输入需求生成中文脚本</span></div>
           <input data-standalone-product type="text" value="便携恒温杯" aria-label="产品名称或创作主题" placeholder="产品名称或创作主题">
+          <select data-standalone-script-format aria-label="脚本类型">
+            <option value="auto">自动选择结构</option>
+            <option value="story">剧情短片</option>
+            <option value="problem_solution">痛点解决</option>
+            <option value="review">真实测评</option>
+            <option value="tutorial">使用教程</option>
+            <option value="ugc">UGC 口播</option>
+          </select>
+          <select data-standalone-duration aria-label="目标时长">
+            <option value="15">15 秒</option>
+            <option value="30" selected>30 秒</option>
+            <option value="45">45 秒</option>
+            <option value="60">60 秒</option>
+          </select>
           <textarea data-standalone-prompt placeholder="输入产品、受众、平台和内容要求"></textarea>
           <button type="button" class="primary" data-run-standalone>运行脚本 Agent</button>
           <div class="nodeResult" data-standalone-result>等待输入</div>
@@ -465,6 +479,6 @@
 
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260723-12"></script>
+    <script src="/static/app.js?v=20260723-13"></script>
   </body>
 </html>
