@@ -57,8 +57,11 @@ def create_user(
         try:
             cursor = conn.execute(
                 """
-                INSERT INTO users (username, display_name, password_hash, role, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO users (
+                    username, display_name, password_hash, role,
+                    onboarding_completed, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, 0, ?, ?)
                 """,
                 (clean_username, display_name.strip()[:80], hash_password(password), role, now, now),
             )
@@ -155,8 +158,11 @@ def review_registration_request(
                 raise ValueError("username already exists")
             conn.execute(
                 """
-                INSERT INTO users (username, display_name, password_hash, role, created_at, updated_at)
-                VALUES (?, ?, ?, 'operator', ?, ?)
+                INSERT INTO users (
+                    username, display_name, password_hash, role,
+                    onboarding_completed, created_at, updated_at
+                )
+                VALUES (?, ?, ?, 'operator', 0, ?, ?)
                 """,
                 (request["username"], request["display_name"], request["password_hash"], now, now),
             )
@@ -216,6 +222,25 @@ def get_user_by_username(
             (username.strip(),),
         ).fetchone()
     return _public_user(dict(row)) if row else None
+
+
+def complete_onboarding(
+    username: str,
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    with queue.get_conn(db_path) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE users
+            SET onboarding_completed = 1, updated_at = ?
+            WHERE username = ? COLLATE NOCASE
+            """,
+            (queue.utc_now(), username.strip()),
+        )
+        if cursor.rowcount != 1:
+            raise KeyError(username)
+    return get_user_by_username(username, db_path=db_path) or {}
 
 
 def update_user(

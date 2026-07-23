@@ -476,7 +476,32 @@ def register_account(request: RegistrationRequest, raw_request: Request) -> dict
 @app.get("/api/v2/auth/session")
 def auth_session(request: Request) -> dict[str, Any]:
     session = _read_session(request)
-    return {"authenticated": session is not None, "auth_enabled": _auth_enabled(), **(session or {})}
+    account = (
+        user_store.get_user_by_username(str(session.get("username") or ""), db_path=_db_path())
+        if session and _auth_enabled()
+        else None
+    )
+    return {
+        "authenticated": session is not None,
+        "auth_enabled": _auth_enabled(),
+        **(session or {}),
+        "display_name": str((account or {}).get("display_name") or ""),
+        "show_onboarding": bool(account is not None and not account.get("onboarding_completed")),
+    }
+
+
+@app.post("/api/v2/auth/onboarding/complete")
+def complete_auth_onboarding(request: Request) -> dict[str, Any]:
+    session = _read_session(request)
+    if session is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    if not _auth_enabled():
+        return {"ok": True}
+    try:
+        user_store.complete_onboarding(str(session["username"]), db_path=_db_path())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="账号不存在") from exc
+    return {"ok": True}
 
 
 @app.get("/healthz")

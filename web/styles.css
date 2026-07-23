@@ -4259,3 +4259,23 @@ pre {
 .scriptEditRow > label {
   flex: 1;
 }
+.onboardingDialog {
+  width: min(560px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 24px 64px rgba(15, 31, 66, .22);
+}
+.onboardingDialog::backdrop { background: rgba(15, 31, 66, .42); backdrop-filter: blur(4px); }
+.onboardingHead { display: flex; gap: 14px; align-items: center; padding: 24px 24px 18px; border-bottom: 1px solid var(--line); }
+.onboardingHead span:not(.brandMark) { color: var(--blue); font-size: 12px; font-weight: 700; }
+.onboardingHead h2 { margin: 3px 0 0; font-size: 22px; }
+.onboardingSteps { display: grid; gap: 0; margin: 0; padding: 8px 24px; list-style: none; }
+.onboardingSteps li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.onboardingSteps li:last-child { border-bottom: 0; }
+.onboardingSteps svg { width: 21px; color: var(--blue); }
+.onboardingSteps span { display: grid; gap: 4px; }
+.onboardingSteps small { color: var(--muted); font-size: 13px; line-height: 1.55; }
+.onboardingActions { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px 24px; }

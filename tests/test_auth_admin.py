@@ -37,6 +37,9 @@ def test_admin_endpoint_requires_admin_role(monkeypatch, tmp_path):
             json={"username": "operator", "password": "operator-pass", "portal": "operator"},
         )
         assert login.status_code == 200
+        assert operator.get("/api/v2/auth/session").json()["show_onboarding"] is True
+        assert operator.post("/api/v2/auth/onboarding/complete").status_code == 200
+        assert operator.get("/api/v2/auth/session").json()["show_onboarding"] is False
         assert operator.get("/api/v2/admin/summary").status_code == 403
 
     with TestClient(app) as admin:

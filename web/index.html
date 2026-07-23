@@ -100,7 +100,7 @@
           <div class="quickToolBrief" id="quickToolBrief"></div>
           <div class="quickToolSettings">
             <label>产品<select id="quickToolProduct"></select></label>
-            <label>运行模式<select id="quickToolMode"><option value="mock">演练模式</option><option value="real">真实模型</option></select></label>
+            <label>运行模式<select id="quickToolMode"><option value="real" selected>真实模型</option><option value="mock">演练模式</option></select></label>
           </div>
           <label class="quickToolPromptLabel"><span id="quickToolInputLabel">创作需求</span><textarea id="quickToolPrompt" placeholder="输入需求、素材转写、脚本或画面描述"></textarea></label>
           <div class="quickToolExample"><span>输入示例</span><button type="button" id="fillQuickToolExample">填入示例</button><p id="quickToolExampleText"></p></div>
@@ -133,8 +133,8 @@
           <label>
             运行模式
             <select id="runtimeMode">
-              <option value="mock" selected>演练模式</option>
-              <option value="real">真实运行</option>
+              <option value="real" selected>真实运行</option>
+              <option value="mock">演练模式</option>
             </select>
           </label>
           <label>
@@ -144,7 +144,7 @@
             </select>
           </label>
           <button type="submit" class="iconAction"><i data-lucide="play"></i>开始生产</button>
-          <small id="runtimeModeHint" class="runtimeModeHint">用于完整流程演练：生成带演练标记的可播放 720P 成片，不调用外部模型。</small>
+          <small id="runtimeModeHint" class="runtimeModeHint">真实调用采集、分析和视频模型，会产生实际耗时与费用；缺少配置时系统会明确拦截。</small>
         </form>
       </section>
 
@@ -477,8 +477,24 @@
       </section>
     </main>
 
+    <dialog id="onboardingDialog" class="onboardingDialog" aria-labelledby="onboardingTitle">
+      <div class="onboardingHead">
+        <span class="brandMark" aria-hidden="true">VF</span>
+        <div><span>首次使用</span><h2 id="onboardingTitle">一分钟认识视频内容工厂</h2></div>
+      </div>
+      <ol class="onboardingSteps">
+        <li><i data-lucide="folder-kanban"></i><span><strong>视频项目</strong><small>选择产品与爆款参考，按脚本、分镜、镜头和验收顺序完成成片。</small></span></li>
+        <li><i data-lucide="wand-sparkles"></i><span><strong>快速工具</strong><small>脚本、拆解、分镜和单镜 Agent 都能脱离项目独立运行。</small></span></li>
+        <li><i data-lucide="database"></i><span><strong>素材中心</strong><small>采集 TikTok 参考，自动下载、转写、分析，再选入生产项目。</small></span></li>
+        <li><i data-lucide="list-checks"></i><span><strong>人工确认</strong><small>脚本、关键帧、Take 和成片均保留人工修改与放行节点。</small></span></li>
+      </ol>
+      <div class="onboardingActions">
+        <button type="button" id="skipOnboarding">跳过</button>
+        <button type="button" class="primary" id="finishOnboarding">开始使用</button>
+      </div>
+    </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260723-18"></script>
+    <script src="/static/app.js?v=20260723-19"></script>
   </body>
 </html>

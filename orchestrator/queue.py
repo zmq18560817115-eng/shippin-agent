@@ -103,6 +103,11 @@ def get_conn(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connectio
 def init_db(db_path: str | os.PathLike[str] | None = None) -> None:
     with get_conn(db_path) as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "onboarding_completed" not in user_columns:
+            # Accounts that predate onboarding are existing users and should
+            # not be interrupted by a first-use tour after deployment.
+            conn.execute("ALTER TABLE users ADD COLUMN onboarding_completed INTEGER NOT NULL DEFAULT 1")
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(collector_schedules)").fetchall()}
         if "failure_count" not in columns:
             conn.execute("ALTER TABLE collector_schedules ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0")

@@ -305,3 +305,16 @@ def test_material_collection_is_always_real_and_mock_references_are_excluded() -
     assert 'requested_count: Number($("#crawlLimit").value || 6),\n        product_id: $("#productSelect").value,\n        mock: false,' in script
     assert 'sourceMode === "mock" ? isMock : !isMock' in script
     assert 'item.material_meta?.source_mode !== "mock"' in script
+
+
+def test_real_mode_is_default_and_new_user_onboarding_is_one_time() -> None:
+    html = Path("web/index.html").read_text(encoding="utf-8")
+    script = Path("web/app.js").read_text(encoding="utf-8")
+
+    runtime = html.split('id="runtimeMode"', 1)[1].split("</select>", 1)[0]
+    quick_tool = html.split('id="quickToolMode"', 1)[1].split("</select>", 1)[0]
+    assert '<option value="real" selected>' in runtime
+    assert '<option value="real" selected>' in quick_tool
+    assert 'id="onboardingDialog"' in html
+    assert "state.session?.show_onboarding" in script
+    assert 'api("/api/v2/auth/onboarding/complete"' in script

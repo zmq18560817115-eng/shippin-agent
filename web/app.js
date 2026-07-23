@@ -39,6 +39,7 @@ const state = {
   selectedMaterials: new Set(),
   projectsLoaded: false,
   projectsLoadError: "",
+  session: null,
 };
 
 const views = {
@@ -458,6 +459,7 @@ async function boot() {
   await loadAutoCollector();
   await loadCollectionJobs();
   await refreshProjects();
+  showFirstUseOnboarding();
   installCommandIcons();
   window.setInterval(() => {
     if (!document.hidden) refreshProjects({ silent: true });
@@ -471,9 +473,32 @@ async function boot() {
 async function loadWorkbenchSession() {
   try {
     const session = await api("/api/v2/auth/session");
+    state.session = session;
     $("#adminEntry").hidden = session.auth_enabled && session.role !== "admin";
   } catch {
+    state.session = null;
     $("#adminEntry").hidden = true;
+  }
+}
+
+function showFirstUseOnboarding() {
+  if (!state.session?.show_onboarding) return;
+  const dialog = $("#onboardingDialog");
+  if (!dialog?.open) dialog.showModal();
+  installCommandIcons(dialog);
+}
+
+async function completeFirstUseOnboarding() {
+  const buttons = [$("#skipOnboarding"), $("#finishOnboarding")];
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    await api("/api/v2/auth/onboarding/complete", { method: "POST" });
+    state.session.show_onboarding = false;
+    $("#onboardingDialog").close();
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
   }
 }
 
@@ -511,6 +536,8 @@ async function runFlowCapability(action, button, resultSelector) {
 }
 
 function bindEvents() {
+  $("#skipOnboarding").addEventListener("click", completeFirstUseOnboarding);
+  $("#finishOnboarding").addEventListener("click", completeFirstUseOnboarding);
   $("#logoutWorkbench").addEventListener("click", async () => {
     await api("/api/v2/auth/logout", { method: "POST" });
     window.location.assign("/login");
