@@ -1129,9 +1129,9 @@ async function checkHealth() {
     const backendHost = $("#collectorBackendState");
     if (backendHost) {
       const backends = runtime.collector_backends || [];
-      backendHost.innerHTML = backends.map((backend) => `
-        <span class="${backend.ready ? "ready" : "missing"}">${escapeHtml(backend.id)} · ${backend.ready ? "可用" : "未配置"}</span>
-      `).join("");
+      backendHost.innerHTML = backends.length
+        ? backends.map(renderCollectorBackendState).join("")
+        : '<span class="missing">未取得服务器采集后端状态</span>';
     }
   } catch (error) {
     $("#health").textContent = "离线";
@@ -2926,6 +2926,33 @@ function renderHeroFrame(frame, shot, gateActive) {
       ${gateActive ? `<button type="button" data-regen="${frame.number}">编辑分镜</button>` : '<span class="gateState done">已确认</span>'}
     </article>
   `;
+}
+
+function renderCollectorBackendState(backend) {
+  const names = {
+    browser_search: "TikTok 浏览器搜索",
+    tiktok_api: "TikTokApi",
+    apify: "Apify",
+    yt_dlp: "视频下载器",
+    manual_url: "人工直链",
+  };
+  const labels = {
+    ready: "可用",
+    configured_unverified: "待验证",
+    error: "连接异常",
+    degraded: "降级可用",
+    dependency_missing: "依赖缺失",
+    optional_disabled: "可选未启用",
+    not_configured: "未配置",
+  };
+  const stateName = String(backend.state || (backend.ready ? "ready" : backend.configured ? "configured_unverified" : "not_configured"));
+  const tone = backend.ready || stateName === "ready"
+    ? "ready"
+    : ["configured_unverified", "degraded", "optional_disabled"].includes(stateName)
+      ? "warning"
+      : "missing";
+  const detail = String(backend.detail || "");
+  return `<span class="${tone}" title="${escapeAttr(detail)}"><strong>${escapeHtml(names[backend.id] || backend.id)}</strong> · ${escapeHtml(labels[stateName] || "状态未知")}</span>`;
 }
 
 async function retryCollectionJob(button, jobId) {

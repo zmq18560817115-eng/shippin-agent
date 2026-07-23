@@ -107,7 +107,7 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert "loadingSkeleton" in html
     assert "navScrollHint" in html
     assert 'scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })' in script
-    assert "20260723-16" in html
+    assert "20260723-17" in html
     assert 'id="projectOverview"' in html
     assert 'id="projectStageRail"' in script
     assert 'id="projectOverviewContinue"' in script
@@ -247,6 +247,15 @@ def test_independent_agent_workbench_has_one_visible_heading() -> None:
 
     assert html.count("<strong>独立 Agent 工作台</strong>") == 1
     assert 'id="independentAgentState" class="agentStateLine"' in html
+
+
+def test_collector_backend_statuses_are_not_flattened_to_unconfigured() -> None:
+    script = Path("web/app.js").read_text(encoding="utf-8")
+
+    assert "function renderCollectorBackendState(backend)" in script
+    for label in ("可用", "待验证", "连接异常", "依赖缺失", "可选未启用", "未配置"):
+        assert label in script
+    assert 'backends.map(renderCollectorBackendState)' in script
 
 
 def test_admin_failures_have_inline_recovery_actions() -> None:

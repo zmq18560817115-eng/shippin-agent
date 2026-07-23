@@ -1640,6 +1640,12 @@ button.quietButton {
   color: var(--green);
 }
 
+.backendStrip span.warning {
+  border-color: #e4c47d;
+  background: #fffaf0;
+  color: #946200;
+}
+
 .backendStrip span.missing {
   border-color: #dfbbb8;
   color: var(--red);
