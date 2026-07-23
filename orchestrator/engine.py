@@ -1012,6 +1012,8 @@ def _merge_take_manifest(root: Path, project_id: str, new_report: dict[str, Any]
             "duration_sec": shot.get("duration_sec", 6),
             "attempt": shot.get("attempt", 1),
             "cost_cny": shot.get("cost_cny", 0),
+            "review_frame_paths": list(shot.get("review_frame_paths") or []),
+            "automated_visual_qa": dict(shot.get("automated_visual_qa") or {}),
         }
         entry["takes"] = [takes[key] for key in sorted(takes)]
     existing["shots"] = [by_number[number] for number in sorted(by_number)]

@@ -31,3 +31,10 @@ def test_visual_qa_reports_truthful_degraded_state_without_ocr(monkeypatch, tmp_
     report = visual_qa.inspect_review_frames([frame.as_posix()], product_id="便携恒温杯")
     assert report["status"] == "NEEDS_REVIEW"
     assert report["engine"] == "not_configured"
+
+
+def test_extract_review_frames_returns_empty_without_ffmpeg(monkeypatch, tmp_path: Path) -> None:
+    video = tmp_path / "take.mp4"
+    video.write_bytes(b"not-a-video")
+    monkeypatch.setattr(visual_qa.shutil, "which", lambda name: None)
+    assert visual_qa.extract_review_frames(video, tmp_path / "frames") == []

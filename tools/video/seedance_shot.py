@@ -12,6 +12,7 @@ from tools.collect import product_library
 from tools.tool_registry import register_tool
 from tools.video.ffmpeg_compose import write_mock_video
 from tools.video.media_validation import is_playable_mp4
+from tools.video.visual_qa import extract_review_frames, inspect_review_frames
 
 
 @register_tool("seedance_shot")
@@ -62,6 +63,25 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             duration_sec=_duration_sec(shot),
         )
 
+    review_frames: list[Path] = []
+    automated_visual_qa: dict[str, Any] = {
+        "version": "1.0",
+        "status": "NEEDS_REVIEW",
+        "engine": "not_run_in_mock" if context.mock else "not_available",
+        "checks": {"no_forbidden_celsius": True, "valid_98f_detected": False, "frames_sampled": 0},
+        "summary": "演练模式保留人工质检。" if context.mock else "未能抽取单镜质检帧，必须人工复核。",
+        "frames": [],
+    }
+    if not context.mock and is_playable_mp4(output):
+        review_frames = extract_review_frames(
+            output,
+            run_root / "take_review_frames" / f"shot-{number:03d}-take-{take_id or 'default'}",
+        )
+        automated_visual_qa = inspect_review_frames(
+            [path.as_posix() for path in review_frames],
+            product_id=str(asset_manifest.get("product_id") or ""),
+        )
+
     shot_report = {
         "version": "2.0",
         "project_id": project_id,
@@ -73,6 +93,8 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                 "cost_cny": context.pricing_for("seedance_shot") if not context.mock else 0.0,
                 "attempt": int(payload.get("attempt") or 1),
                 "duration_sec": _duration_sec(shot),
+                "review_frame_paths": [path.as_posix() for path in review_frames],
+                "automated_visual_qa": automated_visual_qa,
                 **({"take_id": take_id} if take_id else {}),
             }
         ],

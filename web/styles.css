@@ -4068,6 +4068,55 @@ pre {
   }
 }
 
+.agentRunEvidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.agentRunEvidence span,
+.agentWarnings span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agentRunEvidence .passed {
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.agentRunEvidence .warning,
+.agentWarnings span {
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.agentInputEvidence {
+  margin-top: 8px;
+}
+
+.agentInputEvidence p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.agentWarnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.agentNextAction {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
 /* Final accessibility floor after all responsive theme layers. */
 .workflowNav button > span,
 .workflowNav .navLabel,

@@ -47,6 +47,41 @@ def inspect_review_frames(frame_paths: list[str], *, product_id: str = "") -> di
     }
 
 
+def extract_review_frames(video_path: str | Path, output_dir: str | Path, *, limit: int = 3) -> list[Path]:
+    """Extract a small, deterministic sample for per-Take visual review."""
+    ffmpeg = shutil.which("ffmpeg")
+    source = Path(video_path)
+    target = Path(output_dir)
+    if not ffmpeg or not source.is_file() or limit < 1:
+        return []
+    target.mkdir(parents=True, exist_ok=True)
+    pattern = target / "frame-%02d.jpg"
+    try:
+        completed = subprocess.run(
+            [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                source.as_posix(),
+                "-vf",
+                "fps=1/2,scale=720:-2",
+                "-frames:v",
+                str(limit),
+                pattern.as_posix(),
+            ],
+            capture_output=True,
+            timeout=45,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if completed.returncode != 0:
+        return []
+    return sorted(target.glob("frame-*.jpg"))[:limit]
+
+
 def _ocr_frame(path: Path, executable: str) -> str:
     try:
         completed = subprocess.run(

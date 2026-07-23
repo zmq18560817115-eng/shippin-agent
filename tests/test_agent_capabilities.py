@@ -49,7 +49,12 @@ def test_agent_map_and_independent_research_strategy_breakdown(tmp_path: Path, m
         )
         breakdown = client.post(
             "/api/v2/agents/run",
-            json={"project_id": "agent-map-demo", "action": "script_breakdown", "mock": True},
+            json={
+                "project_id": "agent-map-demo",
+                "action": "script_breakdown",
+                    "source_text": "夜间冲奶总是手忙脚乱。等待水温下降会打断照护节奏。恒温杯提前准备好合适温度的水。按正确方向倒入奶瓶完成冲调。现在就收藏这套夜间准备方法。",
+                "mock": True,
+            },
         )
 
     assert capability_map.status_code == 200
@@ -699,6 +704,35 @@ def test_standalone_content_agents_reject_empty_default_generation(tmp_path: Pat
 
     assert all(response.status_code == 422 for response in responses.values())
     assert all("不会用默认模板" in response.json()["detail"] for response in responses.values())
+
+
+def test_standalone_agent_response_exposes_execution_and_quality_evidence(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VAF_DB_PATH", str(tmp_path / "agent-envelope.db"))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(tmp_path / "runs"))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/agents/run",
+            json={
+                "action": "script",
+                "product_id": "折叠雨伞",
+                "prompt": "为晚高峰突然下雨的地铁通勤者创作30秒中文短视频脚本。",
+                "mock": True,
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "succeeded"
+    assert payload["artifact_type"] == "script_copy"
+    assert payload["input_summary"]["product_id"] == "折叠雨伞"
+    assert "晚高峰" in payload["input_summary"]["requirement"]
+    assert payload["input_summary"]["run_mode"] == "演练模式"
+    assert payload["model"]
+    assert payload["quality_checks"]
+    assert all({"id", "label", "status"} <= set(item) for item in payload["quality_checks"])
+    assert any(item["id"] == "run_next_agent" for item in payload["next_actions"])
+    assert any(item["id"] == "promote" for item in payload["next_actions"])
 
 
 def test_real_script_normalizer_fallback_preserves_user_scenario() -> None:

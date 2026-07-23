@@ -142,10 +142,11 @@ TIKTOK_BROWSER_SEARCH_RETRIES=3
 TIKTOK_DOWNLOAD_TIMEOUT_SEC=120
 TIKTOK_SEARCH_CACHE_PATH=data/runtime/tiktok-search-cache.json
 TIKTOK_SEARCH_CACHE_MAX_AGE_SEC=86400
-VAF_TIKTOK_ENRICH_LIMIT=12
+VAF_TIKTOK_ENRICH_LIMIT=5
+VAF_TIKTOK_METADATA_TIMEOUT_S=15
 ```
 
-`VAF_TIKTOK_ENRICH_LIMIT` 控制每次补查真实播放量、作者和标题的候选数量。Cookie 过期后应重新导出 Netscape Cookie 文件并重启采集 Worker。
+`VAF_TIKTOK_ENRICH_LIMIT` 控制每次补查真实播放量、作者和标题的候选数量，`VAF_TIKTOK_METADATA_TIMEOUT_S` 限制单条元数据补查等待时间；默认值优先保证前台响应，后台定时采集可按网络情况适度调高。Cookie 过期后应重新导出 Netscape Cookie 文件并重启采集 Worker。
 实时搜索成功后会保存最近一次真实结果。TikTok 临时返回空页时，系统可在 `TIKTOK_SEARCH_CACHE_MAX_AGE_SEC` 有效期内使用缓存继续任务，并将素材标记为 `cached_browser_search`，不会冒充实时发现。
 
 Cookies、`TIKTOK_MS_TOKEN` 和 API Key 不应进入仓库或镜像。TikTok 的可访问性会受地区、登录状态、Cookie 有效期和平台策略影响；系统会保留人工链接导入作为降级入口。

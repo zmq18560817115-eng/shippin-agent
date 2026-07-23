@@ -957,16 +957,16 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             "human_gates": ["脚本确认", "关键帧确认", "逐镜 Take 选择", "成片人工视觉验收"],
             "delivery": ["中文脚本", "分镜计划", "素材清单", "720×1280 成片", "质检报告"],
         }
-        return {
-            "ok": True,
-            "project_id": None,
-            "action": action,
-            "artifact_name": "orchestration_plan",
-            "artifact": plan,
-            "meta": _agent_execution_meta(
+        return _agent_response_payload(
+            request,
+            action=action,
+            project_id=None,
+            artifact_name="orchestration_plan",
+            artifact=plan,
+            meta=_agent_execution_meta(
                 "orchestrator", creative_brief, standalone=True, agent="orchestrator"
             ),
-        }
+        )
     if action == "collector":
         if not request.target:
             raise HTTPException(status_code=400, detail="collector requires target")
@@ -981,19 +981,20 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
                     mock=request.mock,
                 )
             )
-            return {
-                "ok": captured["ok"],
-                "project_id": None,
-                "action": action,
-                "artifact_name": "tiktok_capture",
-                "artifact": captured,
-                "meta": _agent_execution_meta(
+            return _agent_response_payload(
+                request,
+                action=action,
+                project_id=None,
+                artifact_name="tiktok_capture",
+                artifact=captured,
+                ok=bool(captured.get("ok")),
+                meta=_agent_execution_meta(
                     "collector",
                     creative_brief,
                     persisted=True,
                     provider=captured.get("provider"),
                 ),
-            }
+            )
         result = tool_registry.execute_tool(
             "tiktok_crawler",
             {"target_type": request.target_type, "target": request.target, "provider": request.provider, "limit": max(1, min(request.limit, 20))},
@@ -1001,14 +1002,14 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         )
         if not result.ok:
             raise HTTPException(status_code=422, detail=(result.error or {}).get("message") or result.error)
-        return {
-            "ok": True,
-            "project_id": project_id if not standalone else None,
-            "action": action,
-            "artifact_name": "tiktok_discovery",
-            "artifact": result.data,
-            "meta": _agent_execution_meta("collector", creative_brief, **result.meta),
-        }
+        return _agent_response_payload(
+            request,
+            action=action,
+            project_id=project_id if not standalone else None,
+            artifact_name="tiktok_discovery",
+            artifact=result.data,
+            meta=_agent_execution_meta("collector", creative_brief, **result.meta),
+        )
     if action == "analysis":
         source = (request.source_text or request.prompt or "").strip()
         material: dict[str, Any] | None = None
@@ -1061,23 +1062,23 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
                 meta={"standalone": True, "source_material_id": material.get("material_id")},
                 db_path=_db_path(),
             )
-            return {
-                "ok": True,
-                "project_id": project_id,
-                "action": action,
-                "artifact_name": "analysis_report",
-                "artifact": artifact,
-                "download_url": f"/api/v2/artifacts/{project_id}/analysis_report/download",
-                "material": material,
-                "readiness": intake.get("readiness") or {},
-                "meta": _agent_execution_meta(
+            return _agent_response_payload(
+                request,
+                action=action,
+                project_id=project_id,
+                artifact_name="analysis_report",
+                artifact=artifact,
+                download_url=f"/api/v2/artifacts/{project_id}/analysis_report/download",
+                material=material,
+                readiness=intake.get("readiness") or {},
+                meta=_agent_execution_meta(
                     "analysis",
                     creative_brief,
                     standalone=True,
                     source_mode="tiktok_capture",
                     source_material_id=material.get("material_id"),
                 ),
-            }
+            )
         payload.update(
             {
                 "transcript_text": source,
@@ -1352,20 +1353,20 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             meta={"standalone": standalone},
             db_path=_db_path(),
         )
-        return {
-            "ok": True,
-            "project_id": project_id,
-            "action": action,
-            "artifact_name": artifact_name,
-            "artifact": artifact,
-            "download_url": f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
-            "meta": _agent_execution_meta(
+        return _agent_response_payload(
+            request,
+            action=action,
+            project_id=project_id,
+            artifact_name=artifact_name,
+            artifact=artifact,
+            download_url=f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
+            meta=_agent_execution_meta(
                 "feedback",
                 creative_brief,
                 tool="feedback_library",
                 standalone=standalone,
             ),
-        }
+        )
     else:
         raise HTTPException(status_code=400, detail="action must be orchestrator, collector, analysis, research, strategy, script, script_breakdown, storyboard, asset, production, review, or feedback")
 
@@ -1384,6 +1385,11 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         script_copy = payload.get("script_copy") if isinstance(payload.get("script_copy"), dict) else None
         artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
     artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
+    invalidation = (
+        _invalidate_downstream(project_id, artifact_name)
+        if not standalone and artifact_name in DOWNSTREAM_ARTIFACTS
+        else {"revision": None, "invalidated_artifacts": [], "cancelled_tasks": []}
+    )
     if artifact_name == "analysis_report" and request.source_material_id:
         material_root = _material_library_root()
         analysis_path = material_root / request.source_material_id / "analysis_report.json"
@@ -1417,15 +1423,16 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
         meta={"tool": tool_name, "artifact": artifact_name, "mock": request.mock},
         db_path=_db_path(),
     )
-    response = {
-        "ok": True,
-        "project_id": project_id,
-        "action": action,
-        "artifact_name": artifact_name,
-        "artifact": artifact,
-        "download_url": f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
-        "meta": _agent_execution_meta(action, creative_brief, **result.meta, **execution_meta),
-    }
+    response = _agent_response_payload(
+        request,
+        action=action,
+        project_id=project_id,
+        artifact_name=artifact_name,
+        artifact=artifact,
+        download_url=f"/api/v2/artifacts/{project_id}/{artifact_name}/download",
+        meta=_agent_execution_meta(action, creative_brief, **result.meta, **execution_meta),
+        invalidation=invalidation,
+    )
     if artifact_name == "shot_report":
         shots = artifact.get("shots") if isinstance(artifact.get("shots"), list) else []
         media_path = str((shots[0] if shots else {}).get("path") or "")
@@ -1437,6 +1444,100 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
             if relative:
                 response["media_url"] = f"/api/v2/runs/{project_id}/{relative}"
                 response["media_download_url"] = response["media_url"]
+    return response
+
+
+def _agent_input_summary(request: AgentRunRequest) -> dict[str, Any]:
+    requirement = (request.prompt or request.source_text or "").strip()
+    return {
+        "product_id": request.product_id,
+        "requirement": requirement[:800],
+        "source_material_id": request.source_material_id,
+        "source_refs": list(request.source_refs or []),
+        "has_structured_input": bool(request.input_json),
+        "run_mode": "演练模式" if request.mock else "真实运行",
+        "creative_style": request.creative_style.strip(),
+        "target_audience": request.target_audience.strip(),
+        "creative_freedom": request.creative_freedom.strip().casefold() or "balanced",
+    }
+
+
+def _agent_quality_checks(action: str, artifact: dict[str, Any]) -> list[dict[str, Any]]:
+    assessment = artifact.get("quality_assessment") if isinstance(artifact, dict) else None
+    if isinstance(assessment, dict) and isinstance(assessment.get("checks"), list):
+        return [
+            {
+                "id": str(item.get("name") or "quality"),
+                "label": str(item.get("message") or item.get("name") or "质量检查"),
+                "status": "passed" if item.get("passed") else "failed",
+            }
+            for item in assessment["checks"]
+            if isinstance(item, dict)
+        ]
+    if action == "review":
+        passed = str(artifact.get("status") or "").upper() == "PASS"
+        return [{"id": "review", "label": "内容安全与产品事实审核", "status": "passed" if passed else "blocked"}]
+    if action == "collector":
+        items = artifact.get("items") or artifact.get("materials") or []
+        return [{"id": "results", "label": "采集结果已返回", "status": "passed" if items else "needs_review"}]
+    return [{"id": "schema", "label": "结构化产物已通过契约校验", "status": "passed"}]
+
+
+def _agent_next_actions(action: str, project_id: str | None, artifact_name: str) -> list[dict[str, str]]:
+    labels = {
+        "collector": ("analysis", "分析已入库素材"),
+        "analysis": ("strategy", "生成内容策略"),
+        "research": ("strategy", "生成内容策略"),
+        "strategy": ("script", "生成脚本"),
+        "script": ("storyboard", "生成分镜"),
+        "script_breakdown": ("storyboard", "生成分镜"),
+        "storyboard": ("production", "生成单镜视频"),
+        "asset": ("production", "生成单镜视频"),
+        "production": ("review", "执行内容审核"),
+        "review": ("feedback", "记录复盘反馈"),
+    }
+    actions = [{"id": "download", "label": "下载本节点产物"}]
+    if action in labels:
+        next_action, label = labels[action]
+        actions.append({"id": "run_next_agent", "label": label, "agent_action": next_action})
+    if project_id and project_id.startswith("scratch-") and artifact_name in {"analysis_report", "script_copy", "shot_plan"}:
+        actions.append({"id": "promote", "label": "用此产物创建生产项目"})
+    return actions
+
+
+def _agent_response_payload(
+    request: AgentRunRequest,
+    *,
+    action: str,
+    project_id: str | None,
+    artifact_name: str,
+    artifact: dict[str, Any],
+    meta: dict[str, Any],
+    **extra: Any,
+) -> dict[str, Any]:
+    model = "演练适配器" if request.mock else str(
+        meta.get("model") or meta.get("provider") or meta.get("tool") or "真实供应商"
+    )
+    checks = _agent_quality_checks(action, artifact)
+    warnings = list(artifact.get("warnings") or []) if isinstance(artifact.get("warnings"), list) else []
+    if any(item.get("status") in {"failed", "blocked", "needs_review"} for item in checks):
+        warnings.append("产物存在待处理质量项，请先复核再进入下一节点。")
+    response = {
+        "ok": True,
+        "status": "succeeded",
+        "project_id": project_id,
+        "action": action,
+        "artifact_type": artifact_name,
+        "artifact_name": artifact_name,
+        "artifact": artifact,
+        "input_summary": _agent_input_summary(request),
+        "model": model,
+        "quality_checks": checks,
+        "warnings": list(dict.fromkeys(str(item) for item in warnings if str(item).strip())),
+        "next_actions": _agent_next_actions(action, project_id, artifact_name),
+        "meta": meta,
+    }
+    response.update(extra)
     return response
 
 
@@ -2831,6 +2932,11 @@ def put_artifact(
 
     if artifact_name == "script_copy":
         _refresh_script_gate_checkpoint(project_id, stale_sections)
+    invalidation = _invalidate_downstream(
+        project_id,
+        artifact_name,
+        changed_sections=stale_sections,
+    )
     queue.record_event(
         project_id=project_id,
         event_type="artifact.saved",
@@ -2843,6 +2949,7 @@ def put_artifact(
         "project_id": project_id,
         "artifact_name": artifact_name,
         "stale_sections": stale_sections,
+        **invalidation,
         "artifact": payload,
     }
 
@@ -2978,6 +3085,8 @@ def select_take(request: TakeSelectRequest) -> dict[str, Any]:
         "attempt": int(selected.get("attempt") or 1),
         "duration_sec": float(selected.get("duration_sec") or 6),
         "take_id": request.take_id,
+        "review_frame_paths": list(selected.get("review_frame_paths") or []),
+        "automated_visual_qa": dict(selected.get("automated_visual_qa") or {}),
     }
     report["shots"] = [by_number[number] for number in sorted(by_number)]
     artifacts.save_artifact(project_id, "shot_report", report, run_root=root)
@@ -3007,10 +3116,18 @@ def review_take(request: TakeReviewRequest) -> dict[str, Any]:
         "continuity": request.continuity,
     }
 
-    approved = all(checks.values())
+    automated = take.get("automated_visual_qa") if isinstance(take.get("automated_visual_qa"), dict) else {}
+    automated_blocked = str(automated.get("status") or "").upper() == "BLOCKED"
+    approved = all(checks.values()) and not automated_blocked
     was_selected = shot_entry.get("selected_take_id") == request.take_id
     take["status"] = "selected" if approved and was_selected else "qa_pass" if approved else "rejected"
-    take["qa"] = {"approved": approved, "checks": checks, "notes": request.notes.strip()}
+    take["qa"] = {
+        "approved": approved,
+        "checks": checks,
+        "notes": request.notes.strip(),
+        "automated_visual_qa": automated,
+        "blocked_by_automation": automated_blocked,
+    }
     if not approved and was_selected:
         shot_entry["selected_take_id"] = None
     artifacts.save_artifact(project_id, "take_manifest", manifest, run_root=root)
@@ -3018,7 +3135,7 @@ def review_take(request: TakeReviewRequest) -> dict[str, Any]:
         project_id=project_id,
         event_type="take.qa_passed" if approved else "take.rejected",
         message=f"shot{request.shot_index}:{request.take_id}",
-        meta={"checks": checks, "notes": request.notes.strip()},
+        meta={"checks": checks, "notes": request.notes.strip(), "blocked_by_automation": automated_blocked},
         db_path=_db_path(),
     )
     return {"ok": True, "approved": approved, "take_manifest": manifest}
@@ -3985,6 +4102,106 @@ def _load_artifact_or_none(project_id: str, artifact_name: str) -> dict[str, Any
 
 def _artifact_path(project_id: str, artifact_name: str) -> Path:
     return _run_root(project_id) / "artifacts" / f"{artifact_name}.json"
+
+
+DOWNSTREAM_ARTIFACTS = {
+    "strategy_brief": (
+        "script_copy", "script_breakdown", "review_report", "shot_plan",
+        "asset_manifest", "take_manifest", "shot_report", "render_report",
+        "qa_report", "publish_archive",
+    ),
+    "script_copy": (
+        "script_breakdown", "review_report", "shot_plan", "asset_manifest",
+        "take_manifest", "shot_report", "render_report", "qa_report",
+        "publish_archive",
+    ),
+    "shot_plan": (
+        "asset_manifest", "take_manifest", "shot_report", "render_report",
+        "qa_report", "publish_archive",
+    ),
+    "asset_manifest": (
+        "take_manifest", "shot_report", "render_report", "qa_report",
+        "publish_archive",
+    ),
+    "shot_report": ("render_report", "qa_report", "publish_archive"),
+}
+
+DOWNSTREAM_STAGES = {
+    "strategy_brief": {"script", "script_breakdown", "script_review", "script_gate", "storyboard", "asset", "hero_gate", "production", "take_gate", "compose", "final_qa", "archive"},
+    "script_copy": {"script_breakdown", "script_review", "script_gate", "storyboard", "asset", "hero_gate", "production", "take_gate", "compose", "final_qa", "archive"},
+    "shot_plan": {"asset", "hero_gate", "production", "take_gate", "compose", "final_qa", "archive"},
+    "asset_manifest": {"production", "take_gate", "compose", "final_qa", "archive"},
+    "shot_report": {"compose", "final_qa", "archive"},
+}
+
+
+def _invalidate_downstream(
+    project_id: str,
+    source_artifact: str,
+    *,
+    changed_sections: list[int] | None = None,
+) -> dict[str, Any]:
+    """Archive and remove derived outputs after an upstream revision."""
+    names = DOWNSTREAM_ARTIFACTS.get(source_artifact, ())
+    if not names:
+        return {"revision": None, "invalidated_artifacts": [], "cancelled_tasks": []}
+
+    root = _run_root(project_id)
+    revision = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    revision_root = root / "revisions" / revision / "artifacts"
+    invalidated: list[str] = []
+    for name in names:
+        path = root / "artifacts" / f"{name}.json"
+        if not path.is_file():
+            continue
+        revision_root.mkdir(parents=True, exist_ok=True)
+        shutil.move(path, revision_root / path.name)
+        invalidated.append(name)
+
+    cancelled: list[int] = []
+    stale_stages = DOWNSTREAM_STAGES.get(source_artifact, set())
+    for task in queue.list_tasks(project_id=project_id, db_path=_db_path()):
+        if task.stage in stale_stages and task.status in {"queued", "awaiting_human"}:
+            queue.mark_task_status(
+                task.id,
+                "cancelled",
+                result={"reason": "upstream_revision", "source_artifact": source_artifact},
+                db_path=_db_path(),
+            )
+            cancelled.append(task.id)
+
+    gate = "script_gate" if source_artifact in {"strategy_brief", "script_copy"} else "hero_gate" if source_artifact == "shot_plan" else None
+    if gate:
+        checkpoint.write_checkpoint(
+            project_id,
+            gate,
+            status="awaiting_human",
+            data={
+                "reason": "upstream_revision",
+                "source_artifact": source_artifact,
+                "stale_sections": changed_sections or [],
+                "invalidated_artifacts": invalidated,
+                "revision": revision,
+            },
+            run_root=root,
+        )
+    queue.record_event(
+        project_id=project_id,
+        event_type="artifacts.invalidated",
+        message=source_artifact,
+        meta={
+            "revision": revision,
+            "invalidated_artifacts": invalidated,
+            "cancelled_tasks": cancelled,
+            "changed_sections": changed_sections or [],
+        },
+        db_path=_db_path(),
+    )
+    return {
+        "revision": revision,
+        "invalidated_artifacts": invalidated,
+        "cancelled_tasks": cancelled,
+    }
 
 
 def _changed_script_sections(

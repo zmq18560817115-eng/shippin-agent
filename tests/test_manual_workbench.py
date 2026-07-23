@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from libshared import checkpoint
 from orchestrator import engine, queue
 from orchestrator.api import app
 
@@ -139,6 +140,45 @@ def test_archived_project_allows_shot_edit_and_manual_storyboard_run(
     assert rerun.status_code == 200
     assert rerun.json()["engine"]["stage"] == "hero_gate"
     assert rerun.json()["engine"]["status"] == "awaiting_human"
+
+
+def test_script_revision_archives_and_invalidates_downstream_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "agentflow.db"
+    runs_root = tmp_path / "runs"
+    run_root = runs_root / "revision-demo"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    queue.init_db(db_path)
+    engine.start_pipeline(
+        "revision-demo",
+        product_id="便携恒温杯",
+        db_path=db_path,
+        run_root=run_root,
+        mock=True,
+    )
+    engine.run_until_blocked("revision-demo", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate(
+        "revision-demo", "script_gate", approver="test", db_path=db_path, run_root=run_root
+    )
+    engine.run_until_blocked("revision-demo", db_path=db_path, run_root=run_root, mock=True)
+    assert (run_root / "artifacts" / "shot_plan.json").is_file()
+
+    with TestClient(app) as client:
+        script = client.get("/api/v2/artifacts/revision-demo/script_copy").json()
+        script["sections"][0]["voiceover_zh"] += " 这是人工确认后的新版本。"
+        saved = client.put("/api/v2/artifacts/revision-demo/script_copy", json=script)
+
+    assert saved.status_code == 200
+    body = saved.json()
+    assert body["stale_sections"] == [1]
+    assert "shot_plan" in body["invalidated_artifacts"]
+    assert not (run_root / "artifacts" / "shot_plan.json").exists()
+    assert list((run_root / "revisions").glob("*/artifacts/shot_plan.json"))
+    assert checkpoint.read_latest("revision-demo", run_root=run_root)["stage"] == "script_gate"
+    assert checkpoint.read_latest("revision-demo", run_root=run_root)["status"] == "awaiting_human"
 
 
 def test_manual_production_stops_before_compose(tmp_path: Path, monkeypatch) -> None:

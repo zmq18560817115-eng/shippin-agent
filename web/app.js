@@ -41,20 +41,19 @@ const state = {
 
 const views = {
   home: { step: "工作台", title: "工作首页", description: "继续任务、快速创作与处理审核。" },
-  projects: { step: "01 / 06", title: "项目", description: "创建任务，或打开一个在制项目继续工作。" },
-  strategy: { step: "项目 · 01", title: "内容策略", description: "把研究洞察转化为受众、卖点、钩子、内容方向与行动号召。" },
+  projects: { step: "01 / 06", title: "项目准备", description: "选择产品、素材与运行模式，然后开始生产。" },
+  strategy: { step: "02 / 06", title: "内容方案", description: "查看素材洞察并选择内容方向。" },
   tools: { step: "工具", title: "快速工具", description: "独立运行研究、策略、脚本、分镜与单镜制作。" },
   assets: { step: "素材", title: "素材中心", description: "管理产品素材、TikTok 参考内容、采集任务、分析结果与项目素材包。" },
   tasks: { step: "任务", title: "任务中心", description: "集中查看运行中、待处理、失败与已完成任务。" },
-  script: { step: "03 / 06", title: "脚本", description: "审阅内容策略、脚本拆解与文案，确认后进入分镜。" },
-  storyboard: { step: "04 / 06", title: "分镜", description: "调整镜头计划，确认产品关键帧与视觉连续性。" },
-  production: { step: "05 / 06", title: "制作", description: "逐镜生成、选择最佳 Take，并合成为 30 秒成片。" },
-  review: { step: "项目 · 06", title: "成片验收", description: "合成已选镜头，检查产品、温标、使用方式与人物场景连续性。" },
-  archive: { step: "项目 · 07", title: "交付归档", description: "查看质检结果，下载项目交付包并完成归档。" },
+  script: { step: "03 / 06", title: "脚本确认", description: "编辑并确认场景、动作、剧情与中文旁白。" },
+  storyboard: { step: "04 / 06", title: "分镜确认", description: "调整镜头计划并确认产品与视觉连续性。" },
+  production: { step: "05 / 06", title: "镜头制作", description: "逐镜生成、比较并选用最佳 Take。" },
+  review: { step: "06 / 06", title: "成片交付", description: "合成镜头、完成终审并下载交付产物。" },
   delivery: { step: "06 / 06", title: "交付", description: "检查质检结果，下载交付包并记录反馈。" },
 };
 
-const projectStageViews = ["strategy", "script", "storyboard", "production", "review", "archive"];
+const projectStageViews = ["projects", "strategy", "script", "storyboard", "production", "review"];
 
 const $ = (selector) => document.querySelector(selector);
 const statusGlyph = {
@@ -185,6 +184,11 @@ function renderAgentResult(host, payload) {
   const artifact = payload.artifact || {};
   const contract = payload.meta?.agent_contract || {};
   const brief = payload.meta?.creative_brief || {};
+  const qualityChecks = Array.isArray(payload.quality_checks) ? payload.quality_checks : [];
+  const failedChecks = qualityChecks.filter((item) => item.status !== "passed");
+  const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+  const nextAgent = (payload.next_actions || []).find((item) => item.id === "run_next_agent");
+  const requirement = String(payload.input_summary?.requirement || "").trim();
   const executionContext = contract.identity ? `
     <div class="agentExecutionContext">
       <strong>${escapeHtml(contract.identity)}</strong>
@@ -193,11 +197,30 @@ function renderAgentResult(host, payload) {
   host.className = "nodeResult complete";
   host.innerHTML = `
     <div class="resultHead"><strong>${escapeHtml(artifactLabel(payload.artifact_name))}</strong>${download}${promote}</div>
+    <div class="agentRunEvidence">
+      <span>${escapeHtml(payload.input_summary?.run_mode || "未知模式")}</span>
+      <span>模型/工具：${escapeHtml(payload.model || "未记录")}</span>
+      <span class="${failedChecks.length ? "warning" : "passed"}">${failedChecks.length ? `${failedChecks.length} 项待处理` : `${qualityChecks.length} 项质量检查通过`}</span>
+    </div>
+    ${requirement ? `<details class="agentInputEvidence"><summary>查看本次实际输入</summary><p>${escapeHtml(requirement)}</p></details>` : ""}
     ${executionContext}
     ${payload.project_id && payload.project_id.startsWith("scratch-") ? "<p>独立工作区产物已保存，不会出现在生产项目列表中。</p>" : ""}
+    ${warnings.length ? `<div class="agentWarnings">${warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
     <div class="agentFriendlyResult">${renderFriendlyArtifact(payload.artifact_name, artifact, payload)}</div>
+    ${nextAgent ? `<div class="agentNextAction"><button type="button" data-run-next-agent="${escapeAttr(nextAgent.agent_action)}">${escapeHtml(nextAgent.label)}</button></div>` : ""}
     <details class="rawArtifact"><summary>查看 JSON</summary><pre>${escapeHtml(JSON.stringify(artifact, null, 2))}</pre></details>
   `;
+  host.querySelector("[data-run-next-agent]")?.addEventListener("click", (event) => {
+    const action = event.currentTarget.dataset.runNextAgent;
+    const selector = $("#independentAgentAction");
+    if (!selector || ![...selector.options].some((option) => option.value === action)) return;
+    selector.value = action;
+    updateIndependentAgentUI();
+    const source = host.querySelector(".agentFriendlyResult")?.innerText?.trim() || JSON.stringify(artifact, null, 2);
+    const textarea = $("#independentAgentFields textarea");
+    if (textarea) textarea.value = source.slice(0, 6000);
+    $("#independentAgentWorkbench")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 function creativeRequestFields() {
@@ -923,7 +946,7 @@ function showView(view, { updateUrl = true } = {}) {
   }
   if (next === "home") renderHomeDashboard();
   if (next === "tasks") renderTaskCenter();
-  if (["archive", "delivery"].includes(next)) loadDeliveryDownloads().then(ensureDeliverySelection);
+  if (["review", "delivery"].includes(next)) loadDeliveryDownloads().then(ensureDeliverySelection);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -957,7 +980,7 @@ function viewForStage(stage) {
   if (["storyboard", "asset", "hero_gate"].includes(stage)) return "storyboard";
   if (["production", "take_gate"].includes(stage)) return "production";
   if (["compose", "final_qa"].includes(stage)) return "review";
-  if (["archive", "succeeded"].includes(stage)) return "archive";
+  if (["archive", "succeeded"].includes(stage)) return "review";
   return "projects";
 }
 
@@ -2020,23 +2043,27 @@ function renderPanels() {
   if (state.currentView === "production") {
     renderProductionNode();
   }
-  if (state.currentView === "review") renderComposeNode();
-  if (["archive", "delivery"].includes(state.currentView)) renderDelivery();
+  if (state.currentView === "review") {
+    renderComposeNode();
+    renderDelivery();
+  }
+  if (state.currentView === "delivery") renderDelivery();
   if (state.currentView === "home") renderHomeDashboard();
   if (state.currentView === "tasks") renderTaskCenter();
   installCommandIcons();
 }
 
 const projectStageGroups = [
-  { key: "strategy", label: "内容策略", stages: ["analysis", "research", "strategy"] },
-  { key: "script", label: "脚本", stages: ["script", "script_breakdown", "script_review", "script_gate"] },
-  { key: "storyboard", label: "分镜", stages: ["storyboard", "asset", "hero_gate"] },
+  { key: "projects", label: "项目准备", stages: [] },
+  { key: "strategy", label: "内容方案", stages: ["analysis", "research", "strategy"] },
+  { key: "script", label: "脚本确认", stages: ["script", "script_breakdown", "script_review", "script_gate"] },
+  { key: "storyboard", label: "分镜确认", stages: ["storyboard", "asset", "hero_gate"] },
   { key: "production", label: "镜头制作", stages: ["production", "take_gate"] },
-  { key: "review", label: "成片验收", stages: ["compose", "final_qa"] },
-  { key: "archive", label: "交付归档", stages: ["archive", "succeeded"] },
+  { key: "review", label: "成片交付", stages: ["compose", "final_qa", "archive", "succeeded"] },
 ];
 
 function projectStageStatus(project, group) {
+  if (group.key === "projects") return "succeeded";
   const current = project.current_stage || project.status;
   const values = group.stages.map((stage) => project.stages?.[stage]?.status).filter(Boolean);
   if (group.stages.includes(current)) return project.status === "failed" ? "failed" : project.status === "awaiting_human" ? "awaiting_human" : "running";
@@ -2611,7 +2638,7 @@ async function submitVisualReview() {
     });
     toast("视觉验收已记录，成片已进入交付检查");
     await refreshProjects();
-    showView("archive");
+    showView("review");
   } catch (error) {
     toast(error.message, "error");
   } finally {
@@ -2895,7 +2922,7 @@ async function loadDeliveryDownloads() {
   } catch {
     state.deliveryDownloads = [];
   }
-  if (["archive", "delivery"].includes(state.currentView)) renderDelivery();
+  if (["review", "delivery"].includes(state.currentView)) renderDelivery();
 }
 
 function renderDownloadHistory(host) {

@@ -122,6 +122,43 @@ def test_rejecting_a_selected_take_clears_selection(tmp_path: Path, monkeypatch)
     assert shot["takes"][0]["status"] == "rejected"
 
 
+def test_automated_visual_block_cannot_be_overridden_by_positive_manual_checks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    db_path = tmp_path / "agentflow.db"
+    runs_root = tmp_path / "runs"
+    run_root = runs_root / "automated-block"
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    monkeypatch.setenv("VAF_RUNS_ROOT", str(runs_root))
+    queue.init_db(db_path)
+    engine.start_pipeline("automated-block", product_id="便携恒温杯", db_path=db_path, run_root=run_root, mock=True)
+    engine.run_until_blocked("automated-block", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("automated-block", "script_gate", approver="test", db_path=db_path, run_root=run_root)
+    engine.run_until_blocked("automated-block", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("automated-block", "hero_gate", approver="test", db_path=db_path, run_root=run_root)
+
+    with TestClient(app) as client:
+        client.post("/api/v2/manual/run", json={"project_id": "automated-block", "stage": "production", "shot_index": 1, "take_id": "A", "mock": True})
+        path = run_root / "artifacts" / "take_manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["shots"][0]["takes"][0]["automated_visual_qa"] = {
+            "status": "BLOCKED",
+            "summary": "OCR 识别到 98°C",
+        }
+        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        reviewed = client.post(
+            "/api/v2/takes/review",
+            json={"project_id": "automated-block", "shot_index": 1, "take_id": "A", "product_identity": True, "no_invented_brand": True, "temperature_display": True, "usage_flow": True, "continuity": True},
+        )
+
+    take = reviewed.json()["take_manifest"]["shots"][0]["takes"][0]
+    assert reviewed.status_code == 200
+    assert reviewed.json()["approved"] is False
+    assert take["status"] == "rejected"
+    assert take["qa"]["blocked_by_automation"] is True
+
+
 def test_hero_approval_generates_initial_take_and_waits_for_selection(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "agentflow.db"
     runs_root = tmp_path / "runs"

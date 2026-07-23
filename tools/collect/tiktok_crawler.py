@@ -241,9 +241,9 @@ def _enrich_browser_candidates(
     if not shutil.which("yt-dlp") or not items:
         return items
     try:
-        enrich_limit = max(limit, min(int(env.get("VAF_TIKTOK_ENRICH_LIMIT") or max(8, limit * 2)), 30))
+        enrich_limit = max(1, min(int(env.get("VAF_TIKTOK_ENRICH_LIMIT") or min(max(limit, 4), 8)), 30))
     except (TypeError, ValueError):
-        enrich_limit = max(8, limit * 2)
+        enrich_limit = min(max(limit, 4), 8)
     selected = items[:enrich_limit]
     enriched_by_url: dict[str, dict[str, Any]] = {}
     with ThreadPoolExecutor(max_workers=min(4, len(selected))) as pool:
@@ -276,6 +276,10 @@ def _video_metadata(url: str, env: Mapping[str, str]) -> dict[str, Any] | None:
     command = [executable, "--skip-download", "--dump-single-json", "--no-warnings"]
     command.extend(_yt_dlp_auth_args(env))
     command.append(url)
+    try:
+        timeout_s = max(5, min(int(env.get("VAF_TIKTOK_METADATA_TIMEOUT_S") or 15), 60))
+    except (TypeError, ValueError):
+        timeout_s = 15
     completed = subprocess.run(
         command,
         capture_output=True,
@@ -283,7 +287,7 @@ def _video_metadata(url: str, env: Mapping[str, str]) -> dict[str, Any] | None:
         encoding="utf-8",
         errors="replace",
         env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-        timeout=60,
+        timeout=timeout_s,
         check=False,
     )
     if completed.returncode != 0 or not completed.stdout.strip():

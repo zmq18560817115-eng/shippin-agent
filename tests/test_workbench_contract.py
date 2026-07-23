@@ -84,7 +84,7 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     for view in ("projects", "assets", "script", "storyboard", "production", "delivery"):
         assert f'data-view="{view}"' in html
         if view == "delivery":
-            assert 'data-view-section="archive delivery"' in html
+            assert 'data-view-section="review delivery"' in html
         else:
             assert f'data-view-section="{view}"' in html
     assert 'id="continueProject"' in html
@@ -109,22 +109,27 @@ def test_workbench_uses_stage_views_without_changing_workflow_nodes() -> None:
     assert "function moveProjectStage(direction)" in script
 
 
-def test_video_project_navigation_exposes_every_production_stage() -> None:
+def test_video_project_navigation_exposes_six_user_facing_stages() -> None:
     html = Path("web/index.html").read_text(encoding="utf-8")
     script = Path("web/app.js").read_text(encoding="utf-8")
 
-    for view in ("projects", "strategy", "script", "storyboard", "production", "review", "archive"):
+    for view in ("projects", "strategy", "script", "storyboard", "production", "review"):
         assert f'data-view="{view}"' in html
         assert view in script
+
+    assert 'data-view="archive"' not in html
+    for label in ("项目准备", "内容方案", "脚本确认", "分镜确认", "镜头制作", "成片交付"):
+        assert label in html
 
     assert 'id="strategyNode" data-view-section="strategy"' in html
     assert 'id="scriptGate" data-view-section="script"' in html
     assert 'id="composeNode" data-view-section="review"' in html
-    assert 'id="deliveryNode" data-view-section="archive delivery"' in html
+    assert 'id="deliveryNode" data-view-section="review delivery"' in html
     assert 'id="runStrategy"' in html
     assert 'id="composePanel"' in html
     assert 'id="deliveryPanel"' in html
-    assert 'showView("archive")' in script
+    assert 'showView("review")' in script
+    assert 'const projectStageViews = ["projects", "strategy", "script", "storyboard", "production", "review"]' in script
     assert 'section.dataset.viewSection.split(/\\s+/).includes(next)' in script
 
 
@@ -206,7 +211,7 @@ def test_delivery_center_has_four_operational_views() -> None:
     assert "function renderDownloadHistory" in script
     assert 'api("/api/v2/delivery/downloads?limit=100")' in script
     assert 'state.currentView === "review"' in script
-    assert '["archive", "delivery"].includes(state.currentView)' in script
+    assert '["review", "delivery"].includes(state.currentView)' in script
 
 
 def test_admin_failures_have_inline_recovery_actions() -> None:
