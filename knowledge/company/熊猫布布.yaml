@@ -1,0 +1,38 @@
+company_content_profile:
+  brand: 熊猫布布
+  positioning: 中国科技母婴品牌
+  philosophy: 用科技，温暖每一位妈妈
+  traits:
+    - 专业
+    - 科技
+    - 温暖
+    - 真实
+  visual_language:
+    primary_color: 科技蓝
+    logo_character: 柔和的熊猫头
+    style:
+      - 简约现代
+      - 有温度
+      - 产品结构清晰
+      - 避免过度医疗化
+  content_voice:
+    - 以具体生活动作表达价值
+    - 使用自然、克制、可验证的语言
+    - 不贬低竞品
+    - 不使用无法证明的绝对化、医疗或保证性宣称
+  product_lines:
+    launched:
+      - 专业级吸奶器 Pro
+      - 羊脂膏
+      - 便携恒温杯
+    pending_validation:
+      - 奶瓶消毒柜
+      - 奶瓶
+    research:
+      - 医疗级吸奶器 Medical
+      - 穿戴式吸奶器 Air
+  source:
+    vault:
+      - "\\\\DS223\\obsidian知识库\\shared-knowledge\\products\\熊猫布布品牌信息.md"
+      - "\\\\DS223\\obsidian知识库\\shared-knowledge\\products\\熊猫布布品牌手册.md"
+    imported: "2026-07-23"

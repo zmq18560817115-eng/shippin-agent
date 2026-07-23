@@ -13,6 +13,7 @@ import httpx
 
 from tools.base_tool import ToolContext, ToolResult
 from tools.collect import relevance, tiktok_api_adapter, tiktok_browser_search
+from tools.collect.runtime_deps import yt_dlp_available, yt_dlp_command
 from tools.tool_registry import register_tool
 
 
@@ -145,7 +146,7 @@ def _select_provider(requested: str, target_type: str, context: ToolContext) -> 
         return "apify"
     if tiktok_api_adapter.configured(context.env):
         return "tiktok_api"
-    if target_type == "account" and shutil.which("yt-dlp"):
+    if target_type == "account" and yt_dlp_available():
         return "yt_dlp"
     if target_type == "keyword":
         raise RuntimeError(
@@ -163,7 +164,7 @@ def _fallback_account_discovery(
 ) -> tuple[list[dict[str, Any]], str] | None:
     if requested_provider != "auto" or target_type != "account" or not _is_account_url(target):
         return None
-    if not shutil.which("yt-dlp"):
+    if not yt_dlp_available():
         return None
     try:
         return _discover_account(target, limit, env), "yt_dlp_fallback"
@@ -238,7 +239,7 @@ def _enrich_browser_candidates(
     limit: int,
     env: Mapping[str, str],
 ) -> list[dict[str, Any]]:
-    if not shutil.which("yt-dlp") or not items:
+    if not yt_dlp_available() or not items:
         return items
     try:
         enrich_limit = max(1, min(int(env.get("VAF_TIKTOK_ENRICH_LIMIT") or min(max(limit, 4), 8)), 30))
@@ -270,10 +271,10 @@ def _enrich_browser_candidates(
 def _video_metadata(url: str, env: Mapping[str, str]) -> dict[str, Any] | None:
     if not url:
         return None
-    executable = shutil.which("yt-dlp")
+    executable = yt_dlp_command()
     if not executable:
         return None
-    command = [executable, "--skip-download", "--dump-single-json", "--no-warnings"]
+    command = [*executable, "--skip-download", "--dump-single-json", "--no-warnings"]
     command.extend(_yt_dlp_auth_args(env))
     command.append(url)
     try:
@@ -341,10 +342,10 @@ def _discover_keyword(keyword: str, limit: int, token: str) -> list[dict[str, An
 
 
 def _discover_account(url: str, limit: int, env: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
-    executable = shutil.which("yt-dlp")
+    executable = yt_dlp_command()
     if not executable:
-        raise RuntimeError("yt-dlp is not installed or not on PATH")
-    command = [executable, "--flat-playlist", "--playlist-end", str(limit), "--dump-json"]
+        raise RuntimeError("当前服务 Python 环境未安装 yt-dlp")
+    command = [*executable, "--flat-playlist", "--playlist-end", str(limit), "--dump-json"]
     command.extend(_yt_dlp_auth_args(env or {}))
     command.append(url)
     completed = subprocess.run(

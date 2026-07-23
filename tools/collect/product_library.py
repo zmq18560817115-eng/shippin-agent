@@ -142,7 +142,18 @@ def product_guardrail_text(product_id: str) -> str:
     facts = product.get("facts") if product else {}
     if not isinstance(facts, dict) or not facts:
         return ""
-    return json.dumps(facts, ensure_ascii=False, sort_keys=True)
+    payload: dict[str, Any] = dict(facts)
+    brand = brand_profile()
+    if brand:
+        payload["brand_profile"] = brand
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def brand_profile(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
+    target = _resolve_path(path) if path is not None else ROOT / "knowledge" / "company" / "熊猫布布.yaml"
+    payload = _load_product_facts(target)
+    profile = payload.get("company_content_profile") if isinstance(payload, dict) else None
+    return profile if isinstance(profile, dict) else {}
 
 
 def _scan_root(root: Path, products: dict[str, dict[str, Any]]) -> None:

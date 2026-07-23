@@ -1,0 +1,38 @@
+product_id: 奶瓶
+brand: 熊猫布布
+category: 婴幼儿奶瓶
+source:
+  vault: "\\\\DS223\\obsidian知识库\\shared-knowledge\\products\\三品奶瓶卖点对比-熊猫布布vs贝亲vs世喜.md"
+  updated: "2026-06-14"
+  imported: "2026-07-23"
+approved_facts:
+  - 宽口瓶身，便于清洗
+  - 奶嘴采用仿肤色视觉设计
+  - 奶嘴表面具有不规则凸点
+  - 配件数量较少
+usage_guardrails:
+  - 奶瓶用于承接准备好的奶液并进行喂养。
+  - 组装时必须确保奶嘴、瓶盖和回气结构安装正确。
+  - 不得将奶瓶放进便携恒温杯内部加热。
+visual_guardrails:
+  - 奶瓶外观必须来自获批身份图，禁止根据竞品图片推断。
+  - 喂养镜头不得表现明显错误含乳、倒置漏液或遗漏必要配件。
+forbidden_claims:
+  - 防胀气保证
+  - 完全不进气
+  - 最软
+  - 流速最合适
+  - 像真乳房
+  - 保证深含乳
+  - 治疗胀气或肠绞痛
+claims_requiring_evidence:
+  - 全阶段柔软度
+  - 90 度正常出奶
+  - 回气阀性能
+  - 流速对比
+  - 防胀气效果
+review_required:
+  - 奶嘴和回气结构
+  - 奶瓶材质与容量
+  - 适用月龄和流速型号
+  - 所有竞品比较与效果声明

@@ -252,8 +252,9 @@ document.querySelector("#probeTikTok")?.addEventListener("click", async (event) 
   button.disabled = true;
   button.textContent = "检测中…";
   try {
-    const result = await api("/api/v2/admin/runtime/probe", { method: "POST", body: JSON.stringify({ provider: "browser_search" }) });
-    window.alert(result.ok ? "TikTok 浏览器搜索探针通过" : `采集探针失败：${result.probe?.detail || "未知错误"}`);
+    const result = await api("/api/v2/admin/runtime/probe", { method: "POST", body: JSON.stringify({ provider: "auto" }) });
+    const provider = result.provider === "browser_search" ? "TikTok 浏览器搜索" : "TikTokApi 备用采集";
+    window.alert(result.ok ? `${provider}探针通过` : `采集探针失败：${result.probe?.detail || "未知错误"}`);
     await loadAdmin();
   } catch (error) {
     window.alert(`采集探针失败：${error.message}`);
@@ -273,11 +274,11 @@ cookiesFile?.addEventListener("change", async () => {
   window.lucide?.createIcons();
   try {
     const cookiesText = await file.text();
-    await api("/api/v2/admin/runtime/cookies", {
+    const result = await api("/api/v2/admin/runtime/cookies", {
       method: "POST",
       body: JSON.stringify({ cookies_text: cookiesText }),
     });
-    window.alert("TikTok Cookies 已安全替换，请继续点击“检测采集”验证会话。");
+    window.alert(`TikTok Cookies 已安全替换。\n${result.detail}\n请继续点击“检测采集”验证会话。`);
     await loadAdmin();
   } catch (error) {
     window.alert(`Cookies 更新失败：${error.message}`);

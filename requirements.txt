@@ -6,3 +6,5 @@ httpx
 pytest
 PyYAML
 imageio-ffmpeg
+playwright
+yt-dlp

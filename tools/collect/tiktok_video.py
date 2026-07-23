@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import imageio_ffmpeg
 
 from tools.base_tool import ToolContext, ToolResult
+from tools.collect.runtime_deps import yt_dlp_command
 from tools.collect.tiktok_oembed import TIKTOK_HOSTS
 from tools.tool_registry import register_tool
 
@@ -39,12 +40,12 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             meta={"tool": "tiktok_video", "mock": True},
         )
 
-    executable = shutil.which("yt-dlp")
+    executable = yt_dlp_command()
     if not executable:
-        return ToolResult.failure("not_configured", "yt-dlp is not installed or not on PATH")
+        return ToolResult.failure("not_configured", "当前服务 Python 环境未安装 yt-dlp")
     material_dir.mkdir(parents=True, exist_ok=True)
     command = [
-        executable,
+        *executable,
         "--no-playlist",
         "--restrict-filenames",
         "--write-info-json",

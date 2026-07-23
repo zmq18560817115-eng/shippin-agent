@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from tools.collect import product_library
@@ -134,3 +135,30 @@ def _sample_product_root(tmp_path: Path) -> tuple[Path, Path]:
 def _only_product(payload: dict) -> dict:
     assert len(payload["products"]) == 1
     return payload["products"][0]
+def test_product_guardrails_include_company_content_profile(tmp_path, monkeypatch) -> None:
+    product_path = tmp_path / "index.json"
+    product_path.write_text(
+        json.dumps(
+            {
+                "products": [
+                    {
+                        "id": "吸奶器",
+                        "facts": {"approved_facts": ["自研活塞泵"]},
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VAF_PRODUCT_LIBRARY_INDEX", str(product_path))
+    monkeypatch.setattr(
+        product_library,
+        "brand_profile",
+        lambda path=None: {"brand": "熊猫布布", "content_voice": ["自然、克制、可验证"]},
+    )
+
+    payload = json.loads(product_library.product_guardrail_text("吸奶器"))
+
+    assert payload["approved_facts"] == ["自研活塞泵"]
+    assert payload["brand_profile"]["brand"] == "熊猫布布"

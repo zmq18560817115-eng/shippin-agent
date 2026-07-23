@@ -488,13 +488,14 @@ def healthz() -> dict[str, str]:
 @app.get("/api/v2/runtime")
 def runtime_status() -> dict[str, Any]:
     from tools.collect import tiktok_api_adapter, tiktok_browser_search
+    from tools.collect.runtime_deps import yt_dlp_available
     from tools.video.visual_qa import resolve_tesseract
 
     tiktok_api_installed = tiktok_api_adapter.package_available()
     tiktok_api_ready = tiktok_api_adapter.configured(os.environ)
     browser_search_ready = tiktok_browser_search.configured(os.environ)
     apify_ready = bool(os.environ.get("APIFY_API_TOKEN"))
-    yt_dlp_ready = bool(shutil.which("yt-dlp"))
+    yt_dlp_ready = yt_dlp_available()
     cookies_path = Path(os.environ.get("TIKTOK_COOKIES_FILE") or DATA_ROOT / "secrets" / "tiktok-cookies.txt")
     cookies_ready = cookies_path.is_file() and cookies_path.stat().st_size > 0
     doubao_configured = bool(os.environ.get("DOUBAO_API_KEY"))
@@ -549,7 +550,7 @@ def runtime_status() -> dict[str, Any]:
             "tiktok_video": _runtime_provider(
                 yt_dlp_ready,
                 operational=yt_dlp_ready,
-                detail="yt-dlp 已就绪，可执行直链下载" if yt_dlp_ready else "未检测到 yt-dlp",
+                detail="yt-dlp 已就绪，可执行直链下载" if yt_dlp_ready else "当前服务 Python 环境未安装 yt-dlp",
             ),
             "tiktok_keyword_crawler": {
                 "configured": browser_search_ready or apify_ready or tiktok_api_ready,
@@ -563,7 +564,7 @@ def runtime_status() -> dict[str, Any]:
                 "operational": browser_operational,
                 "state": "ready" if browser_operational else ("configured_unverified" if browser_search_ready else "not_configured"),
                 "mode": "authenticated_search_page",
-                "detail": str(browser_probe.get("detail") or ("Playwright 与 Cookies 已配置，需执行真实关键词探针" if browser_search_ready else "缺少 Playwright 或有效 Cookies")),
+                "detail": str(browser_probe.get("detail") or _browser_search_readiness_detail(cookies_ready)),
                 "last_checked_at": browser_probe.get("checked_at"),
             },
             "tiktok_api": {
@@ -587,7 +588,7 @@ def runtime_status() -> dict[str, Any]:
             {"id": "browser_search", "ready": browser_operational, "configured": browser_search_ready, "state": "ready" if browser_operational else ("configured_unverified" if browser_search_ready else "not_configured"), "supports": ["keyword", "hashtag"], "detail": str(browser_probe.get("detail") or "真实搜索页采集"), "last_checked_at": browser_probe.get("checked_at")},
             {"id": "tiktok_api", "ready": tiktok_operational, "configured": tiktok_api_ready, "state": tiktok_state, "supports": ["account", "hashtag", "keyword", "trending"], "detail": tiktok_detail, "last_checked_at": tiktok_probe.get("checked_at")},
             {"id": "apify", "ready": False, "configured": apify_ready, "optional": True, "state": "configured_unverified" if apify_ready else "optional_disabled", "supports": ["keyword"], "detail": "可选降级后端"},
-            {"id": "yt_dlp", "ready": yt_dlp_ready, "configured": yt_dlp_ready, "state": "ready" if yt_dlp_ready else "not_configured", "supports": ["account", "direct_url"], "cookies_file": cookies_ready, "detail": "下载器已安装" if yt_dlp_ready else "未检测到 yt-dlp"},
+            {"id": "yt_dlp", "ready": yt_dlp_ready, "configured": yt_dlp_ready, "state": "ready" if yt_dlp_ready else "not_configured", "supports": ["account", "direct_url"], "cookies_file": cookies_ready, "detail": "下载器已安装" if yt_dlp_ready else "请在运行服务的同一 Python 环境安装 yt-dlp"},
             {"id": "manual_url", "ready": yt_dlp_ready, "configured": True, "state": "ready" if yt_dlp_ready else "dependency_missing", "supports": ["direct_url"], "detail": "内建导入入口；依赖 yt-dlp"},
         ],
         "budget_mode": str((context.config.get("runtime") or {}).get("budget_mode") or "enforce"),
@@ -856,8 +857,12 @@ def _require_standalone_agent_input(request: AgentRunRequest, action: str) -> No
 @app.post("/api/v2/admin/runtime/probe")
 def probe_runtime_provider(request: RuntimeProbeRequest) -> dict[str, Any]:
     provider = request.provider.strip().casefold()
-    if provider not in {"browser_search", "tiktok_api"}:
-        raise HTTPException(status_code=422, detail="当前仅支持 TikTok 浏览器搜索和 TikTokApi 的无费用实时探针")
+    if provider not in {"auto", "browser_search", "tiktok_api"}:
+        raise HTTPException(status_code=422, detail="当前仅支持自动采集、TikTok 浏览器搜索和 TikTokApi 实时探针")
+    if provider == "auto":
+        from tools.collect import tiktok_browser_search
+
+        provider = "browser_search" if tiktok_browser_search.configured(os.environ) else "tiktok_api"
     started = time.monotonic()
     payload = (
         {"target_type": "keyword", "target": "bottle warmer", "provider": "browser_search", "limit": 1, "expand_queries": False}
@@ -899,7 +904,26 @@ def replace_tiktok_cookies(request: RuntimeCookiesRequest) -> dict[str, Any]:
     if os.name != "nt":
         target.chmod(0o600)
     os.environ["TIKTOK_COOKIES_FILE"] = str(target)
-    return {"ok": True, "configured": True, "size_bytes": target.stat().st_size}
+    from tools.collect import tiktok_browser_search
+
+    return {
+        "ok": True,
+        "configured": True,
+        "size_bytes": target.stat().st_size,
+        "browser_search_configured": tiktok_browser_search.configured(os.environ),
+        "detail": _browser_search_readiness_detail(True),
+    }
+
+
+def _browser_search_readiness_detail(cookies_ready: bool) -> str:
+    playwright_ready = importlib.util.find_spec("playwright") is not None
+    if not cookies_ready and not playwright_ready:
+        return "缺少 TikTok Cookies、Playwright 和 Chromium"
+    if not cookies_ready:
+        return "缺少有效 TikTok Cookies，请点击“更新 Cookies”上传 Netscape .txt 文件"
+    if not playwright_ready:
+        return "Cookies 已保存；当前服务 Python 环境缺少 Playwright，请安装 Playwright 和 Chromium"
+    return "Cookies 与 Playwright 已配置，需执行真实关键词探针确认会话有效"
 
 
 def _runtime_provider(

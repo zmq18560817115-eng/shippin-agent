@@ -46,3 +46,31 @@ def test_tiktok_video_uses_first_frame_as_cover_fallback(tmp_path: Path, monkeyp
 
     assert result.ok is True
     assert Path(result.data["local_cover_path"]).read_bytes() == b"frame"
+
+
+def test_tiktok_video_uses_python_module_when_console_script_is_not_on_path(
+    tmp_path: Path, monkeypatch
+) -> None:
+    material_dir = tmp_path / "material"
+    material_dir.mkdir()
+    (material_dir / "source.mp4").write_bytes(b"video")
+    monkeypatch.setattr(tiktok_video, "yt_dlp_command", lambda: ["python", "-m", "yt_dlp"])
+    captured: list[str] = []
+
+    def run(command, **kwargs):
+        captured.extend(command)
+        return type("Done", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(tiktok_video.subprocess, "run", run)
+    monkeypatch.setattr(tiktok_video, "_extract_frames", lambda *args: [])
+    result = tiktok_video.execute(
+        {
+            "url": "https://www.tiktok.com/@demo/video/123",
+            "material_dir": str(material_dir),
+            "transcript_text": "转写",
+        },
+        tiktok_video.ToolContext(mock=False, env={}),
+    )
+
+    assert result.ok is True
+    assert captured[:3] == ["python", "-m", "yt_dlp"]

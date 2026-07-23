@@ -83,6 +83,7 @@ def test_admin_can_replace_netscape_tiktok_cookies_without_exposing_values(tmp_p
     assert target.read_text(encoding="utf-8").startswith("# Netscape HTTP Cookie File")
     assert runtime.json()["deployment"]["tiktok_cookies"]["ready"] is True
     assert "secret-value" not in runtime.text
+    assert "detail" in response.json()
 
 
 def test_admin_rejects_non_netscape_cookie_upload() -> None:
@@ -91,6 +92,24 @@ def test_admin_rejects_non_netscape_cookie_upload() -> None:
 
     assert response.status_code == 422
     assert "Netscape" in response.json()["detail"]
+
+
+def test_auto_runtime_probe_uses_tiktok_api_when_browser_search_is_not_configured(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("orchestrator.api._runtime_probe_path", lambda: tmp_path / "runtime-probes.json")
+    monkeypatch.setattr("tools.collect.tiktok_browser_search.configured", lambda env: False)
+    captured: dict[str, object] = {}
+
+    def execute_tool(name, payload, **kwargs):
+        captured.update(payload)
+        return ToolResult.success({"items": [{"url": "https://www.tiktok.com/@demo/video/1"}]})
+
+    monkeypatch.setattr("orchestrator.api.tool_registry.execute_tool", execute_tool)
+    with TestClient(app) as client:
+        response = client.post("/api/v2/admin/runtime/probe", json={"provider": "auto"})
+
+    assert response.status_code == 200
+    assert response.json()["provider"] == "tiktok_api"
+    assert captured["provider"] == "tiktok_api"
 
 
 def test_runtime_uses_successful_real_model_calls_as_readiness_evidence(tmp_path, monkeypatch) -> None:

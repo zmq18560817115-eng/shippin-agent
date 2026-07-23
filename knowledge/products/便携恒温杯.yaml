@@ -1,18 +1,58 @@
 product_id: 便携恒温杯
+brand: 熊猫布布
+category: 便携式加热保温容器
+source:
+  vault: "\\\\DS223\\obsidian知识库\\shared-knowledge\\products\\便携恒温杯.md"
+  updated: "2026-07-06"
+  imported: "2026-07-23"
+audiences:
+  - 0-12 月新手父母
+  - 夜间喂养、混合喂养与瓶喂家庭
+  - 经常带娃外出、乘车或乘机的家庭
+approved_facts:
+  - 可充电便携设计
+  - 多档温控
+  - USB-C 充电
+  - 可放入妈咪包或常见杯架
+  - 独立于奶瓶使用
+use_cases:
+  - 夜间卧室喂养
+  - 车内与机场旅途
+  - 公园、餐厅与商场临时准备
 display:
   approved_value: "98°F"
   temperature_scale: Fahrenheit
   forbidden_values:
     - "98°C"
     - "98摄氏度"
+product_identity:
+  body_color: 紫色
+  lid: 翻盖
+  pouring_spout: 圆形倒出口
+  display: 竖向数显
+  control: 椭圆形按键
 visual_guardrails:
-  - The temperature display must read 98°F when a temperature is visible.
-  - Never render 98°C or describe the display as Celsius.
-  - Match the approved flip lid, round pouring spout, purple body, vertical display and oval power button.
+  - 温度可见时必须显示 98°F。
+  - 禁止出现 98°C、摄氏度、沸腾、大量蒸汽或奶液起泡。
+  - 产品外观必须匹配获批身份图中的紫色杯身、翻盖、圆形倒出口、竖向数显和椭圆按键。
 usage_guardrails:
-  - Pour liquid into the warming cup, then pour through the round spout into a separate clean bottle.
-  - Never place a baby bottle inside the cup.
+  - 将允许的奶液或水倒入恒温杯加热保温，达到适宜温度后，再从圆形倒出口倒入独立的干净奶瓶。
+  - 禁止把奶瓶放进恒温杯内加热。
+  - 禁止反向倒液或把恒温杯表现成套娃式暖奶器。
+forbidden_claims:
+  - medical grade
+  - pain-free guarantee
+  - increase milk supply
+  - cure
+  - treat
+  - diagnose
+  - best
+  - "#1"
+  - guaranteed
+  - FDA approved
 review_required:
-  - temperature unit
-  - lid and spout geometry
-  - pour direction
+  - 华氏温标
+  - 杯盖与倒出口结构
+  - 倒液方向
+  - 产品与奶瓶相互独立
+  - 所有量化性能与认证声明

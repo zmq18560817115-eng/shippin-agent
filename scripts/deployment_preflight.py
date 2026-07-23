@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.base_tool import ToolContext
+from tools.collect.runtime_deps import yt_dlp_available
 from tools.video.visual_qa import resolve_tesseract
 
 
@@ -140,7 +141,12 @@ def main() -> int:
     checks = {
         "ffmpeg": application_ffmpeg(),
         "system_ffprobe": command_version("ffprobe", ["-version"]),
-        "yt_dlp": command_version("yt-dlp", ["--version"]),
+        "yt_dlp": {
+            "ok": yt_dlp_available(),
+            "detail": "yt-dlp is available in the service Python environment"
+            if yt_dlp_available()
+            else "install yt-dlp in the same Python environment used to start the service",
+        },
         "playwright": playwright_check(),
         "database": sqlite_check(db_path),
         "materials_volume": writable_directory(data_root / "01_素材库"),

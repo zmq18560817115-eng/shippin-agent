@@ -1,0 +1,57 @@
+product_id: 吸奶器
+brand: 熊猫布布
+model: Pro
+category: 专业级电动吸奶器
+source:
+  vault:
+    - "\\\\DS223\\obsidian知识库\\shared-knowledge\\products\\吸奶器.md"
+    - "\\\\DS223\\obsidian知识库\\shared-knowledge\\products\\熊猫布布智能专业级吸奶器产品介绍.md"
+  updated: "2026-07-06"
+  imported: "2026-07-23"
+audiences:
+  - 0-6 月新手妈妈
+  - 背奶职场妈妈
+  - 夜间吸奶与混合喂养人群
+approved_facts:
+  - 自研活塞泵，吸与放均可控制
+  - 负压传感器与负压反馈算法
+  - 三阶吸乳模式
+  - 可充电电池
+  - 提供多种护罩尺寸
+  - 主机、导管、三通、隔膜、阀门、护罩与奶瓶组成完整使用系统
+usage_guardrails:
+  - 护罩应正确贴合乳房，导管连接三通与主机，乳汁经阀门流入奶瓶。
+  - 内容只能描述获批模式、结构与操作，不得承诺奶量增长、无痛、治疗堵奶或医疗效果。
+  - 护罩尺寸、吸力档位和模式选择需要按说明或专业服务建议确认。
+visual_guardrails:
+  - 产品可见镜头必须使用吸奶器自身获批身份素材，禁止套用恒温杯外观。
+  - 导管、三通、护罩和奶瓶的连接关系必须符合真实结构。
+  - 夜间画面可以表现氛围灯，但不得将其描述为疗效证据。
+forbidden_claims:
+  - 无痛
+  - 催奶
+  - 下奶
+  - 通乳
+  - increase milk supply
+  - boost lactation
+  - cure
+  - treat
+  - diagnose
+  - best
+  - "#1"
+  - guaranteed
+  - 医疗级
+claims_requiring_evidence:
+  - 具体专利数量
+  - 0.2kPa 每档
+  - 120 次每分钟
+  - 连续使用 2 小时
+  - 1000 小时寿命
+  - 超静音
+  - 100 档调节
+  - 临床体验与共创人数
+review_required:
+  - 产品型号与外观
+  - 配件连接关系
+  - 护罩尺寸与吸力描述
+  - 所有性能数字、专利、测试和服务承诺
