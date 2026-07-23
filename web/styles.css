@@ -1682,6 +1682,31 @@ button.quietButton {
   overflow-y: auto;
 }
 
+.navScrollHint {
+  display: none;
+}
+
+.loadingSkeleton {
+  display: grid;
+  gap: 10px;
+  min-height: 120px;
+  align-content: center;
+}
+
+.loadingSkeleton > span {
+  display: block;
+  height: 34px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eef1f5 25%, #f8f9fb 50%, #eef1f5 75%);
+  background-size: 200% 100%;
+  animation: loadingSweep 1.2s ease-in-out infinite;
+}
+
+@keyframes loadingSweep {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
 .workflowNav .navGroup {
   display: grid;
   gap: 3px;
@@ -3795,7 +3820,31 @@ pre {
     overflow-x: auto;
     border-right: 0;
     border-bottom: 1px solid var(--line);
-    padding: 7px 10px;
+    padding: 7px 46px 7px 10px;
+    scroll-padding-inline: 10px 46px;
+  }
+
+  .workflowNav::after {
+    position: sticky;
+    right: -46px;
+    flex: 0 0 42px;
+    align-self: stretch;
+    background: linear-gradient(90deg, rgba(255,255,255,0), #fff 70%);
+    pointer-events: none;
+    content: "";
+  }
+
+  .navScrollHint {
+    position: fixed;
+    top: 112px;
+    right: 8px;
+    z-index: 9;
+    display: block;
+    max-width: 38px;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.15;
+    pointer-events: none;
   }
 
   .workflowNav button {

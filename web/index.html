@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>视频内容工厂</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260721-11" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260723-12" />
   </head>
   <body>
     <header class="topbar">
@@ -43,6 +43,7 @@
         <button type="button" data-view="tasks"><i data-lucide="list-checks"></i><strong>任务中心</strong></button>
         <button type="button" data-view="delivery"><i data-lucide="package-check"></i><strong>交付中心</strong></button>
       </div>
+      <span class="navScrollHint" aria-hidden="true">左右滑动查看更多</span>
     </nav>
 
     <main class="workspace">
@@ -75,12 +76,12 @@
         <div class="homeActionGrid">
           <button type="button" class="homeAction primaryAction" id="homeContinue"><i data-lucide="play"></i><span><strong>继续上次任务</strong><small id="homeContinueHint">暂无在制任务</small></span></button>
           <button type="button" class="homeAction" data-home-view="tools"><i data-lucide="wand-sparkles"></i><span><strong>使用快速工具</strong><small>脚本、分镜与单镜生成</small></span></button>
-          <button type="button" class="homeAction" data-home-view="tasks"><i data-lucide="circle-alert"></i><span><strong>我的待审核</strong><small id="homeReviewCount">0 项待处理</small></span></button>
-          <button type="button" class="homeAction" data-home-view="delivery"><i data-lucide="package-check"></i><span><strong>最近交付</strong><small id="homeDeliveryCount">0 条可查看</small></span></button>
+          <button type="button" class="homeAction" data-home-view="tasks"><i data-lucide="circle-alert"></i><span><strong>我的待审核</strong><small id="homeReviewCount">加载中</small></span></button>
+          <button type="button" class="homeAction" data-home-view="delivery"><i data-lucide="package-check"></i><span><strong>最近交付</strong><small id="homeDeliveryCount">加载中</small></span></button>
         </div>
         <div class="homeColumns">
-          <section class="homePanel"><div class="sectionHead"><h2>在制项目</h2><button type="button" data-home-view="projects">查看全部</button></div><div id="homeProjects" class="compactList emptyState">暂无在制项目</div></section>
-          <section class="homePanel"><div class="sectionHead"><h2>需要处理</h2><button type="button" data-home-view="tasks">进入任务中心</button></div><div id="homeTasks" class="compactList emptyState">暂无待处理任务</div></section>
+          <section class="homePanel"><div class="sectionHead"><h2>在制项目</h2><button type="button" data-home-view="projects">查看全部</button></div><div id="homeProjects" class="compactList loadingSkeleton" aria-busy="true"><span></span><span></span><span></span></div></section>
+          <section class="homePanel"><div class="sectionHead"><h2>需要处理</h2><button type="button" data-home-view="tasks">进入任务中心</button></div><div id="homeTasks" class="compactList loadingSkeleton" aria-busy="true"><span></span><span></span><span></span></div></section>
         </div>
       </section>
 
@@ -116,7 +117,7 @@
           <button type="button" data-task-filter="failed">失败任务 <span id="taskFailedCount">0</span></button>
           <button type="button" data-task-filter="done">已完成 <span id="taskDoneCount">0</span></button>
         </div>
-        <div id="taskCenterList" class="taskList emptyState">暂无任务</div>
+        <div id="taskCenterList" class="taskList loadingSkeleton" aria-busy="true"><span></span><span></span><span></span></div>
       </section>
 
       <section class="band" id="projectSetup" data-view-section="projects" hidden>
@@ -464,6 +465,6 @@
 
     <div id="toast" role="status" aria-live="polite"></div>
     <script src="/static/vendor/lucide.min.js"></script>
-    <script src="/static/app.js?v=20260721-11"></script>
+    <script src="/static/app.js?v=20260723-12"></script>
   </body>
 </html>

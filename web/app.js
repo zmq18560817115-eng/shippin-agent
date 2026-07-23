@@ -37,6 +37,8 @@ const state = {
   scriptBaseline: null,
   scriptLocks: {},
   selectedMaterials: new Set(),
+  projectsLoaded: false,
+  projectsLoadError: "",
 };
 
 const views = {
@@ -861,6 +863,28 @@ function projectBucket(project) {
 
 function renderHomeDashboard() {
   if (!$("#homeDashboard")) return;
+  if (!state.projectsLoaded) {
+    $("#homeContinue").disabled = true;
+    $("#homeContinueHint").textContent = "正在读取在制任务";
+    $("#homeReviewCount").textContent = "加载中";
+    $("#homeDeliveryCount").textContent = "加载中";
+    [$("#homeProjects"), $("#homeTasks")].forEach((host) => {
+      host.className = "compactList loadingSkeleton";
+      host.setAttribute("aria-busy", "true");
+      host.innerHTML = "<span></span><span></span><span></span>";
+    });
+    return;
+  }
+  if (state.projectsLoadError) {
+    $("#homeContinue").disabled = true;
+    $("#homeContinueHint").textContent = "项目读取失败";
+    [$("#homeProjects"), $("#homeTasks")].forEach((host) => {
+      host.className = "compactList emptyState error";
+      host.removeAttribute("aria-busy");
+      host.textContent = state.projectsLoadError;
+    });
+    return;
+  }
   const active = state.projects.filter((project) => ["running", "human"].includes(projectBucket(project))).slice(0, 4);
   const human = state.projects.filter((project) => projectBucket(project) === "human");
   const delivered = state.projects.filter((project) => projectBucket(project) === "done");
@@ -871,10 +895,12 @@ function renderHomeDashboard() {
   $("#homeReviewCount").textContent = `${human.length} 项待处理`;
   $("#homeDeliveryCount").textContent = `${delivered.length} 条可查看`;
   $("#homeProjects").className = active.length ? "compactList" : "compactList emptyState";
+  $("#homeProjects").removeAttribute("aria-busy");
   $("#homeProjects").innerHTML = active.length ? active.map((project) => `
     <button type="button" data-home-project="${escapeAttr(project.project_id)}"><span><strong>${escapeHtml(project.product_id || "未命名产品")}</strong><small>${escapeHtml(project.project_id)}</small></span><em>${escapeHtml(stageLabel(project.current_gate || project.current_stage || project.status))}</em></button>
   `).join("") : "暂无在制项目";
   $("#homeTasks").className = human.length ? "compactList" : "compactList emptyState";
+  $("#homeTasks").removeAttribute("aria-busy");
   $("#homeTasks").innerHTML = human.length ? human.slice(0, 5).map((project) => `
     <button type="button" data-home-project="${escapeAttr(project.project_id)}"><span><strong>${escapeHtml(stageLabel(project.current_gate || project.current_stage))}</strong><small>${escapeHtml(project.product_id || project.project_id)}</small></span><em>去处理</em></button>
   `).join("") : "暂无待处理任务";
@@ -889,6 +915,20 @@ function renderHomeDashboard() {
 
 function renderTaskCenter() {
   if (!$("#taskCenterList")) return;
+  if (!state.projectsLoaded) {
+    const host = $("#taskCenterList");
+    host.className = "taskList loadingSkeleton";
+    host.setAttribute("aria-busy", "true");
+    host.innerHTML = "<span></span><span></span><span></span>";
+    return;
+  }
+  if (state.projectsLoadError) {
+    const host = $("#taskCenterList");
+    host.className = "taskList emptyState error";
+    host.removeAttribute("aria-busy");
+    host.textContent = state.projectsLoadError;
+    return;
+  }
   const buckets = { running: [], human: [], failed: [], done: [] };
   state.projects.forEach((project) => buckets[projectBucket(project)].push(project));
   $("#taskRunningCount").textContent = buckets.running.length;
@@ -898,6 +938,7 @@ function renderTaskCenter() {
   document.querySelectorAll("[data-task-filter]").forEach((button) => button.classList.toggle("active", button.dataset.taskFilter === state.taskFilter));
   const items = buckets[state.taskFilter] || [];
   const host = $("#taskCenterList");
+  host.removeAttribute("aria-busy");
   host.className = items.length ? "taskList" : "taskList emptyState";
   host.innerHTML = items.length ? items.map((project) => renderTaskCenterItem(project, state.taskFilter)).join("") : taskCenterEmptyText(state.taskFilter);
   host.querySelectorAll("[data-task-project]").forEach((button) => {
@@ -969,6 +1010,7 @@ function showView(view, { updateUrl = true } = {}) {
     button.classList.toggle("active", active);
     button.setAttribute("aria-current", active ? "page" : "false");
   });
+  document.querySelector(`.workflowNav [data-view="${next}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   const meta = views[next];
   $("#viewStep").textContent = meta.step;
   $("#viewTitle").textContent = meta.title;
@@ -1574,6 +1616,8 @@ async function refreshProjects({ silent = false, force = false } = {}) {
   try {
     const payload = await api("/api/v2/pipeline?limit=50");
     state.projects = payload.items;
+    state.projectsLoaded = true;
+    state.projectsLoadError = "";
     if (!state.selectedId && state.projects.length) {
       state.selectedId = state.projects[0].project_id;
     }
@@ -1588,6 +1632,10 @@ async function refreshProjects({ silent = false, force = false } = {}) {
     }
     if (state.currentView === "assets" && !(silent && activeEditor)) await loadMaterials();
   } catch (error) {
+    state.projectsLoaded = true;
+    state.projectsLoadError = `项目数据加载失败：${error.message}`;
+    renderHomeDashboard();
+    renderTaskCenter();
     if (!silent) toast(error.message, "error");
   } finally {
     state.refreshing = false;
@@ -2425,6 +2473,8 @@ function renderStoryboardNode() {
   const realMode = $("#runtimeMode").value === "real";
   const doubaoReady = Boolean(state.runtime?.providers?.doubao?.configured);
   const modelState = realMode ? (doubaoReady ? "真实豆包分镜模型已配置" : "真实分镜不可用：缺少豆包模型密钥") : "演练模式";
+  const gateActive = state.selected?.current_gate === "hero_gate";
+  const gateDone = Boolean(state.assetManifest) && !gateActive;
   $("#storyboardNodeState").textContent = state.shotPlan
     ? `${state.shotPlan.shots.length} 镜 · 当前 ${currentDuration} 秒 · 目标 30 秒 · ${modelState}`
     : modelState;
@@ -2446,17 +2496,15 @@ function renderStoryboardNode() {
         <tbody>${state.shotPlan.shots.map(renderShotRow).join("")}</tbody>
       </table>
     </div>
-    <div class="actionBar">
-      <button type="button" id="saveShots">保存分镜</button>
-      <button type="button" id="saveShotsAndContinue" class="primary">保存并进入视频制作</button>
+    <div class="actionBar storyboardActions">
+      <button type="button" id="saveShots" class="${gateDone || gateActive ? "" : "primary"}">${gateDone || gateActive ? "保存分镜修改" : "保存并生成关键帧"}</button>
+      ${gateDone ? '<button type="button" id="goToProduction" class="primary">前往镜头制作</button>' : ""}
       <button type="button" id="regenerateStoryboard">根据当前脚本重新生成分镜</button>
       <a class="buttonLink" href="/api/v2/artifacts/${encodeURIComponent(state.selectedId)}/shot_plan/download">下载分镜 JSON</a>
     </div>
   `;
   $("#saveShots").addEventListener("click", () => saveShotPlan().catch((error) => toast(error.message, "error")));
-  $("#saveShotsAndContinue").addEventListener("click", async () => {
-    try { await saveShotPlan(); showView("production"); } catch (error) { toast(error.message, "error"); }
-  });
+  $("#goToProduction")?.addEventListener("click", () => showView("production"));
   $("#regenerateStoryboard").addEventListener("click", () => runManualStage("storyboard"));
   host.querySelectorAll("[data-focus-storyboard-shot]").forEach((button) => {
     button.addEventListener("click", () => focusStoryboardShot(Number(button.dataset.focusStoryboardShot)));
