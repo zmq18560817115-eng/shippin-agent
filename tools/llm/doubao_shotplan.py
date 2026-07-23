@@ -36,6 +36,7 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
     product_id = str(script_copy.get("product_id") or "当前产品")
     warming_product = _is_warming_product(product_id, product_facts)
     rewrite_reason = str(payload.get("rewrite_reason") or "").strip()
+    reference_analysis = payload.get("reference_analysis") if isinstance(payload.get("reference_analysis"), dict) else {}
     fallback_plan = mock_shot_plan(project_id, script_copy)
     response, meta = ark.chat_json(
         context,
@@ -64,6 +65,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "每个文字字段保持简洁，不在逐镜重复全局产品规则。"
                     f"产品专属叙事要求：{_storyboard_product_instruction(product_id, warming_product)}"
                     f"脚本段落：{_shotplan_input(script_copy)}。产品事实：{(product_facts or '未提供')[:900]}。"
+                    "参考爆款仅用于借鉴钩子、节奏、镜头功能和转场逻辑，禁止复制其品牌、产品外观、台词与宣称。"
+                    f"参考视频拆解：{_reference_analysis_input(reference_analysis)}。"
                     f"必须修复的质量反馈：{rewrite_reason or '无'}。"
                     "交付前静默复看整条时间线：若镜头重复、转场不连续、动作不可生成或产品成为无意义摆拍，先重写再返回 JSON。"
                 ),
@@ -117,6 +120,15 @@ def _shotplan_input(script_copy: dict[str, Any]) -> list[dict[str, str]]:
         }
         for index, section in enumerate((script_copy.get("sections") or [])[:5], start=1)
     ]
+
+
+def _reference_analysis_input(analysis: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "hook_3s": str(analysis.get("hook_3s") or "")[:240],
+        "structure": list(analysis.get("structure") or [])[:8],
+        "pacing": list(analysis.get("pacing") or [])[:8],
+        "shot_breakdown": list(analysis.get("shot_breakdown") or [])[:8],
+    }
 
 
 def _normalize_shots(

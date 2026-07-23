@@ -103,6 +103,8 @@ def _execute_real(payload: dict[str, Any], context: ToolContext) -> ToolResult:
                     "不得虚构功能、品牌、医疗效果或保证性声明。"
                     f"获批产品事实与硬约束：{product_facts or '未提供'}。"
                     f"必须修复的上轮反馈：{rewrite_reason or '无'}。"
+                    "若素材分析来自用户选定的 TikTok 爆款参考，必须继承其有效钩子机制、节奏推进和镜头功能，"
+                    "但必须替换为本产品、目标受众和获批使用场景；禁止照搬竞品品牌、台词、外观、宣称或人物身份。"
                     f"获批内容策略：{strategy_brief}。素材分析：{analysis_report}。"
                     "交付前静默检查：是否有具体生活细节、五段因果是否连续、人物说话是否自然、产品动作是否准确；不满足时先重写再返回 JSON。"
                 ),

@@ -138,8 +138,10 @@
             </select>
           </label>
           <label>
-            参考素材编号（可选）
-            <input id="linkInput" name="link_id" inputmode="numeric" placeholder="例如 101" />
+            TikTok 爆款参考（可选）
+            <select id="sourceMaterialSelect" name="source_material_id">
+              <option value="">不使用参考素材</option>
+            </select>
           </label>
           <button type="submit" class="iconAction"><i data-lucide="play"></i>开始生产</button>
           <small id="runtimeModeHint" class="runtimeModeHint">用于完整流程演练：生成带演练标记的可播放 720P 成片，不调用外部模型。</small>

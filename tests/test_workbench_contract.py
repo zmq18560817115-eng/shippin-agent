@@ -8,6 +8,10 @@ def test_manual_stage_uses_existing_runtime_mode_control() -> None:
     assert 'id="runtimeMode"' in html
     assert '$("#runtimeMode").value' in script
     assert '$("#runMode")' not in script
+    assert 'id="sourceMaterialSelect"' in html
+    assert 'source_material_id: $("#sourceMaterialSelect").value || null' in script
+    assert "function renderReferenceMaterialSelect()" in script
+    assert 'id="linkInput"' not in html
 
 
 def test_agent_capabilities_are_nested_in_existing_workflow_nodes() -> None:

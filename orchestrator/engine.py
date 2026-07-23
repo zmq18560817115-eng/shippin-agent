@@ -270,15 +270,35 @@ def _execute_task(
 
 def _run_analysis(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:
     product_id = _project_product_id(task.project_id, db_path=db_path)
+    source_material_id = str(task.payload_json.get("source_material_id") or "")
+    source_context = _source_material_context(source_material_id) if source_material_id else {}
+    reference_analysis = source_context.get("analysis_report")
+    if isinstance(reference_analysis, dict):
+        reference_analysis = dict(reference_analysis)
+        reference_analysis["project_id"] = task.project_id
+        reference_analysis["material_meta_ref"] = source_material_id
+        reference_analysis["reference_provenance"] = {
+            "source_material_id": source_material_id,
+            "source_url": source_context.get("source_url") or "",
+            "mode": "selected_tiktok_reference",
+        }
+        return _complete_with_artifact(
+            task,
+            root,
+            "analysis_report",
+            reference_analysis,
+            next_stage="research",
+            db_path=db_path,
+        )
     result = _execute_tool(
         "doubao_analyze",
         {
             "project_id": task.project_id,
             "product_id": product_id,
             "source_link_id": task.payload_json.get("source_link_id"),
-            "source_material_id": task.payload_json.get("source_material_id"),
-            "source_url": task.payload_json.get("source_url"),
-            "transcript_text": task.payload_json.get("source_text"),
+            "source_material_id": source_material_id or None,
+            "source_url": task.payload_json.get("source_url") or source_context.get("source_url"),
+            "transcript_text": task.payload_json.get("source_text") or source_context.get("transcript_text"),
         },
         root,
         mock=mock,
@@ -300,7 +320,16 @@ def _run_research(task: queue.Task, root: Path, *, mock: bool, db_path: str | Pa
         "competitor_research",
         {
             "project_id": task.project_id,
-            "source_text": analysis.get("voiceover_text") or analysis.get("material_meta_ref") or "",
+            "source_text": json.dumps(
+                {
+                    "hook_3s": analysis.get("hook_3s"),
+                    "structure": analysis.get("structure"),
+                    "pacing": analysis.get("pacing"),
+                    "shot_breakdown": analysis.get("shot_breakdown"),
+                    "voiceover_text": analysis.get("voiceover_text"),
+                },
+                ensure_ascii=False,
+            ),
             "source_refs": [value for value in [analysis.get("material_meta_ref")] if value],
         },
         root,
@@ -444,6 +473,7 @@ def _run_storyboard(task: queue.Task, root: Path, *, mock: bool, db_path: str | 
         {
             "project_id": task.project_id,
             "script_copy": script_copy,
+            "reference_analysis": _load_artifact(root, "analysis_report"),
             "rewrite_reason": task.payload_json.get("rewrite_reason"),
         },
         root,
@@ -540,6 +570,40 @@ def _source_material_video(project_id: str, *, db_path: str | Path | None) -> st
         return ""
     path = Path(str(meta.get("local_video_path") or ""))
     return path.as_posix() if path.is_file() else ""
+
+
+def _source_material_context(material_id: str) -> dict[str, Any]:
+    configured = os.environ.get("VAF_MATERIAL_LIBRARY_ROOT")
+    library_root = Path(configured) if configured else DATA_ROOT / "01_素材库" / "对标视频" / "manual_import"
+    try:
+        meta = manual_import.load_material_meta(material_id, library_root)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError):
+        return {}
+    report: dict[str, Any] | None = None
+    report_path = library_root / material_id / "analysis_report.json"
+    if report_path.is_file():
+        try:
+            value = json.loads(report_path.read_text(encoding="utf-8"))
+            report = value if isinstance(value, dict) else None
+        except json.JSONDecodeError:
+            report = None
+    if report is None:
+        try:
+            stored = json.loads(str(meta.get("ai_analysis_json") or "{}"))
+            value = stored.get("analysis") if isinstance(stored, dict) else None
+            report = value if isinstance(value, dict) else None
+        except json.JSONDecodeError:
+            report = None
+    if report is not None:
+        try:
+            artifacts.validate_artifact("analysis_report", report)
+        except (ValueError, TypeError):
+            report = None
+    return {
+        "source_url": str(meta.get("source_url") or ""),
+        "transcript_text": str(meta.get("transcript_text") or ""),
+        "analysis_report": report,
+    }
 
 
 def _run_asset(task: queue.Task, root: Path, *, mock: bool, db_path: str | Path | None) -> EngineRunStatus:

@@ -1272,8 +1272,36 @@ async function loadMaterials() {
   } catch {
     state.materials = [];
   }
+  renderReferenceMaterialSelect();
   renderMaterialLibrary();
   renderProjectAssetPackages();
+}
+
+function renderReferenceMaterialSelect() {
+  const select = $("#sourceMaterialSelect");
+  if (!select) return;
+  const selected = select.value;
+  const references = state.materials
+    .filter((item) => item.material_meta?.production_readiness?.ready)
+    .sort((left, right) => {
+      const leftMeta = left.material_meta || {};
+      const rightMeta = right.material_meta || {};
+      const leftQuality = Number(leftMeta.discovery_quality?.score || 0);
+      const rightQuality = Number(rightMeta.discovery_quality?.score || 0);
+      return rightQuality - leftQuality || Number(rightMeta.play_count || 0) - Number(leftMeta.play_count || 0);
+    });
+  select.innerHTML = '<option value="">不使用参考素材</option>' + references.map((item) => {
+    const meta = item.material_meta || {};
+    const title = meta.video_title || meta.caption || item.material_id;
+    const plays = Number(meta.play_count || 0);
+    const relevance = Number(meta.discovery_relevance?.score ?? meta.discovery_relevance ?? meta.production_readiness?.relevance_score);
+    const metrics = [
+      plays > 0 ? `${plays >= 10000 ? `${Math.round(plays / 1000)}k` : plays} 播放` : "",
+      Number.isFinite(relevance) ? `相关度 ${Math.round(relevance * 100)}%` : "",
+    ].filter(Boolean).join(" · ");
+    return `<option value="${escapeAttr(item.material_id)}">${escapeHtml(title.slice(0, 46))}${metrics ? ` · ${escapeHtml(metrics)}` : ""}</option>`;
+  }).join("");
+  if ([...select.options].some((option) => option.value === selected)) select.value = selected;
 }
 
 function renderProjectAssetPackages() {
@@ -1310,7 +1338,7 @@ async function startProject(event) {
   try {
     const body = {
       product_id: $("#productSelect").value,
-      link_id: $("#linkInput").value.trim() || null,
+      source_material_id: $("#sourceMaterialSelect").value || null,
       mock: $("#runtimeMode").value !== "real",
     };
     const payload = await api("/api/v2/pipeline/run", {
