@@ -157,6 +157,12 @@ def approve_gate(
     if stage not in {"script_gate", "hero_gate", "take_gate"}:
         raise ValueError(f"unknown gate stage: {stage}")
     root = _run_root(project_id, run_root)
+    if stage == "take_gate":
+        # Validate (and materialize the selected takes into shot_report) before the
+        # irreversible awaiting_human -> succeeded transition. Otherwise a failed
+        # selection check would leave the gate marked succeeded with no compose task
+        # queued, deadlocking the run since it can no longer be re-approved.
+        _require_selected_takes(root)
     approved = checkpoint.approve_gate(project_id, stage, approver=approver, notes=notes, run_root=root)
     if stage == "script_gate":
         _enqueue_stage(project_id, "storyboard", {"run_root": root.as_posix()}, db_path=db_path)
@@ -176,7 +182,6 @@ def approve_gate(
                 db_path=db_path,
             )
     elif stage == "take_gate":
-        _require_selected_takes(root)
         _enqueue_stage(project_id, "compose", {"run_root": root.as_posix()}, db_path=db_path)
     return EngineRunStatus(project_id, stage, approved["status"], "gate approved")
 

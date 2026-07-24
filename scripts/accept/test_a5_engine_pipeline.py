@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
 
 from libshared import checkpoint
 from orchestrator import engine, queue
@@ -47,6 +50,43 @@ def test_a5_mock_pipeline_runs_with_two_human_gates(tmp_path: Path) -> None:
     assert (run_root / "artifacts" / "render_report.json").is_file()
     assert (run_root / "artifacts" / "publish_archive.json").is_file()
     assert queue.list_tasks(status="failed", db_path=db_path) == []
+
+
+def test_a5_take_gate_validation_failure_leaves_gate_recoverable(tmp_path: Path) -> None:
+    db_path = tmp_path / "agentflow.db"
+    run_root = tmp_path / "runs" / "ref-takegate"
+    queue.init_db(db_path=db_path)
+
+    engine.start_pipeline("ref-takegate", product_id="便携恒温杯", db_path=db_path, run_root=run_root, mock=True)
+    engine.run_until_blocked("ref-takegate", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("ref-takegate", "script_gate", approver="qa", db_path=db_path, run_root=run_root)
+    engine.run_until_blocked("ref-takegate", db_path=db_path, run_root=run_root, mock=True)
+    engine.approve_gate("ref-takegate", "hero_gate", approver="qa", db_path=db_path, run_root=run_root)
+    take_stop = engine.run_until_blocked("ref-takegate", db_path=db_path, run_root=run_root, mock=True)
+    assert take_stop.stage == "take_gate" and take_stop.status == "awaiting_human"
+
+    # Approving before any take is selected must fail the selection check WITHOUT
+    # advancing the gate state; otherwise the run deadlocks (gate marked succeeded
+    # but no compose task queued, and no longer re-approvable).
+    with pytest.raises(ValueError):
+        engine.approve_gate("ref-takegate", "take_gate", approver="qa", db_path=db_path, run_root=run_root)
+
+    gate = checkpoint._latest_for_stage("ref-takegate", "take_gate", run_root=run_root)
+    assert gate is not None and gate["status"] == "awaiting_human"
+    assert not [t for t in queue.list_tasks(project_id="ref-takegate", db_path=db_path) if t.stage == "compose"]
+
+    # Selecting takes then re-approving must recover cleanly and queue compose.
+    manifest_path = run_root / "artifacts" / "take_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for shot in manifest["shots"]:
+        take = shot["takes"][0]
+        take["status"] = "selected"
+        shot["selected_take_id"] = take["take_id"]
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    engine.approve_gate("ref-takegate", "take_gate", approver="qa", db_path=db_path, run_root=run_root)
+    compose_tasks = [t for t in queue.list_tasks(project_id="ref-takegate", db_path=db_path) if t.stage == "compose"]
+    assert len(compose_tasks) == 1
 
 
 def test_a5_seedance_failure_isolated_and_retry_only_failed_shot(tmp_path: Path, monkeypatch) -> None:
