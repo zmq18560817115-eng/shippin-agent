@@ -174,6 +174,11 @@ def _normalize_shots(
         shots.append(
             {
                 "number": int(section.get("number") or index),
+                "script_role": role,
+                "script_timing": str(section.get("timing") or ""),
+                "script_scene_zh": str(section.get("scene_zh") or ""),
+                "script_action_zh": str(section.get("action_zh") or ""),
+                "script_story_beat_zh": str(section.get("story_beat_zh") or ""),
                 "visual": visual,
                 "visual_prompt": visual_prompt,
                 "seedance_prompt": prompt,
@@ -267,7 +272,13 @@ def ensure_shot_locks(shot_plan: dict, script_copy: dict | None = None) -> dict:
             continue
         voiceover = ""
         if index - 1 < len(sections) and isinstance(sections[index - 1], dict):
-            voiceover = str(sections[index - 1].get("voiceover_en") or "")
+            source = sections[index - 1]
+            voiceover = str(source.get("voiceover_zh") or source.get("voiceover_en") or "")
+            shot["script_role"] = str(source.get("role") or "")
+            shot["script_timing"] = str(source.get("timing") or "")
+            shot["script_scene_zh"] = str(source.get("scene_zh") or "")
+            shot["script_action_zh"] = str(source.get("action_zh") or "")
+            shot["script_story_beat_zh"] = str(source.get("story_beat_zh") or "")
         shot["seedance_prompt"] = _lock_prompt(
             str(shot.get("seedance_prompt") or shot.get("visual_prompt") or shot.get("visual") or ""),
             voiceover,

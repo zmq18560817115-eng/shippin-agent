@@ -79,6 +79,45 @@ def test_collection_job_cleanup_only_purges_expired_terminal_records(tmp_path: P
     assert queue.get_collection_job(jobs[3]["id"], db_path=db_path)["status"] == "queued"
 
 
+def test_collection_failure_statistics_groups_actionable_reasons(tmp_path: Path) -> None:
+    db_path = tmp_path / "collection-statistics.db"
+    job = queue.create_collection_job(
+        target_type="keyword",
+        provider="auto",
+        target="portable bottle warmer",
+        requested_count=2,
+        product_id="便携恒温杯",
+        mock=False,
+        db_path=db_path,
+    )
+    queue.upsert_collection_item(
+        job["id"],
+        source_url="https://www.tiktok.com/@demo/video/1",
+        item={"title": "unrelated"},
+        relevance_score=0.1,
+        status="filtered",
+        error_message="与采集目标相关性不足",
+        db_path=db_path,
+    )
+    queue.upsert_collection_item(
+        job["id"],
+        source_url="https://www.tiktok.com/@demo/video/2",
+        item={"title": "warmer"},
+        relevance_score=0.9,
+        status="failed",
+        error_message="原视频下载失败：yt-dlp unavailable",
+        db_path=db_path,
+    )
+
+    result = queue.collection_failure_statistics(db_path=db_path)
+
+    assert result["total"] == 2
+    assert {item["code"]: item["count"] for item in result["categories"]} == {
+        "download": 1,
+        "relevance": 1,
+    }
+
+
 def test_collection_item_deduplicates_tiktok_video_id_across_url_variants(tmp_path: Path) -> None:
     db_path = tmp_path / "collection-video-id.db"
     job = queue.create_collection_job(

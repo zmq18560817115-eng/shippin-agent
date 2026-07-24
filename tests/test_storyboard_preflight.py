@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from orchestrator import engine, queue
 from orchestrator.api import app
 from tools.llm.doubao_shotplan import ensure_shot_locks
+from tools.video.seedance_shot import _prompt_preflight
 
 
 def test_script_gate_blocks_creatively_repeated_script(tmp_path: Path, monkeypatch) -> None:
@@ -142,3 +143,14 @@ def test_saving_an_older_locked_prompt_adds_the_current_display_contract() -> No
     assert "product identity lock:" in prompt
     assert "fully unlit" in prompt
     assert "do not render any digits" in prompt
+
+
+def test_paid_generation_preflight_requires_baby_bottle_structure_for_pour_shot() -> None:
+    incomplete = (
+        "Product identity lock. Display contract. Continuity lock. "
+        "Pour through round spout into a baby bottle. Never reverse."
+    )
+    assert "缺少奶瓶结构证据" in _prompt_preflight(4, incomplete)
+
+    complete = incomplete + " Show visible measurement marks on the baby bottle."
+    assert _prompt_preflight(4, complete) == []

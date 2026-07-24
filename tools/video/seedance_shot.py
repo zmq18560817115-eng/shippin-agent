@@ -49,10 +49,18 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         write_mock_video(output, _duration_sec(shot))
         provider_meta = {"provider": "mock"}
     else:
+        prompt = _shot_prompt(shot, asset_manifest)
+        prompt_issues = _prompt_preflight(number, prompt)
+        if prompt_issues:
+            return ToolResult.failure(
+                "validation_error",
+                "生成前镜头结构检查未通过：" + "；".join(prompt_issues),
+                meta={"tool": "seedance_shot", "shot_index": number, "prompt_issues": prompt_issues},
+            )
         reference_paths = _reference_paths_for_shot(shot, asset_manifest)
         provider_meta = ark.create_seedance_video(
             context,
-            prompt=_shot_prompt(shot, asset_manifest),
+            prompt=prompt,
             image_path=str(asset_manifest.get("seedance_source") or ""),
             image_paths=[
                 str(path)
@@ -80,6 +88,8 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         automated_visual_qa = inspect_review_frames(
             [path.as_posix() for path in review_frames],
             product_id=str(asset_manifest.get("product_id") or ""),
+            shot=shot,
+            context=context,
         )
 
     shot_report = {
@@ -145,13 +155,27 @@ def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
     elif number == 4:
         action_rule = (
             "Shot 4 action only: close and lock the main screw-on lid before pouring, with the main lid visibly closed throughout the action. The small dust cover may open only enough to expose the approved round spout, while the main lid stays locked. "
-            "Tilt the warming cup and show one continuous liquid stream leaving only through that round spout and entering a separate clean, completely unbranded baby bottle. "
+            "Tilt the warming cup and show one continuous liquid stream leaving only through that round spout and entering a separate clean, transparent, completely unbranded baby bottle. "
+            "The receiving container must have unmistakable infant-feeding-bottle structure: cylindrical feeding bottle body, visible measurement marks, threaded neck or collar, and a silicone nipple or nipple assembly visible in the same shot. "
+            "Reject and avoid every glass jar, drinking glass, mason jar, mug, storage jar, cup, tumbler, pitcher, carton, or adult drinking bottle. "
             "Never pour through the open main mouth, never reverse the direction, and never place the bottle inside the cup."
+        )
+    elif number == 2:
+        action_rule = (
+            "Shot 2 is an organization-only preparation beat. Show the caregiver placing the closed warming cup, "
+            "sealed milk pouch, and separate baby bottle side by side on the counter. Do not tilt any container and "
+            "do not show any liquid stream. This shot must not contain pouring or flowing liquid. "
+            "Frame only the upper half of the warming cup; crop the entire lower "
+            "control panel and temperature display below the bottom edge for every frame, including the final frame. "
+            "No readable digits, illuminated panel, pouring, open lid, or liquid transfer may appear."
         )
     else:
         action_rule = (
             f"Shot {number} must not contain pouring, flowing liquid, an open main lid, or a bottle inserted into the cup. "
-            "Keep the product closed and perform only the single scene action described for this shot."
+            "Keep the product closed and perform only the single scene action described for this shot. "
+            "Keep the display control panel turned away from the camera or fully outside the crop for the entire shot. "
+            "The display must remain physically dark in every frame, including the final frame; never animate, illuminate, "
+            "or reveal digits when the product is placed on the surface."
         )
     return " ".join(
         part
@@ -174,6 +198,32 @@ def _shot_prompt(shot: dict[str, Any], asset_manifest: dict[str, Any]) -> str:
         )
         if part
     )
+
+
+def _prompt_preflight(number: int, prompt: str) -> list[str]:
+    normalized = " ".join(prompt.casefold().split())
+    required = [
+        ("product identity", "缺少产品身份锁定"),
+        ("display contract", "缺少温标显示契约"),
+        ("continuity", "缺少人物与场景连续性约束"),
+    ]
+    if number == 4:
+        required.extend(
+            [
+                ("round spout", "缺少圆形出液口约束"),
+                ("baby bottle", "缺少独立奶瓶约束"),
+                ("measurement marks", "缺少奶瓶结构证据"),
+                ("never reverse", "缺少倒液方向约束"),
+            ]
+        )
+    elif number != 3:
+        required.extend(
+            [
+                ("fully unlit", "非温标镜头未要求屏幕熄灭"),
+                ("must not contain pouring", "非倒液镜头未禁止液体流动"),
+            ]
+        )
+    return [message for marker, message in required if marker not in normalized]
 
 
 def _duration_sec(shot: dict[str, Any]) -> int:

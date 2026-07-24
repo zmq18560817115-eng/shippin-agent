@@ -201,6 +201,78 @@ def list_collection_jobs(
     return [_collection_job_dict(row) for row in rows]
 
 
+def collection_failure_statistics(
+    *,
+    db_path: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Summarize actionable collection failures without exposing source secrets."""
+    init_db(db_path)
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT error_message, COUNT(*) AS count
+            FROM collection_items
+            WHERE status IN ('failed','filtered') AND error_message != ''
+            GROUP BY error_message
+            """
+        ).fetchall()
+        job_rows = conn.execute(
+            """
+            SELECT error_message, COUNT(*) AS count
+            FROM collection_jobs
+            WHERE status IN ('failed','partial') AND error_message != ''
+            GROUP BY error_message
+            """
+        ).fetchall()
+    categories: dict[str, int] = {}
+    examples: dict[str, str] = {}
+    for row in [*rows, *job_rows]:
+        message = str(row["error_message"] or "")
+        category = _collection_failure_category(message)
+        categories[category] = categories.get(category, 0) + int(row["count"] or 0)
+        examples.setdefault(category, message[:240])
+    return {
+        "total": sum(categories.values()),
+        "categories": [
+            {"code": code, "label": _COLLECTION_FAILURE_LABELS[code], "count": count, "example": examples.get(code, "")}
+            for code, count in sorted(categories.items(), key=lambda item: (-item[1], item[0]))
+        ],
+    }
+
+
+_COLLECTION_FAILURE_LABELS = {
+    "authentication": "登录或 Cookies 失效",
+    "relevance": "相关度不足",
+    "popularity": "热度证据不足",
+    "duplicate": "重复素材",
+    "download": "原视频下载失败",
+    "cover": "封面缺失",
+    "transcript": "转写或 ASR 失败",
+    "analysis": "拆解分析失败",
+    "provider": "采集后端失败",
+    "other": "其他失败",
+}
+
+
+def _collection_failure_category(message: str) -> str:
+    normalized = str(message or "").casefold()
+    rules = (
+        ("authentication", ("cookie", "session", "login", "authentication", "登录", "会话")),
+        ("relevance", ("相关", "relevance", "不匹配")),
+        ("popularity", ("播放量", "热度", "play metric", "play_count")),
+        ("duplicate", ("重复", "已存在", "duplicate")),
+        ("download", ("下载", "download", "yt-dlp", "原视频")),
+        ("cover", ("封面", "thumbnail", "cover")),
+        ("transcript", ("转写", "字幕", "asr", "transcript")),
+        ("analysis", ("拆解", "分析", "breakdown", "analysis")),
+        ("provider", ("provider", "browser", "tiktokapi", "apify", "采集后端")),
+    )
+    for category, markers in rules:
+        if any(marker in normalized for marker in markers):
+            return category
+    return "other"
+
+
 def purge_expired_collection_jobs(
     *,
     succeeded_before: str,

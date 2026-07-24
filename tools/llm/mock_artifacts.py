@@ -221,6 +221,11 @@ def mock_shot_plan(project_id: str, script_copy: dict[str, Any]) -> dict[str, An
         shots.append(
             {
                 "number": number,
+                "script_role": role,
+                "script_timing": str(section.get("timing") or ""),
+                "script_scene_zh": str(section.get("scene_zh") or ""),
+                "script_action_zh": str(section.get("action_zh") or ""),
+                "script_story_beat_zh": str(section.get("story_beat_zh") or ""),
                 "visual": visual,
                 "visual_prompt": visual_prompt,
                 "seedance_prompt": (

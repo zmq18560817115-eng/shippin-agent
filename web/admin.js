@@ -134,7 +134,11 @@ async function loadAdmin() {
   if (runtimeStamp) runtimeStamp.textContent = `版本 ${payload.runtime.build_version || "unknown"}`;
   document.querySelector("#recentProjects").innerHTML = payload.recent_projects.map((project) => `<tr><td>${escapeHtml(project.id)}</td><td>${escapeHtml(project.product_id || "-")}</td><td><span class="statusTag status-${escapeHtml(project.status)}">${escapeHtml(statusNames[project.status] || project.status)}</span></td><td>${escapeHtml(formatTime(project.updated_at))}</td><td><a href="/workbench#view=projects">查看</a></td></tr>`).join("") || '<tr><td colspan="5">暂无项目</td></tr>';
   const activeUsers = (users.items || []).filter((user) => user.status === "active");
-  document.querySelector("#recentFailures").innerHTML = payload.recent_failures.map((failure) => `<article class="failureItem">
+  const systemAlerts = (payload.alerts || []).map((alert) => `<article class="failureItem systemAlert ${escapeHtml(alert.severity || "warning")}">
+    <div class="failureSummary"><div><strong>${alert.type === "budget" ? "预算告警" : "采集告警"}</strong><span>${escapeHtml(alert.project_id || "系统")}</span></div><span class="statusTag status-${alert.severity === "critical" ? "failed" : "running"}">${alert.severity === "critical" ? "严重" : "提醒"}</span></div>
+    <p>${escapeHtml(alert.message || "")}</p>
+  </article>`).join("");
+  document.querySelector("#recentFailures").innerHTML = systemAlerts + payload.recent_failures.map((failure) => `<article class="failureItem">
     <div class="failureSummary"><div><strong>${escapeHtml(failure.project_id)} · ${escapeHtml(failure.stage)}</strong><span>${escapeHtml(failure.agent)} · ${escapeHtml(formatTime(failure.updated_at))}</span></div><span class="statusTag status-failed">失败</span></div>
     <p>${escapeHtml(failureMessage(failure.error_json))}</p>
     <details><summary>查看原始日志</summary><pre>${escapeHtml(failure.error_json || "无错误详情")}</pre></details>

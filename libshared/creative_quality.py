@@ -9,6 +9,20 @@ EXPECTED_TIMINGS = ["0-6s", "6-12s", "12-18s", "18-24s", "24-30s"]
 VAGUE_CREATIVE_PHRASES = ("高级感", "氛围感", "品质生活", "轻松解决", "一键搞定", "必备神器", "开启美好")
 
 
+def assess_strategy(strategy: dict[str, Any]) -> dict[str, Any]:
+    checks = [
+        _check("direction", len(str(strategy.get("content_direction") or "").strip()) >= 12, "内容方向必须具体且可执行"),
+        _check("audience", bool(strategy.get("target_audience")), "必须明确目标受众"),
+        _check("selling_points", len(strategy.get("selling_point_priority") or []) >= 2, "至少需要两个已获批卖点"),
+        _check("hooks", bool(strategy.get("hook_options")), "至少需要一个可拍摄的钩子"),
+        _check("cta", bool(strategy.get("cta_options")), "至少需要一个明确行动号召"),
+        _check("guardrails", isinstance(strategy.get("product_guardrails"), dict) and bool(strategy.get("product_guardrails")), "产品安全规则必须为非空结构化对象"),
+        _check("chinese_delivery", _chinese_ratio(str(strategy)) >= 0.18, "策略交付必须以简体中文为主"),
+        _check("anti_template_copy", not _contains_any(str(strategy), VAGUE_CREATIVE_PHRASES), "策略不得使用模板化空话代替具体创意"),
+    ]
+    return _report("strategy", checks)
+
+
 def assess_script(script: dict[str, Any]) -> dict[str, Any]:
     sections = script.get("sections") if isinstance(script.get("sections"), list) else []
     checks = [
@@ -86,6 +100,23 @@ def assess_storyboard(plan: dict[str, Any], script: dict[str, Any] | None = None
             "分镜不得用高级感、氛围感等空词代替主体位置、环境、动作和镜头设计",
         ),
     ]
+    if script:
+        sections = script.get("sections") if isinstance(script.get("sections"), list) else []
+        checks.append(
+            _check(
+                "script_information_conservation",
+                len(sections) == len(shots)
+                and all(
+                    str(shot.get("script_role") or "") == str(section.get("role") or "")
+                    and str(shot.get("script_timing") or "") == str(section.get("timing") or "")
+                    and str(shot.get("script_scene_zh") or "") == str(section.get("scene_zh") or "")
+                    and str(shot.get("script_action_zh") or "") == str(section.get("action_zh") or "")
+                    and str(shot.get("script_story_beat_zh") or "") == str(section.get("story_beat_zh") or "")
+                    for shot, section in zip(shots, sections)
+                ),
+                "分镜必须逐段保留脚本角色、时间、场景、动作和剧情推进，不得在模型生成时丢失",
+            )
+        )
     product_id = str((script or {}).get("product_id") or "")
     if "恒温杯" in product_id and len(shots) >= 4:
         proof = " ".join(str(shots[3].get(key) or "") for key in ("visual", "visual_zh", "seedance_prompt"))

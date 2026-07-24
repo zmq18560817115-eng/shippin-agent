@@ -52,6 +52,8 @@ def test_admin_endpoint_requires_admin_role(monkeypatch, tmp_path):
         assert summary.status_code == 200
         assert summary.json()["status"] == "ok"
         assert "storage_bytes" in summary.json()
+        assert "alerts" in summary.json()
+        assert "collection_failure_statistics" in summary.json()
         assert len(summary.json()["analytics"]["daily"]) == 7
         assert summary.json()["analytics"]["project_status"] == summary.json()["projects"]
 

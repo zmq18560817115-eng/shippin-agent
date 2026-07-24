@@ -250,6 +250,54 @@ def _seedance_request_body(
     }
 
 
+def vision_json(
+    context: ToolContext,
+    *,
+    prompt: str,
+    image_paths: Iterable[str | Path],
+    api_key_names: Iterable[str] = ("DOUBAO_API_KEY", "ARK_DOUBAO_API_KEY", "ARK_API_KEY"),
+    model_env: str = "DOUBAO_VISION_MODEL",
+    default_model: str = DEFAULT_DOUBAO_MODEL,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Run a small multimodal QA request against sampled local frames."""
+    api_key = env_value(context, *api_key_names)
+    model = str(
+        context.env.get(model_env)
+        or context.env.get("DOUBAO_MODEL")
+        or context.env.get("ARK_DOUBAO_MODEL")
+        or default_model
+    ).strip()
+    timeout_s = float(context.env.get("ARK_TIMEOUT_S") or 240)
+    content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+    for path_text in image_paths:
+        source = _resolve_path(str(path_text))
+        if source.is_file():
+            content.append({"type": "image_url", "image_url": {"url": _image_data_url(source)}})
+    if len(content) == 1:
+        raise ArkProviderError("vision QA requires at least one readable frame")
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": content}],
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+    }
+    payload = _post_json(
+        _chat_base_url(context) + "/chat/completions",
+        api_key=api_key,
+        body=body,
+        timeout_s=timeout_s,
+    )
+    response_content = (((payload.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    if not response_content:
+        raise ArkProviderError("Ark vision response did not contain message content")
+    return _json_from_text(response_content), {
+        "provider": "ark",
+        "model": model,
+        "usage": payload.get("usage") or {},
+        "response_id": payload.get("id"),
+    }
+
+
 def _is_seedance_image_role_error(exc: Exception) -> bool:
     message = str(exc).casefold()
     return "role" in message and any(token in message for token in ("invalid", "unsupported", "not support"))

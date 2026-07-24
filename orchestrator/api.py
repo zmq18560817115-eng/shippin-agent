@@ -682,8 +682,20 @@ def admin_summary() -> dict[str, Any]:
                 f"SELECT status, COUNT(*) AS count FROM tasks WHERE project_id IN ({placeholders}) GROUP BY status",
                 production_project_ids,
             ).fetchall()
+            project_cost_rows = conn.execute(
+                f"""
+                SELECT projects.id, projects.budget_cny, projects.budget_mode,
+                       COALESCE(SUM(cost_entries.cost_cny), 0) AS spent_cny
+                FROM projects
+                LEFT JOIN cost_entries ON cost_entries.project_id = projects.id
+                WHERE projects.id IN ({placeholders})
+                GROUP BY projects.id, projects.budget_cny, projects.budget_mode
+                """,
+                production_project_ids,
+            ).fetchall()
         else:
             task_rows = []
+            project_cost_rows = []
         total_cost = float(conn.execute("SELECT COALESCE(SUM(cost_cny), 0) FROM cost_entries").fetchone()[0])
         cost_rows = conn.execute("SELECT cost_cny, created_at FROM cost_entries ORDER BY created_at").fetchall()
         failures = []
@@ -733,6 +745,29 @@ def admin_summary() -> dict[str, Any]:
         }
         for summary in summaries[:12]
     ]
+    alerts: list[dict[str, Any]] = []
+    for row in project_cost_rows:
+        budget = float(row["budget_cny"] or 0)
+        spent = float(row["spent_cny"] or 0)
+        ratio = spent / budget if budget > 0 else 1.0
+        if ratio >= 0.8:
+            alerts.append(
+                {
+                    "type": "budget",
+                    "severity": "critical" if ratio >= 1 else "warning",
+                    "project_id": str(row["id"]),
+                    "message": f"项目预算已使用 {ratio:.0%}（¥{spent:.2f}/¥{budget:.2f}）",
+                }
+            )
+    collection_failures = queue.collection_failure_statistics(db_path=_db_path())
+    if collection_failures["total"]:
+        alerts.append(
+            {
+                "type": "collection",
+                "severity": "warning",
+                "message": f"采集队列累计 {collection_failures['total']} 条失败或过滤记录，请按失败原因处理",
+            }
+        )
     return {
         "status": "ok",
         "projects": project_counts,
@@ -755,6 +790,8 @@ def admin_summary() -> dict[str, Any]:
         },
         "recent_projects": recent,
         "recent_failures": failures,
+        "alerts": alerts,
+        "collection_failure_statistics": collection_failures,
         "runtime": runtime_status(),
         "users": {
             "total": len(users),
@@ -1577,11 +1614,13 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
     elif artifact_name == "shot_plan":
         script_copy = payload.get("script_copy") if isinstance(payload.get("script_copy"), dict) else None
         artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
+    elif artifact_name == "strategy_brief":
+        artifact["quality_assessment"] = creative_quality.assess_strategy(artifact)
     quality_retry_count = 0
     assessment = artifact.get("quality_assessment") if isinstance(artifact, dict) else None
     if (
         not request.mock
-        and artifact_name in {"script_copy", "shot_plan"}
+        and artifact_name in {"strategy_brief", "script_copy", "shot_plan"}
         and isinstance(assessment, dict)
         and assessment.get("status") != "PASS"
     ):
@@ -1603,9 +1642,11 @@ def run_agent_capability(request: AgentRunRequest) -> dict[str, Any]:
                     if standalone and artifact.get("production_profile") != "30s-five-beat"
                     else creative_quality.assess_script(artifact)
                 )
-            else:
+            elif artifact_name == "shot_plan":
                 script_copy = retry_payload.get("script_copy") if isinstance(retry_payload.get("script_copy"), dict) else None
                 artifact["quality_assessment"] = creative_quality.assess_storyboard(artifact, script_copy)
+            else:
+                artifact["quality_assessment"] = creative_quality.assess_strategy(artifact)
             quality_retry_count = 1
     artifacts.save_artifact(project_id, artifact_name, artifact, run_root=root)
     invalidation = (
@@ -2162,7 +2203,12 @@ def collection_jobs(status: str | None = Query(default=None), limit: int = Query
     if status and status not in allowed:
         raise HTTPException(status_code=422, detail="不支持的采集任务状态")
     jobs = queue.list_collection_jobs(status=status, limit=limit, db_path=_db_path())
-    return {"ok": True, "count": len(jobs), "jobs": jobs}
+    return {
+        "ok": True,
+        "count": len(jobs),
+        "jobs": jobs,
+        "failure_statistics": queue.collection_failure_statistics(db_path=_db_path()),
+    }
 
 
 @app.get("/api/v2/collect/jobs/{job_id}")
