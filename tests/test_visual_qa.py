@@ -28,6 +28,7 @@ def test_visual_qa_reports_truthful_degraded_state_without_ocr(monkeypatch, tmp_
     frame = tmp_path / "frame.jpg"
     frame.write_bytes(b"fake")
     monkeypatch.setattr(visual_qa.shutil, "which", lambda name: None)
+    monkeypatch.setattr(visual_qa.importlib.util, "find_spec", lambda name: None)
     report = visual_qa.inspect_review_frames([frame.as_posix()], product_id="便携恒温杯")
     assert report["status"] == "NEEDS_REVIEW"
     assert report["engine"] == "not_configured"
@@ -45,5 +46,4 @@ def test_visual_qa_uses_configured_tesseract_outside_path(monkeypatch, tmp_path:
     executable.write_bytes(b"binary")
     monkeypatch.setenv("VAF_TESSERACT_CMD", executable.as_posix())
     monkeypatch.setattr(visual_qa.shutil, "which", lambda name: None)
-
     assert visual_qa.resolve_tesseract() == str(executable)

@@ -187,6 +187,47 @@ def test_batch_delete_refuses_material_referenced_by_project(monkeypatch, tmp_pa
         assert (library_root / material_id / "material_meta.json").is_file()
 
 
+def test_batch_delete_detaches_active_mock_project_reference(monkeypatch, tmp_path):
+    library_root = tmp_path / "materials"
+    db_path = tmp_path / "mock-reference.db"
+    monkeypatch.setenv("VAF_MATERIAL_LIBRARY_ROOT", str(library_root))
+    monkeypatch.setenv("VAF_DB_PATH", str(db_path))
+    imported = manual_import.import_links(
+        [{
+            "url": "https://www.tiktok.com/@demo/video/995",
+            "caption": "mock material",
+            "source_mode": "mock",
+        }],
+        product_id="便携恒温杯",
+        source_keyword="bottle warmer",
+        library_root=library_root,
+    )
+    material_id = imported["items"][0]["material_id"]
+    queue.init_db(db_path=db_path)
+    queue.ensure_project(
+        "active-mock-project",
+        payload={"source_material_id": material_id, "mock": True},
+        db_path=db_path,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v2/collect/materials/batch-action",
+            json={"material_ids": [material_id], "action": "delete"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["completed"] == [material_id]
+    with queue.get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT payload_json FROM projects WHERE id = ?",
+            ("active-mock-project",),
+        ).fetchone()
+    payload = json.loads(row["payload_json"])
+    assert payload["source_material_id"] is None
+    assert payload["deleted_source_material_id"] == material_id
+
+
 def test_batch_delete_cleans_stale_index_entry(monkeypatch, tmp_path):
     library_root = tmp_path / "materials"
     monkeypatch.setenv("VAF_MATERIAL_LIBRARY_ROOT", str(library_root))

@@ -40,6 +40,7 @@ const state = {
   projectsLoaded: false,
   projectsLoadError: "",
   session: null,
+  redirectingToLogin: false,
 };
 
 const views = {
@@ -137,6 +138,10 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
+  if (response.status === 401 && path !== "/api/v2/auth/session") {
+    redirectToLogin();
+    throw new Error("登录状态已失效，正在返回登录页");
+  }
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`;
     try {
@@ -164,6 +169,13 @@ function formatApiDetail(detail) {
     return `${detail.message || "质量检查未通过"}（${detail.score ?? 0} 分）：${detail.issues.join("；")}`;
   }
   return detail?.message || JSON.stringify(detail);
+}
+
+function redirectToLogin() {
+  if (state.redirectingToLogin) return;
+  state.redirectingToLogin = true;
+  const returnPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  window.location.replace(`/login?next=${encodeURIComponent(returnPath)}`);
 }
 
 function toast(message, kind = "ok") {
@@ -449,7 +461,7 @@ function installCommandIcons(root = document) {
 async function boot() {
   bindEvents();
   installCommandIcons();
-  await loadWorkbenchSession();
+  if (!await loadWorkbenchSession()) return;
   const initialView = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("view");
   showView(views[initialView] ? initialView : "home", { updateUrl: false });
   await checkHealth();
@@ -473,11 +485,17 @@ async function boot() {
 async function loadWorkbenchSession() {
   try {
     const session = await api("/api/v2/auth/session");
+    if (session.auth_enabled && !session.authenticated) {
+      redirectToLogin();
+      return false;
+    }
     state.session = session;
     $("#adminEntry").hidden = session.auth_enabled && session.role !== "admin";
+    return true;
   } catch {
     state.session = null;
     $("#adminEntry").hidden = true;
+    return false;
   }
 }
 

@@ -26,7 +26,11 @@
           "visual": {"type": "string", "minLength": 4},
           "visual_prompt": {"type": "string"},
           "seedance_prompt": {"type": "string"},
-          "footage_type": {"enum": ["AI_BROLL", "AI_VIDEO", "STOCK", "SCREEN", "NONE"]},
+          "footage_type": {
+            "enum": ["AI_BROLL", "AI_VIDEO", "REFERENCE_VIDEO", "STOCK", "SCREEN", "NONE"]
+          },
+          "reference_path": {"type": "string"},
+          "reference_reason": {"type": "string"},
           "camera_motion": {
             "type": "object",
             "required": ["type"],

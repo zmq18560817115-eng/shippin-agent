@@ -1886,6 +1886,19 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
         raise HTTPException(status_code=422 if error.get("category") == "validation" else 502, detail=error["message"])
 
     capture = captured.data
+    if not request.mock and request.source_target_type in {"keyword", "hashtag"}:
+        minimum_plays = max(0, int(os.environ.get("VAF_TIKTOK_MIN_PLAYS") or 5000))
+        captured_plays = capture.get("play_count")
+        require_play_metric = _env_bool("VAF_TIKTOK_REQUIRE_PLAY_METRIC", True)
+        if require_play_metric and captured_plays in (None, ""):
+            manual_import.delete_material(material_id, root)
+            raise HTTPException(status_code=422, detail="素材缺少真实播放量，已自动丢弃")
+        if captured_plays not in (None, "") and int(captured_plays) < minimum_plays:
+            manual_import.delete_material(material_id, root)
+            raise HTTPException(
+                status_code=422,
+                detail=f"素材播放量低于质量门槛 {minimum_plays}，已自动丢弃",
+            )
     transcript_path = material_dir / "transcript.txt"
     transcript_text = str(capture.get("transcript_text") or "").strip()
     if transcript_text:
@@ -1918,7 +1931,7 @@ def collect_tiktok_and_run(request: TikTokIntakeRunRequest) -> dict[str, Any]:
             "source_mode": "mock" if request.mock else "real",
             "source_target_type": request.source_target_type,
             "discovery_relevance": request.relevance or {},
-            **_discovery_meta_updates(request.source_item),
+            **_discovery_meta_updates({**(request.source_item or {}), **capture}),
         },
         root,
     )
@@ -2982,7 +2995,14 @@ def batch_material_action(request: MaterialBatchActionRequest) -> dict[str, Any]
     for material_id in material_ids:
         try:
             if request.action == "delete":
-                references = _detach_terminal_material_references(material_id)
+                try:
+                    material_meta = manual_import.load_material_meta(material_id, root)
+                except FileNotFoundError:
+                    material_meta = {}
+                references = _detach_terminal_material_references(
+                    material_id,
+                    allow_active=material_meta.get("source_mode") == "mock",
+                )
                 if references:
                     raise ValueError(f"素材仍被进行中的项目引用，不能删除：{', '.join(references[:3])}")
                 manual_import.delete_material(material_id, root)
@@ -4806,7 +4826,11 @@ def _material_project_references(material_id: str) -> list[str]:
     return references
 
 
-def _detach_terminal_material_references(material_id: str) -> list[str]:
+def _detach_terminal_material_references(
+    material_id: str,
+    *,
+    allow_active: bool = False,
+) -> list[str]:
     """Detach historical references while preserving active production safety."""
     queue.init_db(db_path=_db_path())
     active_references: list[str] = []
@@ -4821,7 +4845,7 @@ def _detach_terminal_material_references(material_id: str) -> list[str]:
             if str(payload.get("source_material_id") or "") != material_id:
                 continue
             project_id = str(row["id"])
-            if str(row["status"] or "") not in terminal_statuses:
+            if str(row["status"] or "") not in terminal_statuses and not allow_active:
                 active_references.append(project_id)
                 continue
             payload["deleted_source_material_id"] = material_id

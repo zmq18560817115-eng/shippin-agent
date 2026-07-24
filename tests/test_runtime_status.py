@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+import pytest
 
 from orchestrator import cost_tracker, queue
 from orchestrator.api import app
 from tools.base_tool import ToolResult
+
+
+@pytest.fixture(autouse=True)
+def runtime_status_uses_explicit_no_auth_test_mode(monkeypatch):
+    monkeypatch.setenv("VAF_AUTH_ENABLED", "false")
 
 
 def test_runtime_status_never_exposes_secret_values(tmp_path, monkeypatch) -> None:

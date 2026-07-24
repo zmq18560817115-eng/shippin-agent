@@ -539,6 +539,8 @@ def _queue_creative_rewrite_once(
 
 def _attach_reference_footage(project_id: str, shot_plan: dict[str, Any], *, db_path: str | Path | None) -> dict[str, Any]:
     """Use one downloaded source clip as a traceable mixed-timeline candidate."""
+    if os.environ.get("VAF_ALLOW_REFERENCE_FOOTAGE_IN_OUTPUT", "").strip().lower() not in {"1", "true", "yes", "on"}:
+        return shot_plan
     video_path = _source_material_video(project_id, db_path=db_path)
     if not video_path:
         return shot_plan

@@ -128,6 +128,16 @@ def assert_invalid(artifact_name: str, payload: dict, pointer: str, **context: d
     assert pointer in str(excinfo.value)
 
 
+def test_a3_shot_plan_accepts_downloaded_reference_video() -> None:
+    script = valid_script_copy()
+    shot_plan = valid_shot_plan()
+    shot_plan["shots"][1]["footage_type"] = "REFERENCE_VIDEO"
+    shot_plan["shots"][1]["reference_path"] = "data/01_素材库/对标视频/source.mp4"
+    shot_plan["shots"][1]["reference_reason"] = "已下载参考素材用于节奏与语境匹配"
+
+    artifacts.validate_artifact("shot_plan", shot_plan, script_copy=script)
+
+
 def test_a3_valid_core_artifacts_pass(tmp_path: Path) -> None:
     script = valid_script_copy()
     shot_plan = valid_shot_plan()

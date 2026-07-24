@@ -6,5 +6,6 @@ httpx
 pytest
 PyYAML
 imageio-ffmpeg
+rapidocr-onnxruntime
 playwright
 yt-dlp

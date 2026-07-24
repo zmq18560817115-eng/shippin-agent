@@ -57,6 +57,32 @@ def application_ffmpeg() -> dict[str, object]:
     }
 
 
+def application_media_probe() -> dict[str, object]:
+    """Verify the FFmpeg inspection path used by the application."""
+    ffmpeg = application_ffmpeg()
+    if not ffmpeg["ok"]:
+        return {"ok": False, "detail": "FFmpeg is unavailable, so media probing cannot run"}
+    executable = str(ffmpeg["path"])
+    try:
+        result = subprocess.run(
+            [executable, "-hide_banner", "-filters"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "detail": f"application media probe failed: {exc}"}
+    return {
+        "ok": result.returncode == 0,
+        "detail": "application FFmpeg probe path is operational"
+        if result.returncode == 0
+        else "application FFmpeg probe path failed",
+        "path": executable,
+    }
+
+
 def load_env_file(path: Path) -> None:
     if not path.is_file():
         return
@@ -140,7 +166,7 @@ def main() -> int:
     budget_mode = str((tool_context.config.get("runtime") or {}).get("budget_mode") or "enforce")
     checks = {
         "ffmpeg": application_ffmpeg(),
-        "system_ffprobe": command_version("ffprobe", ["-version"]),
+        "media_probe": application_media_probe(),
         "yt_dlp": {
             "ok": yt_dlp_available(),
             "detail": "yt-dlp is available in the service Python environment"
@@ -171,14 +197,22 @@ def main() -> int:
             "detail": "local faster-whisper ready" if local_asr_ready else ("Volcengine ASR configured" if cloud_asr_ready else "subtitle-free videos cannot complete analysis until cloud or local ASR is configured"),
         },
         "visual_ocr": {
-            "ok": bool(resolve_tesseract()),
-            "detail": f"Tesseract OCR ready: {resolve_tesseract()}" if resolve_tesseract() else "optional but recommended: install Tesseract or set VAF_TESSERACT_CMD for automated 98°F/98°C checks; human review remains mandatory",
+            "ok": bool(resolve_tesseract()) or importlib.util.find_spec("rapidocr_onnxruntime") is not None,
+            "detail": (
+                f"Tesseract OCR ready: {resolve_tesseract()}"
+                if resolve_tesseract()
+                else (
+                    "RapidOCR Python backend ready"
+                    if importlib.util.find_spec("rapidocr_onnxruntime") is not None
+                    else "install rapidocr-onnxruntime or configure Tesseract for automated 98°F/98°C checks"
+                )
+            ),
         },
         "budget_enforced": {"ok": budget_mode == "enforce", "detail": f"budget_mode={budget_mode}"},
     }
     checks.update(security_checks())
     required = [
-        "ffmpeg", "yt_dlp", "playwright", "database", "materials_volume", "runs_volume",
+        "ffmpeg", "media_probe", "yt_dlp", "playwright", "database", "materials_volume", "runs_volume",
         "auth_enabled", "session_secret", "pricing_calibrated", "budget_enforced",
     ]
     report = {

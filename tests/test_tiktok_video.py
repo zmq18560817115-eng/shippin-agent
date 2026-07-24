@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from tools.base_tool import ToolContext
@@ -32,6 +33,10 @@ def test_tiktok_video_uses_first_frame_as_cover_fallback(tmp_path: Path, monkeyp
     material_dir.mkdir()
     video_path = material_dir / "source.mp4"
     video_path.write_bytes(b"video")
+    (material_dir / "source.info.json").write_text(
+        json.dumps({"view_count": 42000, "like_count": 120, "comment_count": 9}),
+        encoding="utf-8",
+    )
     frame_path = material_dir / "frames" / "frame-01.jpg"
     frame_path.parent.mkdir()
     frame_path.write_bytes(b"frame")
@@ -46,6 +51,8 @@ def test_tiktok_video_uses_first_frame_as_cover_fallback(tmp_path: Path, monkeyp
 
     assert result.ok is True
     assert Path(result.data["local_cover_path"]).read_bytes() == b"frame"
+    assert result.data["play_count"] == 42000
+    assert result.data["like_count"] == 120
 
 
 def test_tiktok_video_uses_python_module_when_console_script_is_not_on_path(

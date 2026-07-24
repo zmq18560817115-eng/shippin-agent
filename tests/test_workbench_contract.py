@@ -262,6 +262,19 @@ def test_collector_backend_statuses_are_not_flattened_to_unconfigured() -> None:
     assert 'backends.map(renderCollectorBackendState)' in script
 
 
+def test_workbench_redirects_expired_sessions_back_to_login() -> None:
+    script = Path("web/app.js").read_text(encoding="utf-8")
+    login_script = Path("web/login.js").read_text(encoding="utf-8")
+
+    assert "response.status === 401" in script
+    assert "function redirectToLogin()" in script
+    assert "session.auth_enabled && !session.authenticated" in script
+    assert "if (!await loadWorkbenchSession()) return;" in script
+    assert 'new URLSearchParams(window.location.search).get("next")' in login_script
+    assert "candidate.origin === window.location.origin" in login_script
+    assert "candidate.pathname === payload.redirect" in login_script
+
+
 def test_admin_failures_have_inline_recovery_actions() -> None:
     script = Path("web/admin.js").read_text(encoding="utf-8")
 

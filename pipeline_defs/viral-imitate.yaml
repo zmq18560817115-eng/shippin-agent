@@ -1,8 +1,8 @@
 name: viral-imitate
 version: "2.0"
-description: "爆款跟拍（七Agent版）：拆解 -> 文案 -> 评审+闸门① -> 分镜 -> 素材硬闸+关键帧闸门② -> 镜头级出片 -> 合成 -> 质检 -> 归档反馈"
+description: "爆款参考视频拆解、策略、脚本、分镜、素材确认、逐镜制作、成片质检与归档"
 default_budget_cny: 35.0
-budget_mode: observe
+budget_mode: enforce
 
 defaults:
   max_retries: 2
@@ -15,32 +15,27 @@ stages:
     produces: [analysis_report]
     tools: [doubao_analyze]
     skip_if_artifact_exists: analysis_report
-
   - name: research
     agent: analysis
     consumes: [analysis_report]
     produces: [research_brief]
     tools: [competitor_research]
-
   - name: strategy
     agent: script
     consumes: [research_brief]
     produces: [strategy_brief]
     tools: [content_strategy]
-
   - name: script
     agent: script
     consumes: [analysis_report, strategy_brief]
     produces: [script_copy]
     tools: [doubao_script]
     on_validation_fail: retry
-
   - name: script_breakdown
     agent: script
     consumes: [script_copy]
     produces: [script_breakdown]
     tools: [script_breakdown]
-
   - name: script_review
     agent: review
     task_type: script_review
@@ -48,34 +43,29 @@ stages:
     produces: [review_report]
     tools: [doubao_review]
     on_review_fail: requeue_script
-
   - name: script_gate
     agent: review
     gate: human
     consumes: [script_copy, review_report]
-    gate_ui_hint: "确认/微调文案；保存仅使受影响镜的分镜标记 stale"
-
+    gate_ui_hint: "确认或微调脚本；保存后仅将受影响镜头标记为待更新"
   - name: storyboard
     agent: storyboard
     consumes: [script_copy]
     produces: [shot_plan]
     tools: [doubao_shotplan]
     on_validation_fail: retry
-
   - name: asset
     agent: asset
     consumes: [shot_plan]
     produces: [asset_manifest]
     tools: [hero_frame]
     hard_block_on_fail: true
-
   - name: hero_gate
     agent: asset
     gate: human
     gate_flag: HERO_FRAME_GATE
     consumes: [asset_manifest]
-    gate_ui_hint: "逐镜确认构图；单镜重生成不触发出片"
-
+    gate_ui_hint: "逐镜确认构图与产品身份；单镜重生成不影响其他镜头"
   - name: production
     agent: media
     task_type: shot_gen
@@ -85,20 +75,17 @@ stages:
     tools: [seedance_shot]
     max_retries: 2
     budget_guard: true
-
   - name: take_gate
     agent: media
     gate: human
     consumes: [shot_report]
     gate_ui_hint: "逐镜完成 Take 质检与选用；全部镜头选定后才能合成"
-
   - name: compose
     agent: media
     task_type: compose
     consumes: [shot_report, script_copy]
     produces: [render_report]
     tools: [ffmpeg_compose]
-
   - name: final_qa
     agent: review
     task_type: final_qa
@@ -109,7 +96,6 @@ stages:
           tolerance_s: 1.5
       - has_audio_stream: true
       - resolution_matches_aspect: true
-
   - name: archive
     agent: review
     task_type: archive

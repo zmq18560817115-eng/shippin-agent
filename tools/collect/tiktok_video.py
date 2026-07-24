@@ -111,11 +111,16 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
         if asr.ok:
             subtitle_text = str(asr.data.get("transcript_text") or "").strip()
             asr_segments = list(asr.data.get("segments") or [])
-            transcript_source = "volcengine_asr" if subtitle_text else "missing"
+            transcript_source = (
+                str((asr.meta or {}).get("source") or "volcengine_asr")
+                if subtitle_text
+                else "missing"
+            )
         else:
             asr_error = str((asr.error or {}).get("message") or "")
     cover_path = _find_cover(material_dir)
     frame_paths = _extract_frames(video_path, material_dir / "frames")
+    source_info = _read_source_info(material_dir)
     if cover_path is None and frame_paths:
         cover_path = material_dir / "cover.jpg"
         shutil.copyfile(frame_paths[0], cover_path)
@@ -129,6 +134,11 @@ def execute(payload: dict[str, Any], context: ToolContext) -> ToolResult:
             "transcript_segments": asr_segments,
             "asr_error": asr_error,
             "frame_paths": [path.as_posix() for path in frame_paths],
+            "play_count": source_info.get("view_count"),
+            "like_count": source_info.get("like_count"),
+            "comment_count": source_info.get("comment_count"),
+            "share_count": source_info.get("repost_count"),
+            "duration": source_info.get("duration"),
         },
         meta={"tool": "tiktok_video", "mock": False, "frame_count": len(frame_paths), "transcript_source": transcript_source},
     )
@@ -143,6 +153,19 @@ def _find_video(material_dir: Path) -> Path | None:
 def _find_cover(material_dir: Path) -> Path | None:
     covers = [path for path in material_dir.glob("source.*") if path.suffix.casefold() in {".jpg", ".jpeg", ".png", ".webp"}]
     return max(covers, key=lambda path: path.stat().st_size) if covers else None
+
+
+def _read_source_info(material_dir: Path) -> dict[str, Any]:
+    info_path = material_dir / "source.info.json"
+    if not info_path.is_file():
+        return {}
+    try:
+        import json
+
+        payload = json.loads(info_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _read_subtitles(material_dir: Path) -> str:

@@ -40,7 +40,15 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "登录失败");
-    window.location.assign(payload.redirect);
+    const requestedNext = new URLSearchParams(window.location.search).get("next") || "";
+    let safeNext = payload.redirect;
+    if (requestedNext) {
+      const candidate = new URL(requestedNext, window.location.origin);
+      if (candidate.origin === window.location.origin && candidate.pathname === payload.redirect) {
+        safeNext = `${candidate.pathname}${candidate.search}${candidate.hash}`;
+      }
+    }
+    window.location.assign(safeNext);
   } catch (cause) {
     error.textContent = cause.message;
   }

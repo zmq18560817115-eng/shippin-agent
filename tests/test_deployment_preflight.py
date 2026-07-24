@@ -52,3 +52,19 @@ def test_command_version_reports_blocked_executable_without_crashing(monkeypatch
 
     assert result["ok"] is False
     assert "blocked by application control" in str(result["detail"])
+
+
+def test_application_media_probe_uses_application_ffmpeg(monkeypatch) -> None:
+    monkeypatch.setattr(
+        deployment_preflight,
+        "application_ffmpeg",
+        lambda: {"ok": True, "path": "bundled-ffmpeg.exe", "detail": "ready"},
+    )
+    monkeypatch.setattr(
+        deployment_preflight.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, "filters", ""),
+    )
+    result = deployment_preflight.application_media_probe()
+    assert result["ok"] is True
+    assert result["path"] == "bundled-ffmpeg.exe"

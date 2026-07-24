@@ -5,6 +5,21 @@ from orchestrator import engine, queue
 from tools.collect import manual_import
 
 
+def test_reference_video_is_analysis_only_by_default(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("VAF_ALLOW_REFERENCE_FOOTAGE_IN_OUTPUT", raising=False)
+    shot_plan = {
+        "shots": [
+            {"number": 1, "footage_type": "AI_VIDEO"},
+            {"number": 2, "footage_type": "AI_VIDEO"},
+        ]
+    }
+
+    result = engine._attach_reference_footage("missing-project", shot_plan, db_path=tmp_path / "agentflow.db")
+
+    assert result["shots"][1]["footage_type"] == "AI_VIDEO"
+    assert "reference_path" not in result["shots"][1]
+
+
 def test_selected_tiktok_material_seeds_pipeline_analysis(monkeypatch, tmp_path: Path) -> None:
     material_root = tmp_path / "materials"
     run_root = tmp_path / "runs" / "reference-seeded"
